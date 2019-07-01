@@ -4,10 +4,10 @@ A visualizer designed to generate sheet music based on recorded audio.
 Currently written in (sloppy) p5js. Next steps include rewriting in threejs, unity, and C.
 
 ## Design
-####Input
+### Input
 Microphone or audio file (.wav)
 
-####Logic
+### Logic
 Calculate distribution of note based on desired tuning
 Visualize the staff
 Calculate desired fft windows
@@ -20,7 +20,7 @@ For each fft,
 Analyze collection of note probabilites
 Fit analisis into rules of sheet music
 
-####Output
+### Output
 "Realtime" visualization
 MIDI file
 PDF
