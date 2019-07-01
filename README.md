@@ -13,12 +13,12 @@ Calculate distribution of note based on desired tuning
 Visualize the staff  
 Calculate desired fft windows  
 For each fft  
- Once every frame  
-  Calculate frequency values  
-  Calculate overtone series  
-  Calculate note probability field  
- Combine note probabilites  
- Analyze collection of note probabilites  
+ -Once every frame  
+  +Calculate frequency values  
+  +Calculate overtone series  
+  +Calculate note probability field  
+ -Combine note probabilites  
+ -Analyze collection of note probabilites  
 Fit analisis into rules of sheet music  
 
 ### Output
