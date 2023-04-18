@@ -1,45 +1,60 @@
 import os
+import sys
 import json
 import numpy as np
 from music21 import pitch
 
-
-def get_iteration() -> list[int, str]:
-    """Get the iteration of run \n
-    Returns:\n
-        list: [iteration, iteration_dir] \n
-            iteration (int): iteration number.\n
-            iteration_dir (str): iteration directory.
-    """
+def make_directories(current_path: str) -> list[str]:
     from datetime import datetime
 
-    # get the iteration number
+    # create iteration number
     now: datetime = datetime.now()
     formatted_now: str = now.strftime("%m/%d/%y %H:%M:%S")
     iteration = formatted_now.replace("/", "-").replace(":", "-").replace(" ", "_")
-    iteration_dir: str = f"./Data/Output/{iteration}/"
-    # create folder for iteration
+
+    # create audio folder
+    audio_path: str  = f"{current_path}\Data\Audio\\" 
+    if not os.path.exists(audio_path):
+        os.makedirs(audio_path)
+        print("No audio files found, check directory.")
+        sys.exit(0)
+    # create iteration folder
+    iteration_dir: str = f"{current_path}\Data\Output\{iteration}\\" 
     if not os.path.exists(iteration_dir):
         os.makedirs(iteration_dir)
-    return [iteration, iteration_dir]
+    # create midi folder
+    midi_path: str  = f"{current_path}\Data\Output\{iteration}\MIDI\\"
+    if not os.path.exists(midi_path):
+        os.makedirs(midi_path)
+    # create chroma folder
+    chroma_path: str  = f"{current_path}\Data\Output\{iteration}\Chroma\\"
+    if not os.path.exists(chroma_path):
+        os.makedirs(chroma_path)
+    return {"iter":iteration, "iter_dir":iteration_dir, "audio_dir":audio_path, "midi_dir":midi_path, "chroma_dir":chroma_path}
 
 
-def get_audio_files(just_one_file: bool = False) -> list[str]:
+def get_audio_files(audio_path: str, just_one_file: bool = False, ) -> list[str]:
     """Get the audio files \n
     Args:\n
+        audio_path (str): path of \Audio \n
         just_one_file (bool): If true, only get the first audio file. \n
-    """
+    """ 
     # get audio files
-    audio_files: list[str] = []
-    if os.path.exists("./Data/Audio/"):
-        items = os.listdir("./Data/Audio/")
-        for item in items:
-            if os.path.isfile("./Data/Audio/" + item):
-                audio_files.append(f"./Data/Audio/{item}")
-                if just_one_file:
-                    break
+    audio_files: list[str] = [] 
+    if not os.path.exists(audio_path):
+        print("Audio directory does not exist, check directory.")
+        sys.exit(0)
     else:
-        print("No audio folder found, check directory.")
+        items = os.listdir(audio_path)
+        if len(items) > 0:
+            for item in items:
+                if os.path.isfile(f"{audio_path}{item}"):
+                    audio_files.append(f"{audio_path}{item}")
+                    if just_one_file:
+                        break  
+        else: 
+            print("No audio files found, check directory.")
+            sys.exit(0)
     return audio_files
 
 
