@@ -1,7 +1,6 @@
 import librosa 
 import numpy as np
-import matplotlib.pyplot as plt
-from Modules.utilities import apply_band_pass_filter 
+import matplotlib.pyplot as plt 
 from Modules.Chroma import Chroma
 from Modules.MIDI import MIDI
 
@@ -52,7 +51,7 @@ class Audio():
         for transform_type, stft in transforms.items():
             # filtered = stft
             unfiltered = stft
-            filtered  = apply_band_pass_filter(stft) 
+            filtered  = self.apply_band_pass_filter(stft) 
             # create chroma class 
             first_letter = transform_type[0].lower()
             file_path = f'{chroma_file_name}_{first_letter}.png'
@@ -89,3 +88,20 @@ class Audio():
         plt.tight_layout()
         plt.savefig(full_path)
         plt.close('all') 
+
+    def apply_band_pass_filter( self, chroma: np.ndarray, 
+                                lower_bound_pitch: int = 40, 
+                                upper_bound_pitch: int = 88 ) -> np.ndarray:
+        """Filter out pitches outside the range of a piano \n
+        Args:\n
+            chroma (np.ndarray): Chromagram.\n
+            lower_bound_pitch (int): Lower bound pitch.\n
+            upper_bound_pitch (int): Upper bound pitch.\n
+        Returns:\n
+            filtered_chroma (np.ndarray): Filtered chromagram.
+        """
+        filtered_chroma = np.zeros_like(chroma)
+        filtered_chroma[lower_bound_pitch:upper_bound_pitch] = chroma[
+            lower_bound_pitch:upper_bound_pitch
+        ]
+        return filtered_chroma

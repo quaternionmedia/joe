@@ -1,7 +1,6 @@
 import os
 import numpy as np
-from music21 import stream, note, midi
-from Modules.utilities import midi_to_note_name_music21
+from music21 import stream, note, midi, pitch 
 from Modules.Note import Note 
 
 class MIDI():
@@ -34,7 +33,7 @@ class MIDI():
         notes:dict = self.chroma_to_midi()
         for pitch, start_dur in notes.items(): 
             note = Note()
-            note.note = midi_to_note_name_music21(pitch)
+            note.note = self.midi_to_note_name_music21(pitch)
             note.pitch = pitch
             note.start_dur = start_dur
             self.notes.append(note)
@@ -116,3 +115,7 @@ class MIDI():
                 harmonics_present += weight 
         # Require the weighted sum of the harmonics to be at least half of the total possible weighted sum
         return (harmonics_present >= total_weight / 2)
+
+    def midi_to_note_name_music21(self, midi_number):
+        note = pitch.Pitch(midi=midi_number)
+        return f"{note.nameWithOctave}"

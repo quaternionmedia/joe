@@ -43,29 +43,6 @@ def get_audio_files(just_one_file: bool = False) -> list[str]:
     return audio_files
 
 
-def midi_to_note_name_music21(midi_number):
-    note = pitch.Pitch(midi=midi_number)
-    return f"{note.nameWithOctave}"
-
-
-def apply_band_pass_filter(
-    chroma: np.ndarray, lower_bound_pitch: int = 40, upper_bound_pitch: int = 88
-) -> np.ndarray:
-    """Filter out pitches outside the range of a piano \n
-    Args:\n
-        chroma (np.ndarray): Chromagram.\n
-        lower_bound_pitch (int): Lower bound pitch.\n
-        upper_bound_pitch (int): Upper bound pitch.\n
-    Returns:\n
-        filtered_chroma (np.ndarray): Filtered chromagram.
-    """
-    filtered_chroma = np.zeros_like(chroma)
-    filtered_chroma[lower_bound_pitch:upper_bound_pitch] = chroma[
-        lower_bound_pitch:upper_bound_pitch
-    ]
-    return filtered_chroma
-
-
 def save_json(
     iteration,
     iteration_dir,
