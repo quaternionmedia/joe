@@ -1,0 +1,7 @@
+librosa
+matplotlib
+music21
+pytest
+pytest-sugar
+nox
+numpy
