@@ -2,3 +2,5 @@ Data
 *.pyc
 
 node_modules
+dist
+.vite
