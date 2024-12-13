@@ -4,7 +4,8 @@
   "description": "Realtime sheet music visualization",
   "main": "index.js",
   "scripts": {
-    "dev": "vite"
+    "dev": "vite",
+    "build": "vite build"
   },
   "repository": {
     "type": "git",
