@@ -1,0 +1,30 @@
+{
+  "name": "joe",
+  "version": "0.1.0",
+  "description": "Realtime sheet music visualization",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/quaternionmedia/joe.git"
+  },
+  "keywords": [
+    "sheet",
+    "music",
+    "visualization"
+  ],
+  "author": "Quaternion Media, LLC",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/quaternionmedia/joe/issues"
+  },
+  "homepage": "https://github.com/quaternionmedia/joe#readme",
+  "dependencies": {
+    "p5": "^1.11.2"
+  },
+  "devDependencies": {
+    "vite": "^6.0.3"
+  }
+}
