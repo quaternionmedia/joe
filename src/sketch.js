@@ -4,7 +4,7 @@ var ffth = [];
 var pmap = [];
 var pmaphb = [];
 var pmaph = [];
-var histSize = 100;
+var histSize = 125;
 var staff = [];
 var r, g, b = 0;
 var current = 0;
@@ -13,17 +13,16 @@ var setlist = [];
 
 function setup() {
     createCanvas(windowWidth, windowHeight);
-    fft = new p5.FFT();
-    mic = new p5.AudioIn();
     
+
     // Create a button and attach an event listener
-    let startButton = createButton('Start Audio');
+    let startButton = createButton('Joe, go!');
     startButton.position(10, 10);
     startButton.mousePressed(startAudio);
 
     textAlign(CENTER);
 
-    pmap = pnoDist(88, 12, 440);
+    pmap = new Float32Array(pnoDist(88, 12, 440));
     setlist = [{
         "genre": "",
         "composer": "",
@@ -111,6 +110,8 @@ function setup() {
 }
 
 function startAudio() {
+    fft = new p5.FFT();
+    mic = new p5.AudioIn();
     mic.start();
     mic.connect(fft);
 }
@@ -134,42 +135,43 @@ function draw() {
         pmaph.length = 2000;
     }
 
-    this.spectrum = fft.analyze();
+    if (mic) {
+        this.spectrum = fft.analyze();
 
 
-    for (var k = 0; k < pmap.length; k++) {
-        pmaphb[k] = fft.getEnergy(pmap[k]);
-    }
-    pmaph.unshift(pmaphb);
-    pmaphb = [];
+        for (var k = 0; k < pmap.length; k++) {
+            pmaphb[k] = fft.getEnergy(pmap[k]);
+        }
+        pmaph.unshift(pmaphb);
+        pmaphb = [];
 
-    this.pmapL = 0;
-    if (pmaph.length < histSize) {
-        this.pmapL = pmaph.length
-    } else {
-        this.pmapL = histSize;
-    }
-
-    fill(255, 125);
-    for (var m = 0; m < pmapL; m++) {
-        if (m == 23 || m == 27 || m == 30 || m == 33 || m == 37 || m == 44 || m == 47 || m == 51 || m == 54 || m == 57) {
-            stroke(125);
-            strokeWeight(3);
-            line(0, map(m, 0, 88, height - 100, 100), width, map(m, 0, 88, height - 100, 100));
+        this.pmapL = 0;
+        if (pmaph.length < histSize) {
+            this.pmapL = pmaph.length
+        } else {
+            this.pmapL = histSize;
         }
 
-        noStroke();
+        fill(255, 125);
+        for (var m = 0; m < pmapL; m++) {
+            if (m == 23 || m == 27 || m == 30 || m == 33 || m == 37 || m == 44 || m == 47 || m == 51 || m == 54 || m == 57) {
+                stroke(125);
+                strokeWeight(3);
+                line(0, map(m, 0, 88, height - 100, 100), width, map(m, 0, 88, height - 100, 100));
+            }
 
-        for (var n = 0; n < pmaph[m].length; n++) {
+            noStroke();
 
-            fill(r, g, b);
-            this.xy = logMap(pmaph[m][n], 10, 255, 0, 20);
-            this.px = map(m, 0, histSize, width - 100, 100);
-            this.py = map(n, 0, 88, height - 100, 100);
-            ellipse(this.px, this.py, this.xy, this.xy);
+            for (var n = 0; n < pmaph[m].length; n++) {
+
+                fill(r, g, b);
+                const xy = logMap(pmaph[m][n], 10, 255, 0, 20);
+                const px = map(m, 0, histSize, width - 100, 100);
+                const py = map(n, 0, 88, height - 100, 100);
+                ellipse(px, py, xy, xy);
+            }
         }
     }
-
 }
 
 function grandStaff() {
@@ -178,18 +180,18 @@ function grandStaff() {
 
 
 function logMap(_v, _vmin, _vmax, _omin, _omax) {
-    this.u = _vmax - _vmin;
-    this.m = exp((_v * log(this.u)) / this.u);
-    return map(this.m, _vmin, _vmax, _omin, _omax);
+    const u = _vmax - _vmin;
+    const m = exp((_v * log(u)) / u);
+    return map(m, _vmin, _vmax, _omin, _omax);
 }
 
 
 function pnoDist(_numKeys, _split, _center) {
-    this.fs = [];
+    const fs = [];
     for (var i = 0; i < _numKeys; i++) {
         fs[i] = pow(2, (i - (_numKeys / 2 + 5)) / _split) * _center;
     }
-    return this.fs;
+    return fs;
 }
 
 function keyPressed() {
