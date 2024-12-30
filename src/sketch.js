@@ -15,8 +15,11 @@ function setup() {
     createCanvas(windowWidth, windowHeight);
     fft = new p5.FFT();
     mic = new p5.AudioIn();
-    mic.start()
-    mic.connect(fft);
+    
+    // Create a button and attach an event listener
+    let startButton = createButton('Start Audio');
+    startButton.position(10, 10);
+    startButton.mousePressed(startAudio);
 
     textAlign(CENTER);
 
@@ -105,6 +108,11 @@ function setup() {
     }]
 
 
+}
+
+function startAudio() {
+    mic.start();
+    mic.connect(fft);
 }
 
 function draw() {
