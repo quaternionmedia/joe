@@ -164,7 +164,7 @@ function draw() {
 
             fill(r, g, b);
             this.xy = logMap(pmaph[m][n], 10, 255, 0, 20);
-            this.px = map(m, 0, 100, width - 100, 100);
+            this.px = map(m, 0, histSize, width - 100, 100);
             this.py = map(n, 0, 88, height - 100, 100);
             ellipse(this.px, this.py, this.xy, this.xy);
         }
