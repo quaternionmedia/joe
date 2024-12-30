@@ -1,11 +1,11 @@
 var fft;
 var mic;
-var ffth = [];
+const ffth = [];
 var pmap = [];
 var pmaphb = [];
-var pmaph = [];
-var histSize = 125;
-var staff = [];
+const pmaph = [];
+const histSize = 125;
+const staff = [];
 var r, g, b = 0;
 var current = 0;
 var setlist = [];
@@ -16,7 +16,7 @@ function setup() {
     
 
     // Create a button and attach an event listener
-    let startButton = createButton('Joe, go!');
+    const startButton = createButton('Joe, go!');
     startButton.position(10, 10);
     startButton.mousePressed(startAudio);
 
