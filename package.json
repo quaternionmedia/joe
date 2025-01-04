@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "vite",
-    "build": "vite build --base /joe"
+    "build": "vite build --base /joe --emptyOutDir && cp src/sketch.js dist/"
   },
   "repository": {
     "type": "git",
