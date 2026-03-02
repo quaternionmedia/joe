@@ -1,20 +1,68 @@
 # Joe
 
-Joe (named after Joseph Fourier) is a project that aims to visualize music in real(ish) time and to perform further analysis on it, including outputing midi sheet music.
+Joe (named after Joseph Fourier) is an audio workbench for turning audio files into chroma visualizations and MIDI outputs.
 
-There are a few main components to this project - a p5.js/mithril.js frontend, a python backend, and some ipython notebooks for analysis and IO. These are intended to cooperate, but stay useful on their own too. Maybe someday these will be proper submodules (PRs welcome).
+The repo has three primary parts:
+- Python backend/analysis pipeline
+- p5.js + Vite frontend
+- Notebooks for exploratory analysis
 
-## Setup
+## Quickstart
 
-### Python backend/logic
-We're using `pdm` to get things going on the back end. 
+### Prerequisites
+- Python `3.11.x` (required by `pyproject.toml`)
+- Node.js + npm
+- Optional: `pdm` (`pip install pdm`)
 
-Assuming you've got the proper binary installed locally (`pip install pdm`), you can run `pdm install` to get things started. This will get a venv set up for you too.
+### Python setup (preferred: pdm)
+```powershell
+pdm install
+pdm run python main.py
+```
 
-You can then run `pdm run python main.py` to run analysis on the audio files in the `Data/Audio` directory.
+### Python setup (fallback: venv + pip)
+```powershell
+python -m venv .venv
+.\.venv\Scripts\activate
+pip install -r requirements.txt
+python main.py
+```
 
-The `main.py` script will create a `Process_Data.json` file in the `Output` directory, which will contain the data used for each run. This is where `Audio` classes for each file are created, and `Midi` classes are created for each `Chroma` class. Thresholds and processing parameters are set here.
+### Frontend setup
+```powershell
+npm install
+npm run dev
+npm run build
+```
 
-### P5/mithril front end
-`npx vite` should get the party started
-(maybe `npm i vite` if you don't have it installed)
+## Verify Setup
+
+Run tests:
+```powershell
+python -m pytest -q
+```
+
+Run backend pipeline:
+```powershell
+python main.py
+```
+
+Expected artifacts are created under `Data/Output/<timestamp>/`:
+- `Data/Output/<timestamp>/Chroma/*.png`
+- `Data/Output/<timestamp>/MIDI/*.mid`
+- `Data/Output/<timestamp>/Process_Data_<timestamp>.json`
+
+Input audio is read from `Data/Audio/`.
+
+## Project Structure
+
+- `Data/`: input audio and generated outputs
+- `Modules/`: core Python classes (`Audio`, `Chroma`, `MIDI`, `Note`, utilities)
+- `src/`: frontend source (`p5` + Vite)
+- `tests/`: Python tests
+- `notebooks/`: exploratory notebooks
+- `main.py`: backend entrypoint
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for branch naming, required checks, and PR expectations.
