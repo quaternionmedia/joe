@@ -5,7 +5,9 @@
   "main": "index.js",
   "scripts": {
     "dev": "vite",
-    "build": "vite build --base /joe"
+    "start": "vite",
+    "build": "vite build --base /joe",
+    "check": "npm run build"
   },
   "repository": {
     "type": "git",
@@ -26,6 +28,6 @@
     "p5": "^1.11.2"
   },
   "devDependencies": {
-    "vite": "^6.0.3"
+    "vite": "^6.0.6"
   }
 }
