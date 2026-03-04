@@ -1,0 +1,38 @@
+[project]
+name = "joe"
+version = "0.1.0"
+description = "Audio Workbench - inspired by and named after Joeseph Fourier"
+authors = [
+    {name = "Peter Kagstrom", email = "peter.kagstrom@gmail.com"},
+]
+dependencies = [
+    "librosa",
+    "matplotlib",
+    "music21",
+    "pytest",
+    "pytest-sugar",
+    "nox",
+    "numpy",
+    "spacy",
+    "whisper-openai",
+    "sounddevice",
+    "fastapi",
+    "uvicorn[standard]",
+    "typer",
+]
+requires-python = "==3.11.*"
+readme = "README.md"
+license = {text = "MIT"}
+
+[project.scripts]
+joe = "cli:app"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["cli", "api"]
+
+[tool.pdm]
+distribution = true
