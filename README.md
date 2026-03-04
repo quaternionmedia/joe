@@ -28,7 +28,7 @@ uv run joe dev       # Vite :3000 + API :8000
 Then in a second terminal, run the pipeline:
 
 ```powershell
-uv run joe run       # processes Data/Audio/ → Data/Output/
+uv run joe run       # processes Data/Audio/ -> Data/Output/
 ```
 
 Open `http://localhost:3000/joe`, click **Results → Fetch Latest**.
@@ -41,6 +41,8 @@ Open `http://localhost:3000/joe`, click **Results → Fetch Latest**.
 | `uv run joe backend` | FastAPI API server only (`localhost:8000`) |
 | `uv run joe dev` | Both servers (Ctrl+C to stop) |
 | `uv run joe run` | Run the pipeline once |
+
+See [docs/api.md](docs/api.md) for the full API endpoint reference.
 
 ### Python setup (fallback: pdm)
 
@@ -103,11 +105,11 @@ Input audio is read from `Data/Audio/`.
 ## Project Structure
 
 - `Data/`: input audio and generated outputs (git-ignored)
-- `Modules/`: core Python classes (`Audio`, `Chroma`, `MIDI`, `Note`, utilities)
+- `Modules/`: core Python classes (`Audio`, `Chroma`, `MIDI`, `Note`, utilities) — see [docs/modules.md](docs/modules.md)
 - `src/`: frontend source (`p5.js` + Vite) — components, config, sketch
 - `tests/`: Python unit tests; `tests/e2e/` for Playwright E2E tests
 - `docs/`: contributor guide, module reference, API reference
-- `api.py`: FastAPI server wrapping the pipeline
+- `api.py`: FastAPI server wrapping the pipeline — see [docs/api.md](docs/api.md)
 - `cli.py`: Typer CLI (`joe frontend | backend | dev | run`)
 - `main.py`: backend pipeline entrypoint
 
@@ -120,6 +122,14 @@ The Vite frontend (`src/`) has three layers:
 - **Results panel** — `src/components/ResultsPanel.js` loads pipeline output via **"Fetch Latest"** (calls the API) or via the **"Load JSON"** file picker. Renders a piano roll canvas (pitch × time) coloured by transform type: Raw (white), Harmonic (cyan), Percussive (orange).
 
 > **Note:** `npm run build` warns that `outDir` is outside the project root — expected (Vite root is `src/`).
+
+## Docs
+
+| Document | Contents |
+| --- | --- |
+| [docs/contributing.md](docs/contributing.md) | Local setup, dev server workflow, branch naming, pre-PR checks |
+| [docs/api.md](docs/api.md) | FastAPI endpoint reference with `curl` examples |
+| [docs/modules.md](docs/modules.md) | Python module architecture and data flow |
 
 ## Contributing
 
