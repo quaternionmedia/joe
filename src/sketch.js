@@ -58,7 +58,7 @@ export function createSketch(state) {
       for (let m = 0; m < pmapL; m++) {
         for (let n = 0; n < pmaph[m].length; n++) {
           p.fill(ar, ag, ab);
-          const xy = logMap(pmaph[m][n], 10, 255, 0, 20, p);
+          const xy = logMap(pmaph[m][n], 20, 255, 0, 10, p);
           const px = p.map(m, 0, HIST_SIZE, p.width - 100, 100);
           const py = p.map(n, 0, 88, p.height - 100, 100);
           p.ellipse(px, py, xy, xy);
@@ -92,13 +92,16 @@ export function createSketch(state) {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-// Logarithmic mapping: _vmin -> _omin, _vmax -> _omax, with log compression.
-// Uses log(1+x) so that values just above _vmin produce small but visible output.
+// dB-scale mapping: maps FFT energy to dot diameter using audio-perceptual dB scaling.
+// Mimics how we perceive loudness — quiet sounds get small dots, loud sounds get large dots,
+// with the growth rate matching the logarithmic nature of human hearing (dB scale).
+// _vmin is the noise floor (anything at or below → 0px), _vmax is full scale (→ _omax px).
 function logMap(_v, _vmin, _vmax, _omin, _omax, p) {
-  const clamped = Math.max(0, _v - _vmin);
-  const range   = _vmax - _vmin;
-  const log_v   = Math.log(1 + clamped) / Math.log(1 + range);
-  return p.map(log_v, 0, 1, _omin, _omax);
+  if (_v <= _vmin) return _omin;
+  const dB     = 20 * Math.log10(_v / _vmax);
+  const dB_min = 20 * Math.log10(_vmin / _vmax);
+  const norm   = (dB - dB_min) / (-dB_min);   // 0 at noise floor, 1 at full scale
+  return p.map(norm, 0, 1, _omin, _omax);
 }
 
 function pnoDist(_numKeys, _split, _center) {

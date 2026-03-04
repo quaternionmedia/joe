@@ -80,11 +80,15 @@ class MIDI():
             note_active = False
             start_time = 0 
             for time_step in range(time_steps):
-                if (not note_active and chroma_data[time_step] > self.chroma_threshold 
+                # Use magnitude (np.abs) so that complex STFT values from all
+                # three transforms (Raw, Harmonic, Percussive) are compared on
+                # energy, not just the real part which can be negative.
+                mag = np.abs(chroma_data[time_step])
+                if (not note_active and mag > self.chroma_threshold
                     and self.has_sufficient_harmonics(pitch, time_step)):
                     note_active = True
                     start_time = time_step
-                elif note_active and chroma_data[time_step] < self.chroma_threshold:
+                elif note_active and mag < self.chroma_threshold:
                     note_active = False
                     duration = time_step - start_time
                     if duration > self.min_duration:
@@ -111,7 +115,7 @@ class MIDI():
                 break 
             weight = self.overtone_weights[idx]
             total_weight += weight
-            if self.unfiltered[harmonic_pitch][time_step] > self.harmonic_threshold:
+            if np.abs(self.unfiltered[harmonic_pitch][time_step]) > self.harmonic_threshold:
                 harmonics_present += weight 
         # Require the weighted sum of the harmonics to be at least half of the total possible weighted sum
         return (harmonics_present >= total_weight / 2)

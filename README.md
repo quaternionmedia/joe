@@ -115,9 +115,9 @@ Input audio is read from `Data/Audio/`.
 
 The Vite frontend (`src/`) has three layers:
 
-- **Canvas** — `src/sketch.js` runs a live mic FFT visualiser via `p5.AudioIn` + `p5.FFT`. p5 and p5.sound are loaded as CDN globals (not bundled via Vite) because p5.sound must patch `window.p5` at script-evaluation time. The "Joe, go!" button click resumes the Web Audio context and starts mic capture.
+- **Canvas** — `src/sketch.js` runs a live mic FFT visualiser via `p5.AudioIn` + `p5.FFT`. p5 and p5.sound are loaded as CDN globals (not bundled via Vite) because p5.sound must patch `window.p5` at script-evaluation time. The "Joe, go!" button click resumes the Web Audio context and starts mic capture. Dot size scales on a dB curve (`20·log₁₀(v/255)`) to match human loudness perception.
 - **Era panel** — `src/components/EraPanel.js` shows setlist metadata with arrow-key navigation and anime.js cross-fades.
-- **Results panel** — `src/components/ResultsPanel.js` loads pipeline output via **"Fetch Latest"** (calls the API) or via the **"Load JSON"** file picker. Renders a piano roll canvas (pitch × time, coloured by transform type).
+- **Results panel** — `src/components/ResultsPanel.js` loads pipeline output via **"Fetch Latest"** (calls the API) or via the **"Load JSON"** file picker. Renders a piano roll canvas (pitch × time) coloured by transform type: Raw (white), Harmonic (cyan), Percussive (orange).
 
 > **Note:** `npm run build` warns that `outDir` is outside the project root — expected (Vite root is `src/`).
 

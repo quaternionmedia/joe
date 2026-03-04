@@ -34,6 +34,12 @@ It then creates a `MIDI` object using the resulting chroma representation.
 
 It stores a series of `Note` objects for downstream save/export operations.
 
+Note detection operates on the complex STFT spectrum. Energy at each frequency bin is measured
+using `np.abs()` (magnitude), which gives correct results across all three transform types
+(Raw, Harmonic, Percussive). Comparing the raw complex value directly would only examine the
+real part — which can be negative — and silently suppresses note detection for HPSS-decomposed
+signals where phase structure differs from the original STFT.
+
 ## Note
 
 `Note` is a lightweight data container for note identity, pitch, and timing segments used during MIDI serialization.
