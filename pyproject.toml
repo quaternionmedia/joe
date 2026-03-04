@@ -16,11 +16,23 @@ dependencies = [
     "spacy",
     "whisper-openai",
     "sounddevice",
+    "fastapi",
+    "uvicorn[standard]",
+    "typer",
 ]
 requires-python = "==3.11.*"
 readme = "README.md"
 license = {text = "MIT"}
 
+[project.scripts]
+joe = "cli:app"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["cli", "api"]
 
 [tool.pdm]
-distribution = false
+distribution = true

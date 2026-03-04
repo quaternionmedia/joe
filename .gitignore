@@ -4,3 +4,13 @@ Data
 node_modules
 dist
 .vite
+
+.venv
+
+playwright-report/
+test-results/
+.playwright/
+
+# uv / setuptools build artifacts
+.pdm-python
+joe.egg-info/

@@ -1,0 +1,202 @@
+/* ─── Reset ──────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  width: 100vw;
+  height: 100vh;
+  background: #000;
+  font-family: 'Courier New', Courier, monospace;
+  color: #fff;
+}
+
+/* ─── p5 canvas layer ────────────────────────────────────────────────────── */
+#sketch canvas {
+  display: block;
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 0;
+}
+
+/* ─── Buttons ────────────────────────────────────────────────────────────── */
+button {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: #fff;
+  font-family: inherit;
+  font-size: 0.8rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+  z-index: 30;
+}
+
+button:hover {
+  border-color: rgba(255, 255, 255, 0.8);
+}
+
+#start-button {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+}
+
+#results-toggle {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+}
+
+/* ─── Era panel ──────────────────────────────────────────────────────────── */
+#era-panel {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  pointer-events: none;
+  opacity: 0;            /* animated to 1 by EraPanel.js on first navigation */
+  text-align: center;
+  padding: 14px 80px;    /* clear the corner buttons */
+}
+
+.era-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.era-genre {
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+
+.era-title {
+  font-size: 1.1rem;
+  letter-spacing: 0.05em;
+}
+
+.era-composer {
+  font-size: 0.8rem;
+  opacity: 0.75;
+}
+
+.era-year {
+  font-size: 0.7rem;
+  opacity: 0.5;
+  letter-spacing: 0.15em;
+}
+
+/* ─── Results panel ──────────────────────────────────────────────────────── */
+#results-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 420px;
+  height: 100vh;
+  transform: translateX(100%);    /* off-screen by default; animated by ResultsPanel.js */
+  z-index: 20;
+  background: rgba(8, 8, 12, 0.94);
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.results-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 12px;
+}
+
+.results-header h2 {
+  margin: 0;
+  font-size: 0.85rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+/* ─── Results header actions ─────────────────────────────────────────────── */
+.results-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#fetch-latest {
+  position: static;
+  font-size: 0.75rem;
+  padding: 5px 10px;
+}
+
+.file-label {
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  padding: 5px 10px;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.file-label:hover {
+  border-color: rgba(255, 255, 255, 0.7);
+}
+
+.file-label input[type="file"] {
+  display: none;
+}
+
+#load-error {
+  font-size: 0.75rem;
+  color: #ff6d00;
+  padding: 8px;
+  border: 1px solid rgba(255, 109, 0, 0.4);
+}
+
+#results-meta {
+  font-size: 0.75rem;
+  opacity: 0.6;
+  line-height: 1.6;
+}
+
+/* ─── Piano roll canvas ──────────────────────────────────────────────────── */
+#piano-roll-canvas {
+  width: 100%;
+  flex: 1;
+  min-height: 300px;
+  opacity: 0;           /* animated to 1 by ResultsPanel.js after render */
+  display: block;
+}
+
+/* ─── Legend ─────────────────────────────────────────────────────────────── */
+.piano-roll-legend {
+  display: flex;
+  gap: 14px;
+  font-size: 0.7rem;
+  opacity: 0.65;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}

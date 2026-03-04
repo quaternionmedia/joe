@@ -1,15 +1,54 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="utf-8">
+    <meta charset="utf-8" />
     <title>Joe | QM</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <!-- p5 + p5.sound loaded as globals so p5.sound can patch window.p5 reliably -->
+    <link rel="stylesheet" href="style.css" />
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.2/lib/p5.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.2/addons/p5.sound.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.11.2/lib/addons/p5.sound.js"></script>
   </head>
 
   <body>
+    <!-- p5 canvas target -->
     <div id="sketch"></div>
-    <script src="sketch.js"></script>
+
+    <!-- Controls: top-left -->
+    <button id="start-button" data-testid="start-button" type="button">Joe, go!</button>
+
+    <!-- Era overlay: top-centre, fades in after first navigation -->
+    <div id="era-panel" data-testid="era-panel">
+      <div class="era-content">
+        <span class="era-genre"    data-testid="era-genre"></span>
+        <span class="era-title"    data-testid="era-title"></span>
+        <span class="era-composer" data-testid="era-composer"></span>
+        <span class="era-year"     data-testid="era-year"></span>
+      </div>
+    </div>
+
+    <!-- Results toggle: top-right -->
+    <button id="results-toggle" data-testid="results-toggle" type="button">Results</button>
+
+    <!-- Results slide-in panel: right edge -->
+    <div id="results-panel" data-testid="results-panel">
+      <div class="results-header">
+        <h2>Analysis Results</h2>
+        <div class="results-actions">
+          <button id="fetch-latest" data-testid="fetch-latest" type="button">Fetch Latest</button>
+          <label class="file-label">
+            Load JSON
+            <input type="file" accept=".json" data-testid="file-input" />
+          </label>
+        </div>
+      </div>
+      <div id="load-error" data-testid="load-error" hidden>
+        Could not parse file — check it is a valid Process_Data JSON.
+      </div>
+      <div id="results-meta" data-testid="results-meta"></div>
+      <canvas id="piano-roll-canvas" data-testid="piano-roll-canvas"></canvas>
+    </div>
+
+    <script type="module" src="index.js"></script>
   </body>
 </html>

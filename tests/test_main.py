@@ -1,9 +1,12 @@
 import importlib
+import json
 import os
 import sys
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-from Modules.utilities import make_directories
+import pytest
+
+from Modules.utilities import get_audio_files, make_directories, save_json
 
 
 def _reload_main_with_patched_directory_discovery(fake_dirs):
@@ -73,3 +76,93 @@ def test_make_directories_creates_expected_structure(tmp_path):
     assert os.path.isdir(directories["iter_dir"])
     assert os.path.isdir(directories["midi_dir"])
     assert os.path.isdir(directories["chroma_dir"])
+
+
+def test_make_directories_returns_all_expected_keys(tmp_path):
+    base = str(tmp_path)
+    os.makedirs(os.path.join(base, "Data", "Audio"), exist_ok=True)
+
+    directories = make_directories(base)
+
+    assert set(directories.keys()) == {"iter", "iter_dir", "audio_dir", "chroma_dir", "midi_dir"}
+
+
+def test_get_audio_files_returns_all_audio_files(tmp_path):
+    audio_dir = tmp_path / "Audio"
+    audio_dir.mkdir()
+    (audio_dir / "track1.wav").write_bytes(b"")
+    (audio_dir / "track2.mp3").write_bytes(b"")
+
+    files = get_audio_files(str(audio_dir) + "\\")
+
+    assert len(files) == 2
+    assert any("track1.wav" in f for f in files)
+    assert any("track2.mp3" in f for f in files)
+
+
+def test_get_audio_files_just_one_file_flag(tmp_path):
+    audio_dir = tmp_path / "Audio"
+    audio_dir.mkdir()
+    (audio_dir / "a.wav").write_bytes(b"")
+    (audio_dir / "b.wav").write_bytes(b"")
+
+    files = get_audio_files(str(audio_dir) + "\\", just_one_file=True)
+
+    assert len(files) == 1
+
+
+def test_get_audio_files_missing_dir_exits():
+    with pytest.raises(SystemExit):
+        get_audio_files("/nonexistent/path/Audio\\")
+
+
+def test_get_audio_files_empty_dir_exits(tmp_path):
+    audio_dir = tmp_path / "Audio"
+    audio_dir.mkdir()
+
+    with pytest.raises(SystemExit):
+        get_audio_files(str(audio_dir) + "\\")
+
+
+def test_save_json_writes_parseable_file(tmp_path):
+    iteration = "01-01-26_00-00-00"
+    iteration_dir = str(tmp_path) + "\\"
+
+    note_mock = MagicMock()
+    note_mock.note = "C4"
+    note_mock.pitch = 60
+    note_mock.start_dur = [(0.0, 0.5)]
+
+    chroma_mock = MagicMock()
+    chroma_mock.file_path = "chroma.png"
+    chroma_mock.midi.file_path = "output.mid"
+    chroma_mock.midi.notes = [note_mock]
+
+    audio_mock = MagicMock()
+    audio_mock.name = "test_track"
+    audio_mock.file_path = "Data/Audio/test_track.wav"
+    audio_mock.sr = 22050
+    audio_mock.full_chroma_path = "chroma_full.png"
+    audio_mock.chromas = {"cqt": chroma_mock}
+
+    save_json(
+        iteration=iteration,
+        iteration_dir=iteration_dir,
+        min_duration=0.1,
+        fft_sizes=[512, 1024],
+        chroma_threshold=0.3,
+        harmonic_threshold=0.3,
+        overtone_weights=[0.5, 0.4],
+        audio_files=["Data/Audio/test_track.wav"],
+        audios=[audio_mock],
+    )
+
+    output_file = tmp_path / f"Process_Data_{iteration}.json"
+    assert output_file.exists()
+    with open(output_file) as f:
+        data = json.load(f)
+
+    assert data["iteration"] == iteration
+    assert "audio" in data
+    assert "test_track" in data["audio"]
+    assert data["audio"]["test_track"]["sr"] == 22050

@@ -5,3 +5,6 @@ pytest
 pytest-sugar
 nox
 numpy
+spacy
+whisper-openai
+sounddevice
