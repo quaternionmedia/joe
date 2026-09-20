@@ -59,6 +59,48 @@ uv run joe run
 
 See [api.md](api.md) for endpoint reference and `curl` examples.
 
+For practical end-to-end workflows, see [cookbook.md](cookbook.md).
+
+---
+
+## UI Control Groups
+
+The bottom transport bar has four groups, left to right:
+
+| Group | Controls | Purpose |
+| --- | --- | --- |
+| **1. Audio context** | `Joe, go!` | Resumes the Web Audio context (required once per page load). Turns green when active. |
+| **2. Live capture** | `Browser\|Backend` select + `Live` button + red dot | Sets the capture source; `Live` starts/stops recording. Disabled until **Joe, go!** is clicked. |
+| **3. Transport** | `LIVE\|RESULTS` badge + `Play` + `Stop` + scrub + time + filename + `×` | Plays back a loaded audio file; badge shows canvas mode. Play/Stop disabled while recording. `×` ejects the current source. |
+| **4. Panels** | `Library` + `Results` | Slide-in panels for audio file management and analysis output. |
+
+**Dependency chain:**
+
+```text
+Joe, go!  ->  enables Live  ->  recording  ->  stop  ->  Library: Process  ->  Results loads
+  (user gesture              (disables                  (pipeline runs)     (canvas = RESULTS)
+   for Web Audio)             transport)
+```
+
+**Canvas modes** shown by the badge in the transport bar:
+
+- `LIVE` — real-time scrolling note detections from the mic (while recording)
+- `RESULTS` — static piano roll from pipeline JSON (pitch x time, coloured by transform type)
+- *(no badge)* — idle, or after eject with no active source; scrubber may scan frozen live layer
+
+### Troubleshooting
+
+| Symptom | Likely cause | Fix |
+| --- | --- | --- |
+| `Live` button is greyed out | Web Audio not started | Click **Joe, go!** first |
+| `Live` starts but no notes appear | Mic permission denied or wrong source | Check browser mic permissions; try **Backend** mode |
+| `Play` button is greyed out | Live recording is active | Click **Stop** to end recording first |
+| **Fetch Latest** returns 404 | No pipeline output yet | Run `uv run joe run` (or process a file via Library) |
+| Red dot pulses but canvas is blank | `Joe, go!` not clicked | Click **Joe, go!** — Web Audio must be started before FFT is active |
+| Backend capture fails silently | `sounddevice` not installed or no device | Check `uv sync` completed; verify audio input device |
+
+---
+
 ## Branch Naming
 
 Use short descriptive branch names with a scope prefix:

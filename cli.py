@@ -15,6 +15,25 @@ import sys
 
 import typer
 
+
+def _kill(proc: subprocess.Popen) -> None:
+    """Kill a subprocess and its entire process tree, then wait for it to exit."""
+    if sys.platform == "win32":
+        # terminate() only kills the direct child; on Windows uvicorn --reload
+        # spawns a server worker subprocess that would otherwise keep holding
+        # the port.  taskkill /T kills the whole tree.
+        subprocess.run(
+            ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+            check=False,
+            capture_output=True,
+        )
+    else:
+        proc.terminate()
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+
 app = typer.Typer(
     help="Joe Audio Workbench - dev CLI",
     no_args_is_help=True,
@@ -56,10 +75,8 @@ def dev():
         be.wait()
     except KeyboardInterrupt:
         typer.echo("\nShutting down...")
-        fe.terminate()
-        be.terminate()
-        fe.wait()
-        be.wait()
+        _kill(fe)
+        _kill(be)
 
 
 @app.command()

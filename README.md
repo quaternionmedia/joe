@@ -117,9 +117,24 @@ Input audio is read from `Data/Audio/`.
 
 The Vite frontend (`src/`) has three layers:
 
-- **Canvas** — `src/sketch.js` runs a live mic FFT visualiser via `p5.AudioIn` + `p5.FFT`. p5 and p5.sound are loaded as CDN globals (not bundled via Vite) because p5.sound must patch `window.p5` at script-evaluation time. The "Joe, go!" button click resumes the Web Audio context and starts mic capture. Dot size scales on a dB curve (`20·log₁₀(v/255)`) to match human loudness perception.
+- **FFT canvas** — `src/sketch.js` runs a live mic FFT visualiser via `p5.AudioIn` + `p5.FFT`. p5 and p5.sound are loaded as CDN globals (not bundled via Vite) because p5.sound must patch `window.p5` at script-evaluation time. Dot size scales on a dB curve (`20·log₁₀(v/255)`) to match human loudness perception.
+- **Piano roll canvas** — `src/components/MainCanvas.js` overlays a full-screen canvas that runs in two modes: **LIVE** (real-time scrolling note detections from mic onset detection) and **RESULTS** (static pitch × time piano roll from pipeline JSON, coloured by transform type: Raw white, Harmonic cyan, Percussive orange).
 - **Era panel** — `src/components/EraPanel.js` shows setlist metadata with arrow-key navigation and anime.js cross-fades.
-- **Results panel** — `src/components/ResultsPanel.js` loads pipeline output via **"Fetch Latest"** (calls the API) or via the **"Load JSON"** file picker. Renders a piano roll canvas (pitch × time) coloured by transform type: Raw (white), Harmonic (cyan), Percussive (orange).
+
+### Bottom bar control groups
+
+```text
+[Joe, go!] | [Browser|Backend] [Live] [dot] | [LIVE|RESULTS] [Play] [Stop] [scrub] | [Library] [Results]
+```
+
+| Group | Controls | Notes |
+| --- | --- | --- |
+| Audio context | `Joe, go!` | One-time click — resumes Web Audio, enables Live |
+| Live capture | mode select + `Live` + indicator | Browser = MediaRecorder mic; Backend = sounddevice WAV |
+| Transport | mode badge + `Play/Stop` + scrub + `×` eject | Disabled while recording; badge shows `LIVE` or `RESULTS`; `×` clears active source |
+| Panels | `Library` + `Results` | Slide-in panels for file management and analysis output |
+
+See [docs/cookbook.md](docs/cookbook.md) for step-by-step recipes.
 
 > **Note:** `npm run build` warns that `outDir` is outside the project root — expected (Vite root is `src/`).
 
@@ -127,7 +142,8 @@ The Vite frontend (`src/`) has three layers:
 
 | Document | Contents |
 | --- | --- |
-| [docs/contributing.md](docs/contributing.md) | Local setup, dev server workflow, branch naming, pre-PR checks |
+| [docs/contributing.md](docs/contributing.md) | Local setup, UI control groups, troubleshooting, branch naming, pre-PR checks |
+| [docs/cookbook.md](docs/cookbook.md) | Step-by-step recipes for common workflows |
 | [docs/api.md](docs/api.md) | FastAPI endpoint reference with `curl` examples |
 | [docs/modules.md](docs/modules.md) | Python module architecture and data flow |
 

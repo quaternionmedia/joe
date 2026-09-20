@@ -112,3 +112,31 @@ test('Process_Data fixture has required backend contract keys', async ({ page })
   expect(firstAudio.chroma).toHaveProperty('Harmonic');
   expect(firstAudio.chroma).toHaveProperty('Percussive');
 });
+
+// ─── Transport initial state ──────────────────────────────────────────────────
+
+test('Live button is disabled until Joe, go! is clicked', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', err => errors.push(err.message));
+
+  await page.goto('/');
+  await page.waitForSelector('canvas');
+
+  // Live toggle must be disabled on load (Web Audio context not started)
+  const liveBtn = page.getByTestId('live-toggle');
+  await expect(liveBtn).toBeDisabled();
+
+  // After Joe, go! it should become enabled
+  await page.getByTestId('start-button').click();
+  await expect(liveBtn).toBeEnabled({ timeout: 2000 });
+
+  expect(errors).toHaveLength(0);
+});
+
+test('Canvas mode badge is empty on initial load', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForSelector('canvas');
+
+  // No recording or results — badge should be blank
+  await expect(page.locator('#canvas-mode')).toHaveText('');
+});

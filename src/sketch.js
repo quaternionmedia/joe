@@ -1,25 +1,37 @@
 import { setlist } from './config/setlists.js';
 
-const HIST_SIZE = 125;
-const STAFF_LINES = new Set([23, 27, 30, 33, 37, 44, 47, 51, 54, 57]);
+const HIST_SIZE   = 125;
+const TRANSPORT_H = 48;   // must match MainCanvas.js TRANSPORT_H
+const LABEL_W     = 28;   // must match MainCanvas.js LABEL_W
+
+// C-note piano-key indices (key = MIDI - 20) matching MainCanvas guide lines:
+// C1=4, C2=16, C3=28, C4=40 (middle C), C5=52, C6=64, C7=76
+const STAFF_LINES = new Set([4, 16, 28, 40, 52, 64, 76]);
 
 /**
  * Returns the p5 instance-mode sketch function for the live FFT visualiser.
  *
+ * Coordinate system is aligned with MainCanvas so staff lines, dot history,
+ * and the playhead hairline share the same pixel rows/columns:
+ *
+ *   Y: key n=0 (A0)  → y = height - TRANSPORT_H  (bottom of draw area)
+ *      key n=87 (B7) → y = 0                       (top)
+ *   X: m=0 (now)     → x = width                   (right edge = MainCanvas rightEdge)
+ *      m=HIST_SIZE   → x = LABEL_W                  (left label margin)
+ *
  * @param {Object} state - Shared mutable state: { current: number }
- *   state.current is the active setlist index, owned by index.js.
- *   EraPanel writes it; this sketch reads it each draw frame for the palette.
  */
 export function createSketch(state) {
   return (p) => {
     let fft, mic;
+    let _audioSrcNode = null;   // MediaElementAudioSourceNode for playback FFT
     let pmap = [];
     let pmaphb = [];
     const pmaph = [];
+    let _playheadX = -1;   // pixel X of playhead hairline; -1 = hidden
 
     p.setup = () => {
       p.createCanvas(p.windowWidth, p.windowHeight);
-      p.textAlign(p.CENTER);
       pmap = new Float32Array(pnoDist(88, 12, 440));
     };
 
@@ -30,39 +42,52 @@ export function createSketch(state) {
 
       if (pmaph.length > 2000) pmaph.length = 2000;
 
-      if (!mic) return;
+      const drawBottom = p.height - TRANSPORT_H;
 
-      fft.analyze();
-
-      for (let k = 0; k < pmap.length; k++) {
-        pmaphb[k] = fft.getEnergy(pmap[k]);
+      // ── Staff lines: C notes, aligned with MainCanvas C-note guides ───────
+      p.noFill();
+      p.strokeWeight(0.5);
+      for (const n of STAFF_LINES) {
+        const py = (87 - n) / 87 * drawBottom;
+        p.stroke(125, 125, 125, 55);
+        p.line(LABEL_W, py, p.width, py);
       }
-      pmaph.unshift(pmaphb);
-      pmaphb = [];
 
-      const pmapL = Math.min(pmaph.length, HIST_SIZE);
-      const [ar, ag, ab] = palette.accent;
+      // ── FFT dot history (while mic is active OR audio is routed through FFT)
+      if (fft && (mic || _audioSrcNode)) {
+        fft.analyze();
 
-      // Staff lines — fixed horizontal guides at specific piano-key pitches (n axis)
-      for (let n = 0; n < 88; n++) {
-        if (STAFF_LINES.has(n)) {
-          p.stroke(125);
-          p.strokeWeight(3);
-          p.line(0, p.map(n, 0, 88, p.height - 100, 100),
-                 p.width, p.map(n, 0, 88, p.height - 100, 100));
+        for (let k = 0; k < pmap.length; k++) {
+          pmaphb[k] = fft.getEnergy(pmap[k]);
+        }
+        pmaph.unshift(pmaphb);
+        if (p.onFrame) p.onFrame(pmaphb); // emit before clearing
+        pmaphb = [];
+
+        const pmapL = Math.min(pmaph.length, HIST_SIZE);
+        const [ar, ag, ab] = palette.accent;
+
+        p.noStroke();
+        for (let m = 0; m < pmapL; m++) {
+          for (let n = 0; n < pmaph[m].length; n++) {
+            const xy = logMap(pmaph[m][n], 20, 255, 0, 10, p);
+            if (xy <= 0) continue;
+            p.fill(ar, ag, ab);
+            // X: m=0 (now) at right edge, m=HIST_SIZE (oldest) at LABEL_W
+            const px = p.map(m, 0, HIST_SIZE, p.width, LABEL_W);
+            // Y: n=0 (A0) at drawBottom, n=87 (B7) at 0  — matches MainCanvas
+            const py = (87 - n) / 87 * drawBottom;
+            p.ellipse(px, py, xy, xy);
+          }
         }
       }
 
-      // Frequency history dots
-      p.noStroke();
-      for (let m = 0; m < pmapL; m++) {
-        for (let n = 0; n < pmaph[m].length; n++) {
-          p.fill(ar, ag, ab);
-          const xy = logMap(pmaph[m][n], 20, 255, 0, 10, p);
-          const px = p.map(m, 0, HIST_SIZE, p.width - 100, 100);
-          const py = p.map(n, 0, 88, p.height - 100, 100);
-          p.ellipse(px, py, xy, xy);
-        }
+      // ── Playhead hairline (results-mode, driven by Transport via index.js) ─
+      if (_playheadX >= LABEL_W) {
+        p.stroke(255, 255, 255, 70);
+        p.strokeWeight(1);
+        p.noFill();
+        p.line(_playheadX, 0, _playheadX, drawBottom);
       }
     };
 
@@ -71,12 +96,14 @@ export function createSketch(state) {
     };
 
     /**
-     * Start microphone capture. Called from the #start-button DOM handler.
-     * Exposed on the sketch instance via p so index.js can call sketch.startAudio().
-     *
-     * Browsers suspend the Web Audio context until an explicit resume() inside a
-     * user-gesture handler. We resume here (the button click IS a user gesture),
-     * then create FFT + AudioIn only after the context is running.
+     * Set playhead pixel X for results-mode sync with Transport playback.
+     * Called from index.js each rAF frame while audio plays.  Pass -1 to hide.
+     */
+    p.setPlayheadX = (x) => { _playheadX = x; };
+
+    /**
+     * Start microphone capture.  The button click IS the required user gesture
+     * that allows AudioContext.resume() to succeed.
      */
     p.startAudio = () => {
       const P5 = p.constructor;
@@ -85,7 +112,46 @@ export function createSketch(state) {
         mic = new P5.AudioIn();
         fft.setInput(mic);   // route mic exclusively to FFT analyser
         mic.start();
+        _playheadX = -1;     // hide results playhead while live
       });
+    };
+
+    /** Stop microphone capture and suspend the Web Audio context. */
+    p.stopAudio = () => {
+      if (mic) { mic.stop(); mic = null; }
+      fft = null;
+      p.getAudioContext().suspend();
+    };
+
+    /**
+     * Route an HTMLAudioElement through the p5 FFT analyser so that
+     * audio playback shows up in the live FFT dots.
+     * Safe to call multiple times with the same element (no-op after first).
+     * @param {HTMLAudioElement} audioEl
+     */
+    p.connectAudioSource = (audioEl) => {
+      if (!fft) return;
+      // Each audio element may only have one MediaElementSourceNode —
+      // reuse it if already created (stored on the element itself).
+      if (!audioEl._p5SrcNode) {
+        const ctx = p.getAudioContext();
+        audioEl._p5SrcNode = ctx.createMediaElementSource(audioEl);
+      }
+      if (_audioSrcNode !== audioEl._p5SrcNode) {
+        if (_audioSrcNode) _audioSrcNode.disconnect();
+        _audioSrcNode = audioEl._p5SrcNode;
+        // Connect: audioEl → FFT analyser → destination (so we still hear it)
+        _audioSrcNode.connect(fft.analyser);
+        fft.analyser.connect(p.getAudioContext().destination);
+      }
+    };
+
+    /** Disconnect the audio element from the FFT analyser. */
+    p.disconnectAudioSource = () => {
+      if (_audioSrcNode) {
+        _audioSrcNode.disconnect();
+        _audioSrcNode = null;
+      }
     };
   };
 }

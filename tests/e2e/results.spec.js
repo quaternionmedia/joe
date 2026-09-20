@@ -189,3 +189,58 @@ test('results panel closes on second toggle click', async ({ page }) => {
   const vw  = await page.evaluate(() => window.innerWidth);
   expect(box.x).toBeGreaterThanOrEqual(vw);
 });
+
+// ─── Fetch Latest ─────────────────────────────────────────────────────────────
+
+test('Fetch Latest button loads results and shows note count', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', err => errors.push(err.message));
+
+  // Mock the API before page load
+  await page.route('**/api/results/latest', route => route.fulfill({
+    status:      200,
+    contentType: 'application/json',
+    body:        JSON.stringify(fixtureJson),
+  }));
+
+  await page.goto('/');
+  await page.waitForSelector('canvas');
+  await openResultsPanel(page);
+
+  await page.getByTestId('fetch-latest').click();
+  await page.waitForTimeout(500);
+
+  // Results meta should show note count
+  const meta = await page.getByTestId('results-meta').textContent();
+  expect(meta).toMatch(/Notes:/);
+
+  // Piano roll canvas should be visible
+  await expect(page.getByTestId('piano-roll-canvas')).toBeVisible();
+
+  expect(errors).toHaveLength(0);
+});
+
+// ─── Canvas mode badge ────────────────────────────────────────────────────────
+
+test('Canvas mode badge shows RESULTS after loading notes from file input', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', err => errors.push(err.message));
+
+  await page.goto('/');
+  await page.waitForSelector('canvas');
+  await openResultsPanel(page);
+
+  await page.getByTestId('file-input').setInputFiles({
+    name:     'Process_Data_fixture.json',
+    mimeType: 'application/json',
+    buffer:   fixtureBuffer,
+  });
+
+  await page.waitForTimeout(300);
+
+  // canvas-mode badge should read RESULTS
+  const badge = page.locator('#canvas-mode');
+  await expect(badge).toHaveText('RESULTS', { timeout: 2000 });
+
+  expect(errors).toHaveLength(0);
+});
