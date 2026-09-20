@@ -27,6 +27,11 @@ BAD_REQUEST_NAMES = [
     pytest.param(quote(str(PYPROJECT), safe=""), id="absolute-path"),
     pytest.param("sub%2Fgood.wav", id="encoded-forward-slash"),
     pytest.param("sub/good.wav", id="forward-slash"),
+    # Windows opens good.wav for these; the route must not offer the alias
+    pytest.param(f"{GOOD}.", id="trailing-dot"),
+    pytest.param(f"{GOOD}%20", id="trailing-space"),
+    # a NUL byte would raise ValueError from the filesystem call, not 404
+    pytest.param(f"{GOOD}%00", id="nul-byte"),
 ]
 
 # Names as the handler receives them; the HTTP client normalises "." and ".."
@@ -40,6 +45,9 @@ BAD_HANDLER_NAMES = [
     pytest.param(str(PYPROJECT), id="absolute-path"),
     pytest.param("sub/good.wav", id="forward-slash"),
     pytest.param("sub\\good.wav", id="backslash"),
+    pytest.param(f"{GOOD}.", id="trailing-dot"),
+    pytest.param(f"{GOOD} ", id="trailing-space"),
+    pytest.param(f"{GOOD}\x00", id="nul-byte"),
 ]
 
 

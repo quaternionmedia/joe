@@ -208,10 +208,12 @@ def _audio_file(filename: str) -> Path:
     Map a client-supplied name to a file inside AUDIO_DIR.
 
     Only a bare filename is accepted: no path separators, no parent or
-    drive components, and the resolved candidate must stay inside
-    AUDIO_DIR (which also rules out symlinks pointing elsewhere). Any
-    rejection is reported as 404, identical to a missing file, so the
-    response never reveals whether something exists outside the directory.
+    drive components, no NUL byte, no trailing dot or space (Windows
+    strips those and opens the file they alias), and the resolved
+    candidate must stay inside AUDIO_DIR (which also rules out symlinks
+    pointing elsewhere). Any rejection is reported as 404, identical to a
+    missing file, so the response never reveals whether something exists
+    outside the directory.
     """
     not_found = HTTPException(status_code=404, detail="File not found")
     if (
@@ -219,6 +221,8 @@ def _audio_file(filename: str) -> Path:
         or filename in (".", "..")
         or "/" in filename
         or "\\" in filename
+        or "\x00" in filename
+        or filename.rstrip(". ") != filename
         or Path(filename).name != filename
     ):
         raise not_found

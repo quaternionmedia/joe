@@ -101,7 +101,7 @@ Run the pipeline on a specific file in `Data/Audio/`. Sets the `JOE_AUDIO_FILE` 
 
 | Status | Reason |
 | --- | --- |
-| `404` | File not found in `Data/Audio/`, or `filename` is not a bare name (contains a path separator or `..`) |
+| `404` | File not found in `Data/Audio/`, or `filename` is not a bare name (contains a path separator, `..` or a NUL byte, or ends in a dot or space) |
 | `200` + `returncode: 1` | Unsupported format — check `stderr` for details |
 | `200` + `returncode: -1` | Subprocess failed to start or communicate — check `stderr` |
 | `200` + `returncode != 0` | Pipeline crashed — check `stderr` for Python traceback |
@@ -233,7 +233,7 @@ appropriate `Content-Type` for the browser's `<audio>` element.
 
 | Status | Reason |
 | --- | --- |
-| `404` | File not found in `Data/Audio/`, or `filename` is not a bare name (contains a path separator or `..`) |
+| `404` | File not found in `Data/Audio/`, or `filename` is not a bare name (contains a path separator, `..` or a NUL byte, or ends in a dot or space) |
 
 **curl**
 
