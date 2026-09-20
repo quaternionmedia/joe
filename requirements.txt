@@ -5,3 +5,8 @@ pytest
 pytest-sugar
 nox
 numpy
+sounddevice
+soundfile
+fastapi
+uvicorn[standard]
+typer
