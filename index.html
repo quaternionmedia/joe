@@ -4,19 +4,18 @@
     <meta charset="utf-8" />
     <title>Joe | QM</title>
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
-    <!-- p5 + p5.sound loaded as globals so p5.sound can patch window.p5 reliably -->
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.2/lib/p5.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.2/lib/addons/p5.sound.js"></script>
-    <script type="module" crossorigin src="/joe/assets/index-Bzw7Y1ud.js"></script>
-    <link rel="stylesheet" crossorigin href="/joe/assets/index-CGWCi9Eq.css">
+    <script type="module" crossorigin src="/joe/assets/index-DxeJ6AAz.js"></script>
+    <link rel="stylesheet" crossorigin href="/joe/assets/index-kGamhCVb.css">
   </head>
 
   <body>
-    <!-- p5 canvas target -->
+    <!-- Layer 0: p5 FFT canvas -->
     <div id="sketch"></div>
 
-    <!-- Controls: top-left -->
-    <button id="start-button" data-testid="start-button" type="button">Joe, go!</button>
+    <!-- Layer 1: unified piano roll canvas — full-screen, always on -->
+    <canvas id="piano-roll-canvas" data-testid="piano-roll-canvas"></canvas>
 
     <!-- Era overlay: top-centre, fades in after first navigation -->
     <div id="era-panel" data-testid="era-panel">
@@ -28,10 +27,25 @@
       </div>
     </div>
 
-    <!-- Results toggle: top-right -->
-    <button id="results-toggle" data-testid="results-toggle" type="button">Results</button>
+    <!-- Capture slide-in panel: left edge — library only -->
+    <div id="capture-panel" data-testid="capture-panel" class="capture-panel">
+      <div class="capture-header">
+        <span class="capture-title">Library</span>
+        <button data-testid="capture-close" type="button">x</button>
+      </div>
+      <div data-testid="capture-file" class="capture-file"></div>
+      <button data-testid="capture-process" type="button" hidden>Process with pipeline</button>
+      <div data-testid="capture-error" class="capture-error" hidden></div>
+      <div class="capture-library">
+        <div class="capture-library-header">
+          <span>Audio Files</span>
+          <button data-testid="capture-refresh" type="button">Refresh</button>
+        </div>
+        <ul data-testid="capture-file-list"></ul>
+      </div>
+    </div>
 
-    <!-- Results slide-in panel: right edge -->
+    <!-- Results slide-in panel: right edge — metadata + controls -->
     <div id="results-panel" data-testid="results-panel">
       <div class="results-header">
         <h2>Analysis Results</h2>
@@ -47,7 +61,73 @@
         Could not parse file — check it is a valid Process_Data JSON.
       </div>
       <div id="results-meta" data-testid="results-meta"></div>
-      <canvas id="piano-roll-canvas" data-testid="piano-roll-canvas"></canvas>
+      <div class="piano-roll-legend">
+        <div class="legend-item"><div class="legend-swatch legend-raw"></div> Raw</div>
+        <div class="legend-item"><div class="legend-swatch legend-harmonic"></div> Harmonic</div>
+        <div class="legend-item"><div class="legend-swatch legend-percussive"></div> Percussive</div>
+      </div>
+    </div>
+
+    <!-- ─── First-run hint (dismissed via localStorage) ─────────────────── -->
+    <div id="first-run-hint" class="first-run-hint" role="note" aria-label="Quick start guide">
+      <span class="hint-steps">
+        <span class="hint-step"><b>1.</b> Joe, go! — start audio</span>
+        <span class="hint-sep">·</span>
+        <span class="hint-step"><b>2.</b> Browser/Backend + Live — record</span>
+        <span class="hint-sep">·</span>
+        <span class="hint-step"><b>3.</b> Library → Process — run pipeline</span>
+        <span class="hint-sep">·</span>
+        <span class="hint-step"><b>4.</b> Results — view piano roll</span>
+      </span>
+      <button id="hint-dismiss" type="button" aria-label="Dismiss">×</button>
+    </div>
+
+    <!-- ─── Single bottom control bar ────────────────────────────────────── -->
+    <div id="transport">
+
+      <!-- 1. System: audio context -->
+      <div class="tg">
+        <button id="start-button" data-testid="start-button" type="button">Joe, go!</button>
+      </div>
+
+      <div class="td"></div>
+
+      <!-- 2. Live capture: mode selector + record toggle + indicator -->
+      <div class="tg">
+        <select id="capture-mode" data-testid="capture-mode" aria-label="Capture mode">
+          <option value="browser">Browser</option>
+          <option value="backend">Backend</option>
+        </select>
+        <button id="live-toggle" data-testid="live-toggle" type="button" disabled>Live</button>
+        <span id="live-indicator" class="capture-indicator"></span>
+      </div>
+
+      <div class="td"></div>
+
+      <!-- 3. Canvas mode badge + playback transport (takes remaining width) -->
+      <div class="tg tg-transport">
+        <span id="canvas-mode" class="canvas-mode" aria-live="polite"></span>
+        <button data-testid="transport-play" type="button">Play</button>
+        <button data-testid="transport-stop" type="button">Stop</button>
+        <input type="range" data-testid="transport-scrub"
+               min="0" max="100" step="0.001" value="0"
+               aria-label="Playback position" />
+        <span data-testid="transport-time">0:00</span>
+        <span class="transport-sep">/</span>
+        <span data-testid="transport-duration">0:00</span>
+        <span data-testid="transport-name" class="transport-name"></span>
+        <button id="transport-eject" data-testid="transport-eject"
+                type="button" hidden aria-label="Eject audio">×</button>
+      </div>
+
+      <div class="td"></div>
+
+      <!-- 4. Panel toggles -->
+      <div class="tg">
+        <button id="capture-toggle" data-testid="capture-toggle" type="button">Library</button>
+        <button id="results-toggle" data-testid="results-toggle" type="button">Results</button>
+      </div>
+
     </div>
 
   </body>
