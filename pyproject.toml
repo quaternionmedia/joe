@@ -18,6 +18,7 @@ dependencies = [
     "fastapi",
     "uvicorn[standard]",
     "typer",
+    "httpx",
 ]
 requires-python = "==3.11.*"
 readme = "README.md"

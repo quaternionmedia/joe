@@ -203,12 +203,39 @@ def audio_files():
     ]
 
 
+def _audio_file(filename: str) -> Path:
+    """
+    Map a client-supplied name to a file inside AUDIO_DIR.
+
+    Only a bare filename is accepted: no path separators, no parent or
+    drive components, and the resolved candidate must stay inside
+    AUDIO_DIR (which also rules out symlinks pointing elsewhere). Any
+    rejection is reported as 404, identical to a missing file, so the
+    response never reveals whether something exists outside the directory.
+    """
+    not_found = HTTPException(status_code=404, detail="File not found")
+    if (
+        not filename
+        or filename in (".", "..")
+        or "/" in filename
+        or "\\" in filename
+        or Path(filename).name != filename
+    ):
+        raise not_found
+    audio_root = AUDIO_DIR.resolve()
+    try:
+        candidate = (audio_root / filename).resolve()
+    except (OSError, RuntimeError):
+        raise not_found from None
+    if not candidate.is_relative_to(audio_root) or not candidate.is_file():
+        raise not_found
+    return candidate
+
+
 @app.get("/api/audio/{filename}")
 def audio_serve(filename: str):
     """Serve an audio file from Data/Audio/ for browser playback."""
-    path = AUDIO_DIR / filename
-    if not path.exists() or not path.is_file():
-        raise HTTPException(status_code=404, detail="File not found")
+    path = _audio_file(filename)
     media_type = MEDIA_TYPES.get(path.suffix, "application/octet-stream")
     return FileResponse(str(path), media_type=media_type)
 
@@ -221,9 +248,7 @@ async def run_on_file(filename: str):
     Run the pipeline on a specific file in Data/Audio/.
     Sets JOE_AUDIO_FILE env var so main.py processes only that file.
     """
-    path = AUDIO_DIR / filename
-    if not path.exists() or not path.is_file():
-        raise HTTPException(status_code=404, detail="File not found")
+    path = _audio_file(filename)
     if path.suffix.lower() not in PIPELINE_EXTENSIONS:
         return {
             "returncode": 1,
@@ -234,7 +259,7 @@ async def run_on_file(filename: str):
                 f"(WebM requires ffmpeg on PATH)"
             ),
         }
-    env = {**os.environ, "JOE_AUDIO_FILE": str(path.resolve())}
+    env = {**os.environ, "JOE_AUDIO_FILE": str(path)}
     try:
         proc = await asyncio.create_subprocess_exec(
             sys.executable,
