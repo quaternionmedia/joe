@@ -26,12 +26,24 @@ const SILENT_WAV = Buffer.from([
  * Install route mocks for all API endpoints used by the app.
  * Must be called before page.goto() so the mocks are active when
  * CapturePanel.mount() calls _loadLibrary() on startup.
+ *
+ * Playwright tries routes in reverse registration order (the last one
+ * registered wins), so the catch-all audio route goes first and the
+ * more specific /api/audio/files route after it.
  */
 async function mockApi(page, {
   filename       = 'test.wav',
   pipelineOk     = true,
   pipelineStderr = '',
 } = {}) {
+  // Audio file served to HTMLAudioElement (catch-all; registered first so
+  // the /api/audio/files route below takes precedence)
+  await page.route('**/api/audio/**', route => route.fulfill({
+    status:      200,
+    contentType: 'audio/wav',
+    body:        SILENT_WAV,
+  }));
+
   // Library file list (fetched on mount)
   await page.route('**/api/audio/files', route => route.fulfill({
     status:      200,
@@ -55,13 +67,6 @@ async function mockApi(page, {
     status:      200,
     contentType: 'application/json',
     body:        JSON.stringify(fixtureJson),
-  }));
-
-  // Audio file served to HTMLAudioElement
-  await page.route('**/api/audio/**', route => route.fulfill({
-    status:      200,
-    contentType: 'audio/wav',
-    body:        SILENT_WAV,
   }));
 }
 
@@ -141,6 +146,13 @@ test('Unsupported format shows error and keeps results panel closed', async ({ p
   const errors = [];
   page.on('pageerror', err => errors.push(err.message));
 
+  // Catch-all audio route first, so the /api/audio/files route registered
+  // after it takes precedence (last registered wins).
+  await page.route('**/api/audio/**', route => route.fulfill({
+    status:      200,
+    contentType: 'application/octet-stream',
+    body:        Buffer.from([]),
+  }));
   await page.route('**/api/audio/files', route => route.fulfill({
     status:      200,
     contentType: 'application/json',
@@ -154,11 +166,6 @@ test('Unsupported format shows error and keeps results panel closed', async ({ p
       stdout:     '',
       stderr:     "Format '.xyz' is not supported by the pipeline. Supported: .flac, .mp3, .ogg, .wav, .webm",
     }),
-  }));
-  await page.route('**/api/audio/**', route => route.fulfill({
-    status:      200,
-    contentType: 'application/octet-stream',
-    body:        Buffer.from([]),
   }));
 
   await page.goto('/');
