@@ -11,6 +11,9 @@ Endpoints:
     GET  /api/audio/files           List saved audio files sorted by mtime
     GET  /api/audio/{filename}      Serve an audio file for browser playback
     POST /api/run/{filename}        Run the pipeline on a specific file in Data/Audio/
+    GET  /api/voice/devices         Lists the server's audio input devices
+    POST /api/voice/transcribe      Transcribes an audio file under Data/Audio/ or Data/Voice/
+    POST /api/voice/listen          Records from the server's mic and transcribes it
 
 Run directly:
     python -m uvicorn api:app --reload --port 8000
@@ -31,6 +34,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from capture import AudioCapture
+
+from Modules.Voice import Voice
 
 app = FastAPI(title="Joe API", version="0.1.0")
 
@@ -284,3 +289,36 @@ async def run_on_file(filename: str):
         "stdout": stdout.decode("utf-8", errors="replace"),
         "stderr": stderr.decode("utf-8", errors="replace"),
     }
+
+
+def _resolve_audio_path(filename: str) -> Path:
+    """Resolve `filename` to a real file under Data/Audio/ or Data/Voice/.
+
+    Rejects absolute paths and any path that escapes those two directories,
+    since this is reachable from an HTTP request.
+    """
+    for base in (Path("Data/Audio"), Path("Data/Voice")):
+        candidate = (base / filename).resolve()
+        if candidate.is_relative_to(base.resolve()) and candidate.is_file():
+            return candidate
+    raise HTTPException(
+        status_code=404,
+        detail=f"No such file under Data/Audio/ or Data/Voice/: {filename}",
+    )
+
+
+@app.post("/api/voice/transcribe")
+def voice_transcribe(filename: str):
+    """Transcribes an audio file already present under Data/Audio/ or Data/Voice/."""
+    path = _resolve_audio_path(filename)
+    voice = Voice()
+    return voice.transcribe(str(path))
+
+
+@app.post("/api/voice/listen")
+def voice_listen(duration: float = 5.0):
+    """Records `duration` seconds from the server's default microphone and transcribes it."""
+    if not 0 < duration <= 60:
+        raise HTTPException(status_code=400, detail="duration must be between 0 and 60 seconds")
+    voice = Voice()
+    return voice.listen(duration=duration)

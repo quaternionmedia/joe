@@ -13,6 +13,8 @@ dependencies = [
     "pytest-sugar",
     "nox",
     "numpy",
+    "scipy",
+    "openai-whisper",
     "sounddevice",
     "soundfile",
     "fastapi",
