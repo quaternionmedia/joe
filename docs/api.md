@@ -94,6 +94,63 @@ curl -X POST http://localhost:8000/api/run
 
 ---
 
+### `POST /api/voice/transcribe`
+
+Transcribes an audio file already present under `Data/Audio/` or `Data/Voice/` using
+whisper. `filename` is a name relative to one of those two directories — paths that
+resolve outside them are rejected.
+
+**Query params**
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `filename` | str | — | required; filename under `Data/Audio/` or `Data/Voice/` |
+
+**Response** — `200 OK`
+
+```json
+{ "text": "...", "segments": [...], "language": "en" }
+```
+
+**Errors**
+
+| Status | Reason |
+| --- | --- |
+| `404` | No such file under `Data/Audio/` or `Data/Voice/` |
+
+**curl**
+
+```bash
+curl -X POST "http://localhost:8000/api/voice/transcribe?filename=clip.wav"
+```
+
+---
+
+### `POST /api/voice/listen`
+
+Records `duration` seconds (default `5.0`, max `60`) from the server's default
+microphone, writes it to `Data/Voice/`, and transcribes the result.
+
+**Query params**
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `duration` | float | `5.0` | seconds to record, `0 < duration <= 60` |
+
+**Response** — `200 OK`
+
+```json
+{ "text": "...", "segments": [...], "language": "en", "audio_path": "Data/Voice/capture_...wav" }
+```
+
+**curl**
+
+```bash
+curl -X POST "http://localhost:8000/api/voice/listen?duration=5"
+```
+
+---
+
 ## Interactive docs
 
 FastAPI auto-generates an interactive API explorer at:
