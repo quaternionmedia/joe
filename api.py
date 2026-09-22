@@ -35,7 +35,7 @@ from fastapi.responses import FileResponse
 
 from capture import AudioCapture
 
-from Modules.Voice import Voice
+from Modules.Voice import NoMicrophoneError, Voice, list_input_devices
 
 app = FastAPI(title="Joe API", version="0.1.0")
 
@@ -307,6 +307,21 @@ def _resolve_audio_path(filename: str) -> Path:
     )
 
 
+@app.get("/api/voice/devices")
+def voice_devices():
+    """Audio input devices the server's machine can see, and which one is default.
+
+    Query this before relying on `/api/voice/listen` — it is the server's
+    hardware that records, not the caller's, so "is there a microphone" is a
+    question about wherever this process is running.
+    """
+    devices = list_input_devices()
+    return {
+        "devices": devices,
+        "microphone_available": any(d["default"] for d in devices) or bool(devices),
+    }
+
+
 @app.post("/api/voice/transcribe")
 def voice_transcribe(filename: str):
     """Transcribes an audio file already present under Data/Audio/ or Data/Voice/."""
@@ -321,4 +336,7 @@ def voice_listen(duration: float = 5.0):
     if not 0 < duration <= 60:
         raise HTTPException(status_code=400, detail="duration must be between 0 and 60 seconds")
     voice = Voice()
-    return voice.listen(duration=duration)
+    try:
+        return voice.listen(duration=duration)
+    except NoMicrophoneError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))

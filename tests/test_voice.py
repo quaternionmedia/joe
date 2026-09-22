@@ -4,7 +4,69 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from Modules.Voice import Voice
+from Modules.Voice import NoMicrophoneError, Voice, default_input_device, list_input_devices, microphone_available
+
+
+def _fake_sounddevice(devices, default_input_index):
+    fake_sd = MagicMock()
+    fake_sd.query_devices.return_value = devices
+    fake_sd.default.device = (default_input_index, 0)
+    return fake_sd
+
+
+def test_list_input_devices_marks_the_default(monkeypatch):
+    devices = [
+        {"name": "Speakers", "max_input_channels": 0, "max_output_channels": 2},
+        {"name": "Built-in Mic", "max_input_channels": 2, "max_output_channels": 0},
+        {"name": "USB Mic", "max_input_channels": 1, "max_output_channels": 0},
+    ]
+    fake_sd = _fake_sounddevice(devices, default_input_index=2)
+
+    with patch.dict(sys.modules, {"sounddevice": fake_sd}):
+        result = list_input_devices()
+
+    assert [d["name"] for d in result] == ["Built-in Mic", "USB Mic"]
+    assert result[0]["default"] is False
+    assert result[1]["default"] is True
+
+
+def test_list_input_devices_empty_when_backend_unreachable(monkeypatch):
+    fake_sd = MagicMock()
+    fake_sd.query_devices.side_effect = OSError("no host api")
+
+    with patch.dict(sys.modules, {"sounddevice": fake_sd}):
+        assert list_input_devices() == []
+
+
+def test_default_input_device_falls_back_to_first_when_none_marked_default():
+    devices = [
+        {"name": "Only Mic", "max_input_channels": 1, "max_output_channels": 0},
+    ]
+    fake_sd = _fake_sounddevice(devices, default_input_index=99)  # doesn't match any index
+
+    with patch.dict(sys.modules, {"sounddevice": fake_sd}):
+        device = default_input_device()
+
+    assert device is not None
+    assert device["name"] == "Only Mic"
+
+
+def test_microphone_available_false_with_no_input_devices():
+    fake_sd = _fake_sounddevice([{"name": "Speakers", "max_input_channels": 0, "max_output_channels": 2}], 0)
+
+    with patch.dict(sys.modules, {"sounddevice": fake_sd}):
+        assert microphone_available() is False
+
+
+def test_record_raises_no_microphone_error_when_none_available(tmp_path):
+    fake_sd = _fake_sounddevice([], default_input_index=0)
+
+    voice = Voice(capture_dir=str(tmp_path))
+    with patch.dict(sys.modules, {"sounddevice": fake_sd}):
+        with pytest.raises(NoMicrophoneError):
+            voice.record()
+
+    fake_sd.rec.assert_not_called()
 
 
 def test_transcribe_raises_for_missing_file(tmp_path):
@@ -44,7 +106,9 @@ def test_transcribe_returns_expected_shape(tmp_path):
 
 
 def test_record_writes_wav_file(tmp_path):
-    fake_sd = MagicMock()
+    fake_sd = _fake_sounddevice(
+        [{"name": "Mic", "max_input_channels": 1, "max_output_channels": 0}], default_input_index=0
+    )
     fake_sd.rec.return_value = np.zeros((80000, 1), dtype="float32")
 
     voice = Voice(capture_dir=str(tmp_path))
@@ -59,7 +123,9 @@ def test_record_writes_wav_file(tmp_path):
 
 
 def test_listen_combines_record_and_transcribe(tmp_path):
-    fake_sd = MagicMock()
+    fake_sd = _fake_sounddevice(
+        [{"name": "Mic", "max_input_channels": 1, "max_output_channels": 0}], default_input_index=0
+    )
     fake_sd.rec.return_value = np.zeros((80000, 1), dtype="float32")
 
     fake_whisper = MagicMock()
