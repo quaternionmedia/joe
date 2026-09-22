@@ -43,6 +43,7 @@ Open `http://localhost:3000/joe`, click **Results → Fetch Latest**.
 | `uv run joe run` | Run the pipeline once |
 | `uv run joe voice transcribe <path>` | Transcribe an audio file to text |
 | `uv run joe voice listen [--duration 5]` | Record from the mic and transcribe it |
+| `uv run joe voice devices` | List audio input devices this machine can see |
 
 See [docs/api.md](docs/api.md) for the full API endpoint reference.
 
@@ -112,7 +113,7 @@ Input audio is read from `Data/Audio/`.
 - `tests/`: Python unit tests; `tests/e2e/` for Playwright E2E tests
 - `docs/`: contributor guide, module reference, API reference
 - `api.py`: FastAPI server wrapping the pipeline — see [docs/api.md](docs/api.md)
-- `cli.py`: Typer CLI (`joe frontend | backend | dev | run | voice transcribe | voice listen`)
+- `cli.py`: Typer CLI (`joe frontend | backend | dev | run | voice transcribe | voice listen | voice devices`)
 - `main.py`: backend pipeline entrypoint
 
 ## Frontend Architecture

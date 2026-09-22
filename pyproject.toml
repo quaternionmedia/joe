@@ -35,5 +35,13 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 py-modules = ["cli", "api"]
 
+# Without this, only cli.py/api.py themselves get installed — Modules/ (the
+# actual analysis package they both import) is left out of the wheel, so the
+# installed console script fails with ModuleNotFoundError while `uv run
+# python -m uvicorn api:app` from the repo root happens to work (cwd puts
+# Modules/ on sys.path there, masking the gap).
+[tool.setuptools.packages.find]
+include = ["Modules*"]
+
 [tool.pdm]
 distribution = true

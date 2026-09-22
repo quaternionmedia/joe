@@ -12,6 +12,58 @@ import numpy as np
 from scipy.io import wavfile
 
 
+class NoMicrophoneError(RuntimeError):
+    """No usable input device was found, or the audio backend could not be reached.
+
+    Raised in place of whatever `sounddevice`/PortAudio throws natively
+    (`PortAudioError`, or an unrelated `OSError` when no backend exists at
+    all) so a caller — the CLI, the API, a demo script — sees one clear,
+    catchable reason instead of a backend-specific traceback.
+    """
+
+
+def list_input_devices() -> list[dict]:
+    """Every audio input device the local machine's backend can see.
+
+    Each entry: {"index": int, "name": str, "channels": int, "default": bool}.
+    Returns an empty list rather than raising when the audio backend itself
+    is unreachable (e.g. no PortAudio host API on this machine) — that is a
+    "no microphone" fact, not a crash.
+    """
+    try:
+        import sounddevice as sd
+
+        devices = sd.query_devices()
+        default_input = sd.default.device[0] if sd.default.device is not None else None
+    except Exception:
+        return []
+
+    return [
+        {
+            "index": i,
+            "name": d["name"],
+            "channels": d["max_input_channels"],
+            "default": i == default_input,
+        }
+        for i, d in enumerate(devices)
+        if d["max_input_channels"] > 0
+    ]
+
+
+def default_input_device() -> dict | None:
+    """The device `record()` would actually use, or None if there isn't one."""
+    devices = list_input_devices()
+    for d in devices:
+        if d["default"]:
+            return d
+    return devices[0] if devices else None
+
+
+def microphone_available() -> bool:
+    """Whether `record()` has any usable input device to record from."""
+    return default_input_device() is not None
+
+
 class Voice:
     """Speech-to-text and microphone capture, backed by whisper + sounddevice."""
 
@@ -60,11 +112,27 @@ class Voice:
         """Record `duration` seconds from the default microphone to a WAV file.
 
         Returns the path written to.
+
+        Raises NoMicrophoneError, rather than a raw PortAudio/OSError, when
+        there is no usable input device — checked before recording so the
+        failure is the same whether the backend has zero devices or errors
+        out entirely.
         """
+        if not microphone_available():
+            raise NoMicrophoneError(
+                "No microphone found. `joe voice devices` lists what this "
+                "machine's audio backend can see."
+            )
+
         import sounddevice as sd
 
-        frames = sd.rec(int(duration * sample_rate), samplerate=sample_rate, channels=1, dtype="float32")
-        sd.wait()
+        try:
+            frames = sd.rec(
+                int(duration * sample_rate), samplerate=sample_rate, channels=1, dtype="float32"
+            )
+            sd.wait()
+        except Exception as exc:
+            raise NoMicrophoneError(f"Recording failed: {exc}") from exc
 
         os.makedirs(self.capture_dir, exist_ok=True)
         stamp = datetime.now().strftime("%m-%d-%y_%H-%M-%S")

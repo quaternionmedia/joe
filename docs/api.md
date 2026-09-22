@@ -1,7 +1,7 @@
 # Joe API Reference
 
-The Joe FastAPI server (`api.py`) provides three endpoints for integrating the Python pipeline
-with the frontend, and for ad-hoc troubleshooting.
+The Joe FastAPI server (`api.py`) provides endpoints for integrating the Python pipeline
+with the frontend, for ad-hoc troubleshooting, and for speech analysis.
 
 **Base URL (local dev):** `http://localhost:8000`
 
@@ -94,6 +94,36 @@ curl -X POST http://localhost:8000/api/run
 
 ---
 
+### `GET /api/voice/devices`
+
+Lists the audio input devices *the server's machine* can see, and which one
+is default. Query this before relying on `/api/voice/listen` — recording
+happens wherever `joe backend` is running, not wherever the caller is, so
+"is there a microphone" is a question about that machine.
+
+**Response** — `200 OK`
+
+```json
+{
+  "devices": [
+    { "index": 1, "name": "USB Microphone", "channels": 2, "default": true }
+  ],
+  "microphone_available": true
+}
+```
+
+An empty `devices` list (and `microphone_available: false`) means the server
+has no usable input device, or its audio backend itself couldn't be reached
+— both report the same way rather than one of them crashing.
+
+**curl**
+
+```bash
+curl http://localhost:8000/api/voice/devices
+```
+
+---
+
 ### `POST /api/voice/transcribe`
 
 Transcribes an audio file already present under `Data/Audio/` or `Data/Voice/` using
@@ -142,6 +172,13 @@ microphone, writes it to `Data/Voice/`, and transcribes the result.
 ```json
 { "text": "...", "segments": [...], "language": "en", "audio_path": "Data/Voice/capture_...wav" }
 ```
+
+**Errors**
+
+| Status | Reason |
+| --- | --- |
+| `400` | `duration` outside `0 < duration <= 60` |
+| `503` | No microphone available on the server's machine — check `GET /api/voice/devices` |
 
 **curl**
 
