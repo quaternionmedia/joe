@@ -208,20 +208,20 @@ def audio_files():
     ]
 
 
-def _audio_file(filename: str) -> Path:
-    """
-    Map a client-supplied name to a file inside AUDIO_DIR.
+def _is_bare_filename(filename: str) -> bool:
+    """Whether a client-supplied name is a plain filename and nothing else.
 
-    Only a bare filename is accepted: no path separators, no parent or
-    drive components, no NUL byte, no trailing dot or space (Windows
-    strips those and opens the file they alias), and the resolved
-    candidate must stay inside AUDIO_DIR (which also rules out symlinks
-    pointing elsewhere). Any rejection is reported as 404, identical to a
-    missing file, so the response never reveals whether something exists
-    outside the directory.
+    No path separators, no parent or drive components, no NUL byte (it
+    reaches the filesystem call and raises out of the handler), and no
+    trailing dot or space (Windows strips those when opening, so `x.wav.`
+    and `"x.wav "` open the file they alias under a name no listing shows).
+
+    Shared by every route that takes a name, because the two that existed
+    did not agree: `/api/audio/{filename}` refused all of this and
+    `/api/voice/transcribe` refused none of it, so one name was 404 on the
+    first and 200 on the second.
     """
-    not_found = HTTPException(status_code=404, detail="File not found")
-    if (
+    return not (
         not filename
         or filename in (".", "..")
         or "/" in filename
@@ -229,7 +229,21 @@ def _audio_file(filename: str) -> Path:
         or "\x00" in filename
         or filename.rstrip(". ") != filename
         or Path(filename).name != filename
-    ):
+    )
+
+
+def _audio_file(filename: str) -> Path:
+    """
+    Map a client-supplied name to a file inside AUDIO_DIR.
+
+    Only a bare filename is accepted (see `_is_bare_filename`), and the
+    resolved candidate must stay inside AUDIO_DIR (which also rules out
+    symlinks pointing elsewhere). Any rejection is reported as 404,
+    identical to a missing file, so the response never reveals whether
+    something exists outside the directory.
+    """
+    not_found = HTTPException(status_code=404, detail="File not found")
+    if not _is_bare_filename(filename):
         raise not_found
     audio_root = AUDIO_DIR.resolve()
     try:
@@ -294,17 +308,25 @@ async def run_on_file(filename: str):
 def _resolve_audio_path(filename: str) -> Path:
     """Resolve `filename` to a real file under Data/Audio/ or Data/Voice/.
 
-    Rejects absolute paths and any path that escapes those two directories,
-    since this is reachable from an HTTP request.
+    Holds the name to the same rule as `/api/audio/{filename}`: a bare
+    filename, resolving inside one of the two directories. This is reachable
+    from an HTTP request, and an alias accepted here transcribes a file the
+    library never lists.
     """
-    for base in (Path("Data/Audio"), Path("Data/Voice")):
-        candidate = (base / filename).resolve()
-        if candidate.is_relative_to(base.resolve()) and candidate.is_file():
-            return candidate
-    raise HTTPException(
+    not_found = HTTPException(
         status_code=404,
         detail=f"No such file under Data/Audio/ or Data/Voice/: {filename}",
     )
+    if not _is_bare_filename(filename):
+        raise not_found
+    for base in (Path("Data/Audio"), Path("Data/Voice")):
+        try:
+            candidate = (base / filename).resolve()
+        except (OSError, RuntimeError):
+            raise not_found from None
+        if candidate.is_relative_to(base.resolve()) and candidate.is_file():
+            return candidate
+    raise not_found
 
 
 @app.get("/api/voice/devices")
