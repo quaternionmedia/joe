@@ -1,0 +1,480 @@
+/* ─── Reset ──────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  width: 100vw;
+  height: 100vh;
+  background: #000;
+  font-family: 'Courier New', Courier, monospace;
+  color: #fff;
+}
+
+/* ─── p5 canvas layer (z-index 0) ────────────────────────────────────────── */
+#sketch canvas {
+  display: block;
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 0;
+}
+
+/* ─── Main unified piano roll canvas (z-index 5) ─────────────────────────── */
+#piano-roll-canvas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: calc(100vh - 48px);
+  z-index: 5;
+  pointer-events: none;
+}
+
+/* ─── Era panel ──────────────────────────────────────────────────────────── */
+#era-panel {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  pointer-events: none;
+  opacity: 0;
+  text-align: center;
+  padding: 14px 80px;
+}
+
+.era-content { display: flex; flex-direction: column; gap: 2px; }
+
+.era-genre {
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+.era-title    { font-size: 1.1rem; letter-spacing: 0.05em; }
+.era-composer { font-size: 0.8rem; opacity: 0.75; }
+.era-year     { font-size: 0.7rem; opacity: 0.5; letter-spacing: 0.15em; }
+
+/* ─── Shared button baseline ─────────────────────────────────────────────── */
+button {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  color: #fff;
+  font-family: inherit;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 5px 11px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+button:hover { border-color: rgba(255, 255, 255, 0.7); }
+
+/* ─── Single bottom control bar ──────────────────────────────────────────── */
+#transport {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 48px;
+  z-index: 25;
+  background: rgba(8, 8, 12, 0.94);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+}
+
+/* Transport group — flex row of controls */
+.tg {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* Transport group that fills remaining width (playback scrub) */
+.tg-transport {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Thin divider between groups */
+.td {
+  width: 1px;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.12);
+  margin: 0 10px;
+  flex-shrink: 0;
+}
+
+/* Scrub range */
+#transport input[type="range"] {
+  flex: 1;
+  min-width: 0;
+  accent-color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+}
+
+/* Time display */
+[data-testid="transport-time"],
+[data-testid="transport-duration"] {
+  font-size: 0.72rem;
+  opacity: 0.55;
+  min-width: 30px;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.transport-sep  { opacity: 0.25; font-size: 0.7rem; flex-shrink: 0; }
+
+.transport-name {
+  font-size: 0.66rem;
+  opacity: 0.38;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 0 1 180px;
+  margin-left: 4px;
+  transition: opacity 0.2s;
+}
+
+/* Eject button — shown only when a file is loaded */
+#transport-eject {
+  border: none;
+  background: none;
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 0 3px;
+  letter-spacing: 0;
+  flex-shrink: 0;
+  margin-left: 0;
+}
+#transport-eject:hover { color: rgba(255, 109, 0, 0.9); border-color: transparent; }
+
+/* ─── First-run hint strip ───────────────────────────────────────────────── */
+.first-run-hint {
+  position: fixed;
+  bottom: 48px;
+  left: 0;
+  right: 0;
+  height: 28px;
+  z-index: 24;
+  background: rgba(12, 20, 30, 0.92);
+  border-top: 1px solid rgba(0, 229, 255, 0.18);
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  gap: 10px;
+  font-size: 0.6rem;
+  letter-spacing: 0.05em;
+  color: rgba(255, 255, 255, 0.45);
+}
+.first-run-hint.hidden { display: none; }
+
+.hint-steps {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+}
+.hint-step { white-space: nowrap; }
+.hint-step b { color: rgba(0, 229, 255, 0.7); font-weight: normal; }
+.hint-sep { opacity: 0.25; }
+
+#hint-dismiss {
+  border: none;
+  background: none;
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 4px;
+  letter-spacing: 0;
+  flex-shrink: 0;
+}
+#hint-dismiss:hover { color: rgba(255, 255, 255, 0.75); border-color: transparent; }
+
+/* ─── Capture mode select ────────────────────────────────────────────────── */
+#capture-mode {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: rgba(255, 255, 255, 0.7);
+  font-family: inherit;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  padding: 4px 6px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+#capture-mode option { background: #0a0a0f; color: #fff; }
+
+/* ─── Live toggle: disabled until audio context is started ───────────────── */
+#live-toggle:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+  border-style: dashed;
+}
+
+/* ─── Start button: active state after audio context started ─────────────── */
+#start-button.active {
+  border-color: rgba(100, 220, 100, 0.6);
+  color: rgba(180, 255, 180, 0.9);
+}
+
+/* ─── Canvas mode badge ──────────────────────────────────────────────────── */
+.canvas-mode {
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  padding: 2px 7px;
+  border-radius: 2px;
+  display: none;
+  flex-shrink: 0;
+}
+.canvas-mode.mode-live {
+  display: inline-block;
+  background: rgba(244, 67, 54, 0.18);
+  border: 1px solid rgba(244, 67, 54, 0.55);
+  color: #f44336;
+}
+.canvas-mode.mode-results {
+  display: inline-block;
+  background: rgba(0, 229, 255, 0.08);
+  border: 1px solid rgba(0, 229, 255, 0.35);
+  color: rgba(0, 229, 255, 0.75);
+}
+
+/* ─── Recording indicator (shared between live-indicator + capture panel) ─── */
+.capture-indicator {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: transparent;
+  flex-shrink: 0;
+}
+
+.capture-indicator.recording {
+  background: #f44336;
+  animation: capture-pulse 1s ease-in-out infinite;
+  will-change: opacity;
+}
+
+@keyframes capture-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.2; }
+}
+
+/* ─── Results panel ──────────────────────────────────────────────────────── */
+#results-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 320px;
+  height: calc(100vh - 48px);
+  transform: translateX(100%);
+  z-index: 20;
+  background: rgba(8, 8, 12, 0.95);
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  overflow-y: auto;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.results-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 10px;
+}
+
+.results-header h2 {
+  margin: 0;
+  font-size: 0.8rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+
+.results-actions { display: flex; align-items: center; gap: 6px; }
+
+#fetch-latest { position: static; }
+
+.file-label {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  padding: 5px 10px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  white-space: nowrap;
+}
+.file-label:hover { border-color: rgba(255, 255, 255, 0.7); }
+.file-label input[type="file"] { display: none; }
+
+#load-error {
+  font-size: 0.72rem;
+  color: #ff6d00;
+  padding: 8px;
+  border: 1px solid rgba(255, 109, 0, 0.35);
+}
+
+#results-meta {
+  font-size: 0.72rem;
+  opacity: 0.55;
+  line-height: 1.65;
+}
+
+/* ─── Legend ─────────────────────────────────────────────────────────────── */
+.piano-roll-legend { display: flex; gap: 12px; font-size: 0.68rem; opacity: 0.6; }
+.legend-item       { display: flex; align-items: center; gap: 4px; }
+.legend-swatch     { width: 9px; height: 9px; border-radius: 2px; }
+.legend-raw        { background: rgba(255,255,255,0.80); }
+.legend-harmonic   { background: rgba(0,229,255,0.80); }
+.legend-percussive { background: rgba(255,109,0,0.80); }
+
+/* ─── Capture / Library panel ────────────────────────────────────────────── */
+.capture-panel {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 320px;
+  height: calc(100vh - 48px);
+  transform: translateX(-100%);
+  transition: transform 0.28s ease;
+  z-index: 20;
+  background: rgba(8, 8, 12, 0.95);
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  overflow-y: auto;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.capture-panel.open { transform: translateX(0); }
+
+.capture-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 10px;
+}
+
+.capture-title {
+  font-size: 0.8rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+
+.capture-controls { display: flex; flex-direction: column; gap: 8px; }
+
+.capture-modes {
+  display: flex;
+  gap: 14px;
+  font-size: 0.72rem;
+  opacity: 0.75;
+}
+
+.capture-modes label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.capture-file {
+  font-size: 0.68rem;
+  opacity: 0.55;
+  word-break: break-all;
+  min-height: 1rem;
+}
+
+.capture-error {
+  font-size: 0.68rem;
+  color: #f87;
+  overflow-wrap: break-word;
+  margin-top: 0.25rem;
+}
+
+/* ─── Audio library ──────────────────────────────────────────────────────── */
+.capture-library { display: flex; flex-direction: column; gap: 8px; flex: 1; }
+
+.capture-library-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.55;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 10px;
+}
+
+.capture-library ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.capture-library li {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  flex-wrap: wrap;
+}
+
+.capture-library li.lib-empty {
+  font-size: 0.68rem;
+  opacity: 0.35;
+  border: none;
+}
+
+.lib-name {
+  flex: 1;
+  font-size: 0.68rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.lib-size {
+  font-size: 0.62rem;
+  opacity: 0.4;
+  flex-shrink: 0;
+}
+
+.capture-library button {
+  font-size: 0.62rem;
+  padding: 3px 7px;
+}
+
+/* Active/loaded file highlight in the library list */
+.capture-library li.lib-active {
+  background: rgba(0, 229, 255, 0.05);
+  border-left: 2px solid rgba(0, 229, 255, 0.45);
+  padding-left: 6px;
+}
+.capture-library li.lib-active .lib-name {
+  color: rgba(0, 229, 255, 0.85);
+  opacity: 1;
+}

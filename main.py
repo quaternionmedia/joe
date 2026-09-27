@@ -1,6 +1,10 @@
 import os
-from Modules.Audio import Audio 
+from Modules.Audio import Audio
 from Modules.utilities import get_audio_files, save_json, make_directories
+
+# When set, process only this specific file instead of scanning Data/Audio/.
+# api.py sets this env var when calling POST /api/run/{filename}.
+_targeted_file = os.environ.get("JOE_AUDIO_FILE")
  
 n_chroma                        = 12    # number of chroma bins
 bins_per_octave                 = 12    # number of bins per octave
@@ -31,9 +35,12 @@ midi_dir: str = directories["midi_dir"]
 class AudioToMidi(): 
     def __init__(self):
         """ Initialize the audio to midi process \n """
-        # set title and subtitle  
+        # set title and subtitle
         self.audio: list[Audio] = []
-        self.audio_files: list[str] = get_audio_files(audio_dir, just_one_file)
+        if _targeted_file and os.path.isfile(_targeted_file):
+            self.audio_files = [_targeted_file]
+        else:
+            self.audio_files: list[str] = get_audio_files(audio_dir, just_one_file)
         self.chroma_threshold: float = chroma_threshold
         self.fft_sizes: list[float] = fft_sizes
         self.harmonic_threshold: float = harmonic_threshold
@@ -52,7 +59,7 @@ class AudioToMidi():
                 iteration_dir: str, path of iteration folder. \n
         """ 
         for audio_file_path in self.audio_files:  
-            name = audio_file_path.split('\\')[-1].split('.')[0]   
+            name = os.path.splitext(os.path.basename(audio_file_path))[0]
             self.audio.append(Audio(name, audio_file_path, data_dir, chroma_dir, midi_dir,
                                     self.overtone_weights, self.chroma_threshold, self.min_duration,
                                     self.harmonic_threshold))
