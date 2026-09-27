@@ -1,0 +1,54 @@
+name: tests
+
+# The Python suite ran nowhere until this existed. The application and the
+# only workflow reaching it lived on two branches that diverged on
+# 2024-04-19 and were reconciled on 2026-09-27; `deploy.yml` builds and
+# publishes the frontend and reads no Python at all.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  pytest:
+    # Windows, because that is the only platform this application currently
+    # runs on. `ubuntu-latest` was tried first and reported 74 passed and 6
+    # failed, all in tests/test_main.py and all one cause: Modules/utilities.py
+    # composes paths with literal backslashes --
+    #
+    #     midi_path: str = f"{current_path}\Data\Output\{iteration}\MIDI\\"
+    #
+    # which is one filename component on Linux rather than a directory
+    # structure, and is also the source of the `invalid escape sequence`
+    # DeprecationWarnings on `\D`, `\O` and `\M` (a SyntaxError in a later
+    # Python). Making this a matrix is worth doing after those paths go
+    # through os.path.join or pathlib; doing it before would mean a job that
+    # is permanently red, or one marked continue-on-error, which is a green
+    # check standing where nothing is enforced.
+    #
+    # The Linux run also needed `libportaudio2`: sounddevice binds the native
+    # PortAudio library, its Windows wheel bundles it and its Linux wheel does
+    # not, and capture.py imports sounddevice at module scope while api.py
+    # imports capture -- so both API test modules failed at collection before
+    # a single test ran. Recorded here so the next attempt starts past it.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # --frozen, per the commit that regenerated the lock: it changes only
+      # when a dependency edit calls for it, never as a side effect of a run.
+      # This also installs torch and the CUDA subtree, which arrived with
+      # openai-whisper and is the bulk of the wall-clock here.
+      - name: Install through the lock
+        run: uv sync --frozen
+
+      - name: Run the suite
+        run: uv run --frozen pytest tests/ -q
+
+  # The Playwright specs under tests/e2e/ are not run: they need browser
+  # binaries and a live server, and neither is set up. Naming the gap rather
+  # than leaving the directory looking covered.
