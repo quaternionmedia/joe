@@ -153,3 +153,67 @@ def test_run_on_file_missing_file_is_404(client, no_subprocess):
     res = client.post("/api/run/absent.wav")
     assert res.status_code == 404
     assert no_subprocess == []
+
+
+# ─── _resolve_audio_path (the voice routes) ───────────────────────────────────
+#
+# POST /api/voice/transcribe takes a filename too, and used its own resolver
+# which applied none of the rules above: `good.wav.` was 404 on /api/audio and
+# 200 here, and a NUL byte raised out of the handler as a 500. Both resolvers
+# now share `_is_bare_filename`, and these hold them to the same list.
+#
+# It resolves against a relative `Data/Audio` and `Data/Voice` rather than
+# AUDIO_DIR, so the fixture below moves the working directory instead of
+# patching a module attribute.
+
+@pytest.fixture
+def voice_dirs(tmp_path, monkeypatch):
+    """A Data/Audio and Data/Voice under a temporary working directory.
+
+    `exist_ok` because the agreement test below asks for `audio_dir` too,
+    and both fixtures build under the same `tmp_path`.
+    """
+    for name in ("Audio", "Voice"):
+        (tmp_path / "Data" / name).mkdir(parents=True, exist_ok=True)
+    (tmp_path / "Data" / "Audio" / GOOD).write_bytes(b"RIFF")
+    (tmp_path / "pyproject.toml").write_bytes(OUTSIDE_MARKER)
+    monkeypatch.chdir(tmp_path)
+    return tmp_path
+
+
+def test_resolve_audio_path_resolves_bare_name(voice_dirs):
+    resolved = api._resolve_audio_path(GOOD)
+    assert resolved == (voice_dirs / "Data" / "Audio" / GOOD).resolve()
+
+
+def test_resolve_audio_path_finds_a_file_under_data_voice(voice_dirs):
+    (voice_dirs / "Data" / "Voice" / "spoken.wav").write_bytes(b"RIFF")
+    assert api._resolve_audio_path("spoken.wav").name == "spoken.wav"
+
+
+@pytest.mark.parametrize("name", BAD_HANDLER_NAMES)
+def test_resolve_audio_path_rejects_non_bare_names(voice_dirs, name):
+    """The same list the audio route is held to — including the aliases.
+
+    `good.wav.` and `"good.wav "` are the ones that matter: the file they
+    alias exists, so a resolver that only checked containment returned it
+    and the endpoint transcribed a file under a name no listing shows.
+    """
+    with pytest.raises(HTTPException) as excinfo:
+        api._resolve_audio_path(name)
+    assert excinfo.value.status_code == 404
+
+
+def test_resolve_audio_path_rejects_missing_file(voice_dirs):
+    with pytest.raises(HTTPException) as excinfo:
+        api._resolve_audio_path("absent.wav")
+    assert excinfo.value.status_code == 404
+
+
+@pytest.mark.parametrize("name", BAD_HANDLER_NAMES)
+def test_both_resolvers_agree_on_every_bad_name(audio_dir, voice_dirs, name):
+    """The defect was disagreement, so the property is agreement."""
+    for resolver in (api._audio_file, api._resolve_audio_path):
+        with pytest.raises(HTTPException) as excinfo:
+            resolver(name)
+        assert excinfo.value.status_code == 404, f"{resolver.__name__} allowed {name!r}"

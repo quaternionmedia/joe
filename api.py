@@ -11,6 +11,9 @@ Endpoints:
     GET  /api/audio/files           List saved audio files sorted by mtime
     GET  /api/audio/{filename}      Serve an audio file for browser playback
     POST /api/run/{filename}        Run the pipeline on a specific file in Data/Audio/
+    GET  /api/voice/devices         Lists the server's audio input devices
+    POST /api/voice/transcribe      Transcribes an audio file under Data/Audio/ or Data/Voice/
+    POST /api/voice/listen          Records from the server's mic and transcribes it
 
 Run directly:
     python -m uvicorn api:app --reload --port 8000
@@ -31,6 +34,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from capture import AudioCapture
+
+from Modules.Voice import NoMicrophoneError, Voice, list_input_devices
 
 app = FastAPI(title="Joe API", version="0.1.0")
 
@@ -203,20 +208,20 @@ def audio_files():
     ]
 
 
-def _audio_file(filename: str) -> Path:
-    """
-    Map a client-supplied name to a file inside AUDIO_DIR.
+def _is_bare_filename(filename: str) -> bool:
+    """Whether a client-supplied name is a plain filename and nothing else.
 
-    Only a bare filename is accepted: no path separators, no parent or
-    drive components, no NUL byte, no trailing dot or space (Windows
-    strips those and opens the file they alias), and the resolved
-    candidate must stay inside AUDIO_DIR (which also rules out symlinks
-    pointing elsewhere). Any rejection is reported as 404, identical to a
-    missing file, so the response never reveals whether something exists
-    outside the directory.
+    No path separators, no parent or drive components, no NUL byte (it
+    reaches the filesystem call and raises out of the handler), and no
+    trailing dot or space (Windows strips those when opening, so `x.wav.`
+    and `"x.wav "` open the file they alias under a name no listing shows).
+
+    Shared by every route that takes a name, because the two that existed
+    did not agree: `/api/audio/{filename}` refused all of this and
+    `/api/voice/transcribe` refused none of it, so one name was 404 on the
+    first and 200 on the second.
     """
-    not_found = HTTPException(status_code=404, detail="File not found")
-    if (
+    return not (
         not filename
         or filename in (".", "..")
         or "/" in filename
@@ -224,7 +229,21 @@ def _audio_file(filename: str) -> Path:
         or "\x00" in filename
         or filename.rstrip(". ") != filename
         or Path(filename).name != filename
-    ):
+    )
+
+
+def _audio_file(filename: str) -> Path:
+    """
+    Map a client-supplied name to a file inside AUDIO_DIR.
+
+    Only a bare filename is accepted (see `_is_bare_filename`), and the
+    resolved candidate must stay inside AUDIO_DIR (which also rules out
+    symlinks pointing elsewhere). Any rejection is reported as 404,
+    identical to a missing file, so the response never reveals whether
+    something exists outside the directory.
+    """
+    not_found = HTTPException(status_code=404, detail="File not found")
+    if not _is_bare_filename(filename):
         raise not_found
     audio_root = AUDIO_DIR.resolve()
     try:
@@ -284,3 +303,62 @@ async def run_on_file(filename: str):
         "stdout": stdout.decode("utf-8", errors="replace"),
         "stderr": stderr.decode("utf-8", errors="replace"),
     }
+
+
+def _resolve_audio_path(filename: str) -> Path:
+    """Resolve `filename` to a real file under Data/Audio/ or Data/Voice/.
+
+    Holds the name to the same rule as `/api/audio/{filename}`: a bare
+    filename, resolving inside one of the two directories. This is reachable
+    from an HTTP request, and an alias accepted here transcribes a file the
+    library never lists.
+    """
+    not_found = HTTPException(
+        status_code=404,
+        detail=f"No such file under Data/Audio/ or Data/Voice/: {filename}",
+    )
+    if not _is_bare_filename(filename):
+        raise not_found
+    for base in (Path("Data/Audio"), Path("Data/Voice")):
+        try:
+            candidate = (base / filename).resolve()
+        except (OSError, RuntimeError):
+            raise not_found from None
+        if candidate.is_relative_to(base.resolve()) and candidate.is_file():
+            return candidate
+    raise not_found
+
+
+@app.get("/api/voice/devices")
+def voice_devices():
+    """Audio input devices the server's machine can see, and which one is default.
+
+    Query this before relying on `/api/voice/listen` — it is the server's
+    hardware that records, not the caller's, so "is there a microphone" is a
+    question about wherever this process is running.
+    """
+    devices = list_input_devices()
+    return {
+        "devices": devices,
+        "microphone_available": any(d["default"] for d in devices) or bool(devices),
+    }
+
+
+@app.post("/api/voice/transcribe")
+def voice_transcribe(filename: str):
+    """Transcribes an audio file already present under Data/Audio/ or Data/Voice/."""
+    path = _resolve_audio_path(filename)
+    voice = Voice()
+    return voice.transcribe(str(path))
+
+
+@app.post("/api/voice/listen")
+def voice_listen(duration: float = 5.0):
+    """Records `duration` seconds from the server's default microphone and transcribes it."""
+    if not 0 < duration <= 60:
+        raise HTTPException(status_code=400, detail="duration must be between 0 and 60 seconds")
+    voice = Voice()
+    try:
+        return voice.listen(duration=duration)
+    except NoMicrophoneError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))

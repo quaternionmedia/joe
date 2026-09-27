@@ -39,6 +39,9 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
+voice_app = typer.Typer(help="Speech analysis: transcription and mic capture.", no_args_is_help=True)
+app.add_typer(voice_app, name="voice")
+
 # npm is 'npm.cmd' on Windows when not in a shell
 _npm = "npm.cmd" if sys.platform == "win32" else "npm"
 
@@ -89,6 +92,45 @@ def run():
     else:
         typer.echo(f"Pipeline exited with code {result.returncode}.", err=True)
         raise typer.Exit(result.returncode)
+
+
+@voice_app.command("devices")
+def voice_devices():
+    """List audio input devices this machine's backend can see."""
+    from Modules.Voice import list_input_devices
+
+    devices = list_input_devices()
+    if not devices:
+        typer.echo("No input devices found.")
+        raise typer.Exit(1)
+
+    for d in devices:
+        mark = "*" if d["default"] else " "
+        typer.echo(f"{mark} [{d['index']}] {d['name']}  ({d['channels']} channels)")
+
+
+@voice_app.command("transcribe")
+def voice_transcribe(path: str, model_size: str = "base"):
+    """Transcribe an audio file to text."""
+    from Modules.Voice import Voice
+
+    result = Voice(model_size=model_size).transcribe(path)
+    typer.echo(result["text"])
+
+
+@voice_app.command("listen")
+def voice_listen(duration: float = 5.0, model_size: str = "base"):
+    """Record from the default microphone and transcribe the result."""
+    from Modules.Voice import NoMicrophoneError, Voice
+
+    typer.echo(f"Listening for {duration}s...")
+    try:
+        result = Voice(model_size=model_size).listen(duration=duration)
+    except NoMicrophoneError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1)
+    typer.echo(f"Saved: {result['audio_path']}")
+    typer.echo(result["text"])
 
 
 if __name__ == "__main__":
