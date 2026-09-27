@@ -104,9 +104,19 @@ def voice_devices():
         typer.echo("No input devices found.")
         raise typer.Exit(1)
 
+    # Host API in the line because the name is not unique: the same
+    # microphone appears once per API, and a list you cannot choose from is
+    # not a list.
+    width = max(len(d["name"]) for d in devices)
     for d in devices:
         mark = "*" if d["default"] else " "
-        typer.echo(f"{mark} [{d['index']}] {d['name']}  ({d['channels']} channels)")
+        typer.echo(
+            f"{mark} [{d['index']:3d}] {d['name']:{width}s}  "
+            f"{d['channels']}ch  {d['hostapi']}"
+        )
+    typer.echo()
+    typer.echo("* is this backend's default, which is not always a microphone.")
+    typer.echo("`joe voice level --device N` says which one a voice arrives on.")
 
 
 @voice_app.command("transcribe")
@@ -119,18 +129,69 @@ def voice_transcribe(path: str, model_size: str = "base"):
 
 
 @voice_app.command("listen")
-def voice_listen(duration: float = 5.0, model_size: str = "base"):
-    """Record from the default microphone and transcribe the result."""
+def voice_listen(
+    duration: float = 5.0,
+    model_size: str = "base",
+    device: str = typer.Option(None, help="Input device index or name fragment"),
+):
+    """Record from an input device and transcribe the result.
+
+    Without `--device`, the backend's default is used, or `JOE_INPUT_DEVICE`
+    if it is set.
+    """
     from Modules.Voice import NoMicrophoneError, Voice
 
     typer.echo(f"Listening for {duration}s...")
     try:
-        result = Voice(model_size=model_size).listen(duration=duration)
+        result = Voice(model_size=model_size).listen(duration=duration, device=device)
     except NoMicrophoneError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(1)
     typer.echo(f"Saved: {result['audio_path']}")
     typer.echo(result["text"])
+
+
+@voice_app.command("level")
+def voice_level(
+    duration: float = 1.0,
+    device: str = typer.Option(None, help="Input device index or name fragment"),
+    every: bool = typer.Option(False, "--every", help="Try every input device in turn"),
+):
+    """How loud an input is right now. Records briefly, keeps nothing.
+
+    `--every` walks the whole list, which is the fastest way to find which
+    of several identically-named devices a voice actually arrives on: talk
+    while it runs, and read the peaks.
+    """
+    from Modules.Voice import NoMicrophoneError, input_level, list_input_devices
+
+    targets = [d["index"] for d in list_input_devices()] if every else [device]
+    if every and not targets:
+        typer.echo("No input devices found.", err=True)
+        raise typer.Exit(1)
+
+    heard = False
+    for target in targets:
+        try:
+            report = input_level(duration=duration, device=target)
+        except NoMicrophoneError as exc:
+            if not every:
+                typer.echo(str(exc), err=True)
+                raise typer.Exit(1)
+            typer.echo(f"  [{target}] unavailable: {exc}")
+            continue
+        mark = "  --  " if report["silent"] else " HEARD"
+        heard = heard or not report["silent"]
+        typer.echo(
+            f"{mark} [{report['device']}] {report['name']}  "
+            f"peak {report['peak']:.4f}  rms {report['rms']:.4f}"
+        )
+
+    if not heard:
+        typer.echo()
+        typer.echo("Nothing above silence. Say something while this runs, or the "
+                   "device is muted.", err=True)
+        raise typer.Exit(1)
 
 
 if __name__ == "__main__":

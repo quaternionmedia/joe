@@ -25,18 +25,30 @@ class NoMicrophoneError(RuntimeError):
 def list_input_devices() -> list[dict]:
     """Every audio input device the local machine's backend can see.
 
-    Each entry: {"index": int, "name": str, "channels": int, "default": bool}.
+    Each entry: {"index", "name", "channels", "default", "hostapi"}.
     Returns an empty list rather than raising when the audio backend itself
     is unreachable (e.g. no PortAudio host API on this machine) — that is a
     "no microphone" fact, not a crash.
+
+    **`hostapi` is in the entry because the name is not unique.** One machine
+    here lists twenty inputs and the same microphone appears three times,
+    once per host API, under a byte-identical name. A list keyed on the name
+    alone cannot be chosen from.
     """
     try:
         import sounddevice as sd
 
         devices = sd.query_devices()
+        apis = sd.query_hostapis()
         default_input = sd.default.device[0] if sd.default.device is not None else None
     except Exception:
         return []
+
+    def api_name(index) -> str:
+        try:
+            return apis[index]["name"]
+        except (IndexError, KeyError, TypeError):
+            return "?"
 
     return [
         {
@@ -44,10 +56,150 @@ def list_input_devices() -> list[dict]:
             "name": d["name"],
             "channels": d["max_input_channels"],
             "default": i == default_input,
+            # `.get`, so one device missing a field costs that field rather
+            # than the whole listing: a caller with no list cannot choose at
+            # all, which is worse than a caller with an unlabelled row.
+            "hostapi": api_name(d.get("hostapi")),
         }
         for i, d in enumerate(devices)
         if d["max_input_channels"] > 0
     ]
+
+
+def resolve_input_device(wanted: int | str | None) -> int | None:
+    """Turn what somebody typed into a device index, or raise saying why.
+
+    Accepts an index, a name or a fragment of one, case-insensitively.
+    `None` means the backend's default, which is what `sd.rec` uses when
+    given nothing.
+
+    A fragment matching several devices is an error rather than a guess:
+    the duplicates are real hardware on different host APIs and they do not
+    behave the same, so picking one silently would make a recording that
+    works on Tuesday fail on Wednesday for no visible reason.
+    """
+    if wanted is None or wanted == "":
+        return None
+
+    devices = list_input_devices()
+    if not devices:
+        raise NoMicrophoneError(
+            "No input devices at all. `joe voice devices` lists what this "
+            "machine's audio backend can see."
+        )
+
+    if isinstance(wanted, int) or (isinstance(wanted, str) and wanted.lstrip("-").isdigit()):
+        index = int(wanted)
+        if any(d["index"] == index for d in devices):
+            return index
+        raise NoMicrophoneError(
+            f"No input device with index {index}. `joe voice devices` lists them."
+        )
+
+    needle = str(wanted).casefold()
+    matches = [d for d in devices if needle in d["name"].casefold()]
+    if not matches:
+        raise NoMicrophoneError(
+            f"No input device whose name contains {wanted!r}. "
+            "`joe voice devices` lists them."
+        )
+    if len(matches) > 1:
+        shown = ", ".join(f"{d['index']} ({d['hostapi']})" for d in matches)
+        raise NoMicrophoneError(
+            f"{len(matches)} input devices match {wanted!r}: {shown}. "
+            "Give an index, or a fragment that picks one."
+        )
+    return matches[0]["index"]
+
+
+def _native_format(index: int | None) -> tuple[int, int]:
+    """The rate and channel count a device will actually open at.
+
+    **RECORDING FORCED 16 kHz MONO AND MOST DEVICES REFUSE IT.** On one
+    machine here every input is natively 44100 or 48000 Hz, and asking for
+    16000 failed on all four host APIs with four different errors -- WASAPI
+    said "Invalid sample rate", the others said less. Nothing could record,
+    including the backend's own default.
+
+    So the device is opened on its terms and the audio is converted
+    afterwards, which is the only order that works: whisper wants 16 kHz
+    mono, and that is a property of the file, not of the microphone.
+    """
+    import sounddevice as sd
+
+    try:
+        info = sd.query_devices(index if index is not None else sd.default.device[0])
+        rate = int(info["default_samplerate"])
+        channels = max(1, min(2, int(info["max_input_channels"])))
+        return rate, channels
+    except (KeyError, TypeError):
+        # A device dict without the fields PortAudio always supplies. Fall
+        # back rather than refuse: 44100 mono opens on more devices than
+        # 16000 does, which is the whole reason this function exists.
+        return 44100, 1
+    except Exception:
+        return 44100, 1
+
+
+def _to_mono_16k(frames, source_rate: int, target_rate: int = 16000):
+    """Downmix to one channel and resample, so whisper gets what it needs."""
+    mono = frames.mean(axis=1) if frames.ndim > 1 else frames
+    if source_rate == target_rate:
+        return mono
+
+    from math import gcd
+
+    from scipy.signal import resample_poly
+
+    factor = gcd(int(source_rate), int(target_rate))
+    return resample_poly(mono, target_rate // factor, source_rate // factor)
+
+
+def _capture(duration: float, device: int | str | None, target_rate: int = 16000):
+    """Record from `device` and return mono float32 at `target_rate`.
+
+    Returns `(samples, index)`. Raises NoMicrophoneError with the backend's
+    own words, which name the format problem when there is one.
+    """
+    index = resolve_input_device(device)
+    rate, channels = _native_format(index)
+
+    import sounddevice as sd
+
+    try:
+        frames = sd.rec(
+            int(duration * rate),
+            samplerate=rate,
+            channels=channels,
+            dtype="float32",
+            device=index,
+        )
+        sd.wait()
+    except Exception as exc:
+        raise NoMicrophoneError(
+            f"Recording failed on device {index if index is not None else 'default'} "
+            f"at {rate} Hz / {channels}ch: {exc}"
+        ) from exc
+
+    # **A DEVICE CAN OPEN AND STILL HAND BACK NOTHING USABLE.** float32
+    # capture is in [-1, 1]. One WDM-KS input here opens without error and
+    # returns values around -2e38 -- uninitialised memory, not sound. The
+    # level meter read that as the loudest device on the machine and
+    # reported it as the one to use, which is worse than the silence it was
+    # written to find: a confident wrong answer instead of no answer.
+    peak = float(np.abs(frames).max()) if frames.size else 0.0
+    # `not (peak <= 1.5)` rather than `peak > 1.5`, because the same devices
+    # also return NaN, and every comparison with NaN is False. The first
+    # version of this guard used `>` and a NaN run walked straight through
+    # it and reported `peak nan` as the loudest device on the machine.
+    if not (peak <= 1.5):
+        raise NoMicrophoneError(
+            f"Device {index if index is not None else 'default'} returned samples "
+            f"outside [-1, 1] (peak {peak:.3g}). The host API opened it and did "
+            f"not deliver audio; try the same microphone on another host API."
+        )
+
+    return _to_mono_16k(frames, rate, target_rate), index
 
 
 def default_input_device() -> dict | None:
@@ -108,44 +260,92 @@ class Voice:
             "language": result.get("language"),
         }
 
-    def record(self, duration: float = 5.0, sample_rate: int = 16000) -> str:
-        """Record `duration` seconds from the default microphone to a WAV file.
+    def record(
+        self,
+        duration: float = 5.0,
+        sample_rate: int = 16000,
+        device: int | str | None = None,
+    ) -> str:
+        """Record `duration` seconds from an input device to a WAV file.
 
         Returns the path written to.
+
+        `device` is an index or a name fragment; `None` takes the backend's
+        default, which is what this did unconditionally before. The default
+        is frequently not a microphone — on one machine here it is a capture
+        card — and a loop recording silence from it looks exactly like a
+        loop that mis-heard.
+
+        Falls back to `JOE_INPUT_DEVICE` when nothing is passed, so the
+        choice is made once rather than on every call.
 
         Raises NoMicrophoneError, rather than a raw PortAudio/OSError, when
         there is no usable input device — checked before recording so the
         failure is the same whether the backend has zero devices or errors
         out entirely.
         """
-        if not microphone_available():
+        if device is None:
+            device = os.environ.get("JOE_INPUT_DEVICE") or None
+
+        if resolve_input_device(device) is None and not microphone_available():
             raise NoMicrophoneError(
                 "No microphone found. `joe voice devices` lists what this "
                 "machine's audio backend can see."
             )
 
-        import sounddevice as sd
-
-        try:
-            frames = sd.rec(
-                int(duration * sample_rate), samplerate=sample_rate, channels=1, dtype="float32"
-            )
-            sd.wait()
-        except Exception as exc:
-            raise NoMicrophoneError(f"Recording failed: {exc}") from exc
+        frames, _ = _capture(duration, device, target_rate=sample_rate)
 
         os.makedirs(self.capture_dir, exist_ok=True)
         stamp = datetime.now().strftime("%m-%d-%y_%H-%M-%S")
         out_path = os.path.join(self.capture_dir, f"capture_{stamp}.wav")
 
-        pcm16 = np.clip(frames[:, 0], -1.0, 1.0)
+        pcm16 = np.clip(frames, -1.0, 1.0)
         pcm16 = (pcm16 * np.iinfo(np.int16).max).astype(np.int16)
         wavfile.write(out_path, sample_rate, pcm16)
         return out_path
 
-    def listen(self, duration: float = 5.0, sample_rate: int = 16000) -> dict:
-        """Record from the microphone and transcribe the result in one step."""
-        wav_path = self.record(duration=duration, sample_rate=sample_rate)
+    def listen(
+        self,
+        duration: float = 5.0,
+        sample_rate: int = 16000,
+        device: int | str | None = None,
+    ) -> dict:
+        """Record from an input device and transcribe the result in one step."""
+        wav_path = self.record(duration=duration, sample_rate=sample_rate, device=device)
         result = self.transcribe(wav_path)
         result["audio_path"] = wav_path
         return result
+
+
+def input_level(duration: float = 1.0, device: int | str | None = None,
+                sample_rate: int = 16000) -> dict:
+    """Record briefly and report how loud it was. Nothing is kept.
+
+    **THE POINT OF THIS IS CHOOSING.** A machine here lists twenty inputs,
+    several with identical names, and no listing says which one a voice
+    actually arrives on. Recording a second from a candidate and reading the
+    level answers that in a way reading names cannot: speak, and the one
+    that moves is yours.
+
+    Returns `{"device", "name", "peak", "rms", "silent"}`, with levels in
+    the 0..1 range `sd.rec` produces. `silent` is the useful field — a
+    device returning digital silence is either the wrong one or muted, and
+    both look the same in a device list.
+    """
+    frames, index = _capture(duration, device, target_rate=sample_rate)
+
+    samples = np.abs(frames)
+    peak = float(samples.max()) if samples.size else 0.0
+    rms = float(np.sqrt((samples**2).mean())) if samples.size else 0.0
+
+    named = next((d for d in list_input_devices() if d["index"] == index), None)
+    return {
+        "device": index,
+        "name": named["name"] if named else "default",
+        "peak": round(peak, 5),
+        "rms": round(rms, 5),
+        # Below this, nothing arrived. Chosen as a floor under real room
+        # noise rather than as a measure of speech: a live microphone in a
+        # quiet room still reads well above digital silence.
+        "silent": peak < 1e-4,
+    }
