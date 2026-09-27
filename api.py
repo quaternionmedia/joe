@@ -13,7 +13,8 @@ Endpoints:
     POST /api/run/{filename}        Run the pipeline on a specific file in Data/Audio/
     GET  /api/voice/devices         Lists the server's audio input devices
     POST /api/voice/transcribe      Transcribes an audio file under Data/Audio/ or Data/Voice/
-    POST /api/voice/listen          Records from the server's mic and transcribes it
+    POST /api/voice/listen          Records from an input device and transcribes it
+    POST /api/voice/level           How loud one input device is right now
 
 Run directly:
     python -m uvicorn api:app --reload --port 8000
@@ -35,7 +36,7 @@ from fastapi.responses import FileResponse
 
 from capture import AudioCapture
 
-from Modules.Voice import NoMicrophoneError, Voice, list_input_devices
+from Modules.Voice import NoMicrophoneError, Voice, input_level, list_input_devices
 
 app = FastAPI(title="Joe API", version="0.1.0")
 
@@ -353,12 +354,32 @@ def voice_transcribe(filename: str):
 
 
 @app.post("/api/voice/listen")
-def voice_listen(duration: float = 5.0):
-    """Records `duration` seconds from the server's default microphone and transcribes it."""
+def voice_listen(duration: float = 5.0, device: str | None = None):
+    """Records `duration` seconds from an input device and transcribes it.
+
+    `device` is an index or a name fragment; omitted, the server's default
+    input is used, or `JOE_INPUT_DEVICE` if that is set.
+    """
     if not 0 < duration <= 60:
         raise HTTPException(status_code=400, detail="duration must be between 0 and 60 seconds")
     voice = Voice()
     try:
-        return voice.listen(duration=duration)
+        return voice.listen(duration=duration, device=device)
+    except NoMicrophoneError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+
+@app.post("/api/voice/level")
+def voice_level(duration: float = 1.0, device: str | None = None):
+    """How loud one input device is right now. Records briefly, keeps nothing.
+
+    This is the route for choosing between devices whose names do not
+    distinguish them: speak, and the one that is not silent is the one to
+    use.
+    """
+    if not 0 < duration <= 10:
+        raise HTTPException(status_code=400, detail="duration must be between 0 and 10 seconds")
+    try:
+        return input_level(duration=duration, device=device)
     except NoMicrophoneError as exc:
         raise HTTPException(status_code=503, detail=str(exc))

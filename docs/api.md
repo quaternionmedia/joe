@@ -255,7 +255,8 @@ happens wherever `joe backend` is running, not wherever the caller is, so
 ```json
 {
   "devices": [
-    { "index": 1, "name": "USB Microphone", "channels": 2, "default": true }
+    { "index": 1, "name": "USB Microphone", "channels": 2, "default": true,
+      "hostapi": "Windows WASAPI" }
   ],
   "microphone_available": true
 }
@@ -307,14 +308,21 @@ curl -X POST "http://localhost:8000/api/voice/transcribe?filename=clip.wav"
 
 ### `POST /api/voice/listen`
 
-Records `duration` seconds (default `5.0`, max `60`) from the server's default
-microphone, writes it to `Data/Voice/`, and transcribes the result.
+Records `duration` seconds (default `5.0`, max `60`) from an input device,
+writes it to `Data/Voice/`, and transcribes the result.
+
+The device is opened at *its* native sample rate and channel count, and the
+audio is downmixed and resampled to 16 kHz mono afterwards. Asking a device
+to open at 16 kHz fails on most of them — one machine here has twenty inputs
+and every one refused, WASAPI saying "Invalid sample rate" and the others
+less.
 
 **Query params**
 
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
 | `duration` | float | `5.0` | seconds to record, `0 < duration <= 60` |
+| `device` | string | *the backend default* | an input index, or a fragment of a device name. A fragment matching several devices is a `503` rather than a guess. Falls back to `JOE_INPUT_DEVICE`. |
 
 **Response** — `200 OK`
 
@@ -327,12 +335,53 @@ microphone, writes it to `Data/Voice/`, and transcribes the result.
 | Status | Reason |
 | --- | --- |
 | `400` | `duration` outside `0 < duration <= 60` |
-| `503` | No microphone available on the server's machine — check `GET /api/voice/devices` |
+| `503` | No microphone available, no device matching `device`, several devices matching it, or a device that opened and returned samples outside `[-1, 1]` |
 
 **curl**
 
 ```bash
 curl -X POST "http://localhost:8000/api/voice/listen?duration=5"
+curl -X POST "http://localhost:8000/api/voice/listen?duration=5&device=USB"
+```
+
+---
+
+### `POST /api/voice/level`
+
+How loud one input device is right now. Records briefly and keeps nothing.
+
+This is the route for choosing between devices whose names do not
+distinguish them — the same microphone appears once per host API under the
+same name, and no listing says which one a voice actually arrives on. Speak,
+and read the peaks.
+
+**Query params**
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `duration` | float | `1.0` | seconds to record, `0 < duration <= 10` |
+| `device` | string | *the backend default* | as for `/api/voice/listen` |
+
+**Response** — `200 OK`
+
+```json
+{ "device": 12, "name": "USB Microphone", "peak": 0.0812, "rms": 0.0091, "silent": false }
+```
+
+`silent` is the useful field: a device returning digital silence is either
+the wrong one or muted, and a device list cannot tell those apart.
+
+**Errors**
+
+| Status | Reason |
+| --- | --- |
+| `400` | `duration` outside `0 < duration <= 10` |
+| `503` | No such device, an ambiguous name, or a device that opened and returned samples outside `[-1, 1]` |
+
+**curl**
+
+```bash
+curl -X POST "http://localhost:8000/api/voice/level?device=12"
 ```
 
 ---
