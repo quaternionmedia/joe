@@ -8,7 +8,7 @@
  * @version v4.3.6
  * @license MIT
  * @copyright 2026 - Julian Garnier
- */const Re={id:null,keyframes:null,playbackEase:null,playbackRate:1,frameRate:je,loop:0,reversed:!1,alternate:!1,autoplay:!0,persist:!1,duration:Qt,delay:0,loopDelay:0,ease:"out(2)",composition:X.replace,modifier:e=>e,onBegin:st,onBeforeUpdate:st,onUpdate:st,onLoop:st,onPause:st,onComplete:st,onRender:st},_n={current:null,root:le},O={defaults:Re,precision:4,timeScale:1,tickThreshold:200},fe=St&&ve.AnimeJSDevTools,Is={version:"4.3.6",engine:null};St&&(ve.AnimeJS||(ve.AnimeJS=[]),ve.AnimeJS.push(Is));/**
+ */const Re={id:null,keyframes:null,playbackEase:null,playbackRate:1,frameRate:je,loop:0,reversed:!1,alternate:!1,autoplay:!0,persist:!1,duration:Qt,delay:0,loopDelay:0,ease:"out(2)",composition:X.replace,modifier:e=>e,onBegin:st,onBeforeUpdate:st,onUpdate:st,onLoop:st,onPause:st,onComplete:st,onRender:st},_n={root:le},O={defaults:Re,precision:4,timeScale:1,tickThreshold:200},fe=St&&ve.AnimeJSDevTools,Is={version:"4.3.6",engine:null};St&&(ve.AnimeJS||(ve.AnimeJS=[]),ve.AnimeJS.push(Is));/**
  * Anime.js - core - ESM
  * @version v4.3.6
  * @license MIT
