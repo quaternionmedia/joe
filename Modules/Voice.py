@@ -214,15 +214,31 @@ def _capture_until_silence(
     device: int | str | None,
     target_rate: int = 16000,
     silence_after: float = 0.8,
-) -> tuple["np.ndarray", int | None]:
+    min_speech: float = 0.2,
+) -> tuple["np.ndarray", int | None, bool]:
     """Record until the speaker stops, or `max_duration`, whichever is first.
 
+    Returns `(samples, index, speech_detected)`.
+
     A fixed window is an impolite listener: it truncates a slow answer and
-    keeps recording after a quick one. This reads ~100 ms blocks and applies
-    one rule: the first blocks set the ambient level, speech is a block well
-    above it, and `silence_after` seconds back at ambient after speech ends
-    the take. Nobody speaking runs to the cap, because hanging up early on a
-    slow responder is the failure this exists to remove.
+    keeps recording after a quick one. This reads ~100 ms blocks through a
+    small state machine of the kind the field settled on:
+
+    - **The floor is the room, and it moves.** It starts from the quietest
+      calibration block and keeps tracking non-speech with the time constant
+      SpeechRecognition's dynamic energy threshold uses, so a person who
+      answers the instant a prompt ends does not raise the bar above their
+      own voice.
+    - **Speech must be sustained to count** (`min_speech`, as Pipecat's
+      `start_secs` and SpeechRecognition's `phrase_threshold` do). A click
+      or cough is a transient, not the start of an answer.
+    - **`silence_after` of quiet after speech ends the take** — 0.8 s by
+      default, SpeechRecognition's `pause_threshold`. Nobody speaking runs
+      to the cap, because hanging up on a slow responder is the failure
+      this exists to remove.
+
+    Every block from the stream's start is kept, so the onset is never
+    clipped and no separate pre-roll buffer is needed.
     """
     index = resolve_input_device(device)
     rate, channels = _native_format(index)
@@ -234,17 +250,22 @@ def _capture_until_silence(
     # round, not int: 0.3 / 0.1 is 2.999… in floats, and truncation quietly
     # shortened every wait by one block.
     max_blocks = max(1, round(max_duration / block_seconds))
-    ambient_blocks = 3
+    calibration_blocks = 2
     # Speech is judged against the room, not an absolute: devices and rooms
-    # differ by orders of magnitude, and the floor only guards a dead-quiet
-    # ambient from making breath sound like speech.
-    speech_factor = 4.0
-    floor = 1e-3
+    # differ by orders of magnitude, and the absolute floor only guards a
+    # dead-quiet room from making breath sound like speech.
+    speech_factor = 3.0
+    absolute_floor = 1e-3
+    # SpeechRecognition's damping of 0.15 per second, per block.
+    damping = 0.15 ** block_seconds
 
     taken: list = []
-    ambient: list[float] = []
+    calibration: list[float] = []
+    noise: float | None = None
     speech_started = False
+    onset_blocks = 0
     quiet_blocks = 0
+    needed_onset = max(1, round(min_speech / block_seconds))
     needed_quiet = max(1, round(silence_after / block_seconds))
 
     try:
@@ -257,14 +278,23 @@ def _capture_until_silence(
                 _reject_unusable(block, index)
                 taken.append(block)
                 rms = float(np.sqrt((block.astype("float64") ** 2).mean())) if block.size else 0.0
-                if len(ambient) < ambient_blocks:
-                    ambient.append(rms)
+                if len(calibration) < calibration_blocks:
+                    calibration.append(rms)
+                    noise = min(calibration)
                     continue
-                threshold = max(max(ambient) * speech_factor, floor)
-                if rms >= threshold:
-                    speech_started = True
+                threshold = max(noise * speech_factor, absolute_floor)
+                loud = rms >= threshold
+                if not speech_started:
+                    if loud:
+                        onset_blocks += 1
+                        if onset_blocks >= needed_onset:
+                            speech_started = True
+                    else:
+                        onset_blocks = 0
+                        noise = noise * damping + rms * (1 - damping)
+                elif loud:
                     quiet_blocks = 0
-                elif speech_started:
+                else:
                     quiet_blocks += 1
                     if quiet_blocks >= needed_quiet:
                         break
@@ -277,7 +307,7 @@ def _capture_until_silence(
         ) from exc
 
     frames = np.concatenate(taken) if taken else np.zeros((0, 1), dtype="float32")
-    return _to_mono_16k(frames, rate, target_rate), index
+    return _to_mono_16k(frames, rate, target_rate), index, speech_started
 
 
 def default_input_device() -> dict | None:
@@ -367,6 +397,20 @@ class Voice:
         failure is the same whether the backend has zero devices or errors
         out entirely.
         """
+        return self._take(duration, sample_rate, device, until_silence, silence_after)[0]
+
+    def _take(
+        self,
+        duration: float,
+        sample_rate: int,
+        device: int | str | None,
+        until_silence: bool,
+        silence_after: float,
+    ) -> tuple[str, bool | None]:
+        """Record, write the WAV, and say whether speech was detected.
+
+        `speech_detected` is None for a fixed window, which does not judge.
+        """
         if device is None:
             device = os.environ.get("JOE_INPUT_DEVICE") or None
 
@@ -376,8 +420,9 @@ class Voice:
                 "machine's audio backend can see."
             )
 
+        speech_detected: bool | None = None
         if until_silence:
-            frames, _ = _capture_until_silence(
+            frames, _, speech_detected = _capture_until_silence(
                 max_duration=duration,
                 device=device,
                 target_rate=sample_rate,
@@ -393,7 +438,7 @@ class Voice:
         pcm16 = np.clip(frames, -1.0, 1.0)
         pcm16 = (pcm16 * np.iinfo(np.int16).max).astype(np.int16)
         wavfile.write(out_path, sample_rate, pcm16)
-        return out_path
+        return out_path, speech_detected
 
     def listen(
         self,
@@ -403,16 +448,23 @@ class Voice:
         until_silence: bool = False,
         silence_after: float = 0.8,
     ) -> dict:
-        """Record from an input device and transcribe the result in one step."""
-        wav_path = self.record(
-            duration=duration,
-            sample_rate=sample_rate,
-            device=device,
-            until_silence=until_silence,
-            silence_after=silence_after,
+        """Record from an input device and transcribe the result in one step.
+
+        The result carries `speech_detected`: True or False for an endpointed
+        take, None for a fixed window. When the endpointer heard no speech,
+        the transcriber is not run and `text` is empty — no speech is a
+        known answer, and a dialog above needs "heard nothing" as a fact
+        distinct from "heard something it could not use".
+        """
+        wav_path, speech_detected = self._take(
+            duration, sample_rate, device, until_silence, silence_after
         )
-        result = self.transcribe(wav_path)
+        if speech_detected is False:
+            result = {"text": "", "segments": [], "language": None}
+        else:
+            result = self.transcribe(wav_path)
         result["audio_path"] = wav_path
+        result["speech_detected"] = speech_detected
         return result
 
 
