@@ -19,16 +19,20 @@ def _reload_main_with_patched_directory_discovery(fake_dirs):
 
 
 def test_audio_to_midi_initialization_uses_discovered_paths():
+    # Built with the host's own separator: main.py derives each name with
+    # os.path.basename, which cannot split a foreign separator's paths.
+    base = os.path.join(os.sep, "tmp", "Data")
+    out = os.path.join(base, "Output", "01-01-26_00-00-00")
     fake_dirs = {
         "iter": "01-01-26_00-00-00",
-        "iter_dir": r"C:\\tmp\\Data\\Output\\01-01-26_00-00-00\\",
-        "audio_dir": r"C:\\tmp\\Data\\Audio\\",
-        "chroma_dir": r"C:\\tmp\\Data\\Output\\01-01-26_00-00-00\\Chroma\\",
-        "midi_dir": r"C:\\tmp\\Data\\Output\\01-01-26_00-00-00\\MIDI\\",
+        "iter_dir": out + os.sep,
+        "audio_dir": os.path.join(base, "Audio") + os.sep,
+        "chroma_dir": os.path.join(out, "Chroma") + os.sep,
+        "midi_dir": os.path.join(out, "MIDI") + os.sep,
     }
     fake_audio_files = [
-        r"C:\\tmp\\Data\\Audio\\test_audio_file1.wav",
-        r"C:\\tmp\\Data\\Audio\\test_audio_file2.mp3",
+        os.path.join(base, "Audio", "test_audio_file1.wav"),
+        os.path.join(base, "Audio", "test_audio_file2.mp3"),
     ]
 
     with patch("Modules.utilities.get_audio_files", return_value=fake_audio_files), patch(
@@ -71,7 +75,7 @@ def test_make_directories_creates_expected_structure(tmp_path):
 
     directories = make_directories(base)
 
-    assert directories["audio_dir"].endswith("Data\\Audio\\")
+    assert directories["audio_dir"].endswith(os.path.join("Data", "Audio") + os.sep)
     assert os.path.isdir(directories["audio_dir"])
     assert os.path.isdir(directories["iter_dir"])
     assert os.path.isdir(directories["midi_dir"])
@@ -93,7 +97,7 @@ def test_get_audio_files_returns_all_audio_files(tmp_path):
     (audio_dir / "track1.wav").write_bytes(b"")
     (audio_dir / "track2.mp3").write_bytes(b"")
 
-    files = get_audio_files(str(audio_dir) + "\\")
+    files = get_audio_files(str(audio_dir) + os.sep)
 
     assert len(files) == 2
     assert any("track1.wav" in f for f in files)
@@ -106,14 +110,14 @@ def test_get_audio_files_just_one_file_flag(tmp_path):
     (audio_dir / "a.wav").write_bytes(b"")
     (audio_dir / "b.wav").write_bytes(b"")
 
-    files = get_audio_files(str(audio_dir) + "\\", just_one_file=True)
+    files = get_audio_files(str(audio_dir) + os.sep, just_one_file=True)
 
     assert len(files) == 1
 
 
 def test_get_audio_files_missing_dir_exits():
     with pytest.raises(SystemExit):
-        get_audio_files("/nonexistent/path/Audio\\")
+        get_audio_files(os.path.join(os.sep, "nonexistent", "path", "Audio"))
 
 
 def test_get_audio_files_empty_dir_exits(tmp_path):
@@ -121,12 +125,12 @@ def test_get_audio_files_empty_dir_exits(tmp_path):
     audio_dir.mkdir()
 
     with pytest.raises(SystemExit):
-        get_audio_files(str(audio_dir) + "\\")
+        get_audio_files(str(audio_dir) + os.sep)
 
 
 def test_save_json_writes_parseable_file(tmp_path):
     iteration = "01-01-26_00-00-00"
-    iteration_dir = str(tmp_path) + "\\"
+    iteration_dir = str(tmp_path) + os.sep
 
     note_mock = MagicMock()
     note_mock.note = "C4"

@@ -59,7 +59,7 @@ The recording is saved automatically to `Data/Audio/`. Open **Library** to see i
 4. Click **Stop** — this flushes a WAV file to `Data/Audio/`.
 5. Process via **Library → Process** or `curl -X POST http://localhost:8000/api/run/{filename}`.
 
-**Requires:** `sounddevice` is installed (`uv sync` includes it via `requirements.txt`).
+**Requires:** `sounddevice` is installed (`uv sync` includes it via `pyproject.toml`).
 
 ---
 

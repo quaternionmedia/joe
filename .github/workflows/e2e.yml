@@ -1,0 +1,23 @@
+name: e2e
+
+# The Playwright specs, runnable on demand. This workflow exists so the gap
+# has a check that can fail rather than a directory that looks covered. The
+# specs need a live server nothing here starts yet, so a dispatch is
+# expected to go red; the host registers a workflow_dispatch trigger only
+# from the default branch, so the first dispatch can happen once this lands.
+# When the server step lands, the trigger can widen.
+
+on: workflow_dispatch
+
+jobs:
+  playwright:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Run the specs
+        run: npm run test:e2e
