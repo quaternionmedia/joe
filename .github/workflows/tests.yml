@@ -43,6 +43,6 @@ jobs:
       - name: Run the suite
         run: uv run --frozen pytest tests/ -q
 
-  # The Playwright specs under tests/e2e/ run on demand in e2e.yml: they
-  # need a live server the workflow does not yet start, so a dispatch is
-  # expected red. Red on demand beats a directory that only looks covered.
+  # The Playwright specs under tests/e2e/ run in e2e.yml on the same
+  # triggers as this suite; playwright.config.js starts the dev server
+  # itself, which is why they need no server step here.
