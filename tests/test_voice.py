@@ -152,24 +152,32 @@ def test_listen_combines_record_and_transcribe(tmp_path):
 
 
 def _fake_stream_sd(blocks):
-    """A sounddevice whose InputStream feeds scripted blocks, then silence."""
+    """A sounddevice whose InputStream delivers scripted blocks to its
+    callback when started, then nothing.
+
+    `read` raises, as it does on PortAudio's WDM-KS host API: the endpointer
+    must not depend on blocking reads, which that host API does not have.
+    """
     fake_sd = _fake_sounddevice(
         [{"name": "Mic", "max_input_channels": 1, "max_output_channels": 0}],
         default_input_index=0,
     )
     stream = MagicMock()
-    feed = iter(blocks)
+    stream.read.side_effect = RuntimeError("Blocking API not supported yet")
 
-    def read(nframes):
-        try:
-            return next(feed), False
-        except StopIteration:
-            return np.zeros((nframes, 1), dtype="float32"), False
+    def open_stream(*args, **kwargs):
+        callback = kwargs["callback"]
 
-    stream.read.side_effect = read
-    stream.__enter__ = MagicMock(return_value=stream)
-    stream.__exit__ = MagicMock(return_value=False)
-    fake_sd.InputStream.return_value = stream
+        def start():
+            for block in blocks:
+                callback(block, len(block), None, None)
+            return stream
+
+        stream.__enter__ = MagicMock(side_effect=start)
+        stream.__exit__ = MagicMock(return_value=False)
+        return stream
+
+    fake_sd.InputStream.side_effect = open_stream
     return fake_sd, stream
 
 
@@ -177,12 +185,19 @@ def _blk(level, frames=4410):
     return np.full((frames, 1), level, dtype="float32")
 
 
+def _blocks_kept(samples):
+    """How many `_blk`s the take kept: 4410 frames at the fake device's
+    44100 Hz are exactly 1600 samples at 16 kHz."""
+    assert samples.size % 1600 == 0, samples.size
+    return samples.size // 1600
+
+
 def test_capture_until_silence_stops_when_the_speaker_stops():
     from Modules.Voice import _capture_until_silence
 
     quiet, loud = 0.0005, 0.2
     blocks = [_blk(quiet)] * 3 + [_blk(loud)] * 5 + [_blk(quiet)] * 20
-    fake_sd, stream = _fake_stream_sd(blocks)
+    fake_sd, _ = _fake_stream_sd(blocks)
 
     with patch.dict(sys.modules, {"sounddevice": fake_sd}):
         samples, index, speech = _capture_until_silence(
@@ -191,8 +206,7 @@ def test_capture_until_silence_stops_when_the_speaker_stops():
 
     # 3 ambient + 5 speech + 3 trailing-quiet blocks (0.3 s at ~100 ms each),
     # and not the 20 the script would have gone on feeding.
-    assert stream.read.call_count == 11, stream.read.call_count
-    assert samples.size > 0
+    assert _blocks_kept(samples) == 11
     assert speech is True
     # None is the backend default, the same contract `_capture` returns.
     assert index is None
@@ -201,15 +215,15 @@ def test_capture_until_silence_stops_when_the_speaker_stops():
 def test_capture_until_silence_waits_out_a_slow_start_to_the_cap():
     from Modules.Voice import _capture_until_silence
 
-    fake_sd, stream = _fake_stream_sd([_blk(0.0005)] * 200)
+    fake_sd, _ = _fake_stream_sd([_blk(0.0005)] * 200)
 
     with patch.dict(sys.modules, {"sounddevice": fake_sd}):
-        _, _, speech = _capture_until_silence(max_duration=1.0, device=None, silence_after=0.3)
+        samples, _, speech = _capture_until_silence(max_duration=1.0, device=None, silence_after=0.3)
 
     assert speech is False
     # Nobody spoke: the recording runs to the cap and no further, because
     # ending early on silence alone would hang up on a slow responder.
-    assert stream.read.call_count == 10, stream.read.call_count
+    assert _blocks_kept(samples) == 10
 
 
 def test_capture_until_silence_rejects_a_garbage_device():
@@ -218,8 +232,57 @@ def test_capture_until_silence_rejects_a_garbage_device():
     fake_sd, _ = _fake_stream_sd([_blk(-2e38)])
 
     with patch.dict(sys.modules, {"sounddevice": fake_sd}):
-        with pytest.raises(NoMicrophoneError):
+        # The message, not only the type: every failure to open raises the
+        # same type, and a take that swallowed the garbage and then stalled
+        # would pass a type-only check.
+        with pytest.raises(NoMicrophoneError, match=r"outside \[-1, 1\]"):
             _capture_until_silence(max_duration=1.0, device=None)
+
+
+def test_a_stream_that_delivers_nothing_is_abandoned_not_waited_on(monkeypatch):
+    """Some devices open cleanly and never call back. Without a bound the
+    dialog above would wait on them for ever."""
+    import Modules.Voice as voice_module
+    from Modules.Voice import NoMicrophoneError, _capture_until_silence
+
+    monkeypatch.setattr(voice_module, "STALL_SECONDS", 0.05)
+    fake_sd, _ = _fake_stream_sd([])
+
+    with patch.dict(sys.modules, {"sounddevice": fake_sd}):
+        with pytest.raises(NoMicrophoneError, match="delivered no audio"):
+            _capture_until_silence(max_duration=1.0, device=None)
+
+
+def test_rank_candidates_takes_the_loudest_microphone_on_its_best_host_api():
+    from Modules.Voice import rank_candidates
+
+    def dev(index, name, hostapi):
+        return {"index": index, "name": name, "hostapi": hostapi}
+
+    heard = [
+        (0.03, dev(55, "USB Mic", "Windows WDM-KS")),
+        (0.011, dev(1, "USB Mic", "MME")),
+        (0.009, dev(36, "USB Mic", "Windows WASAPI")),
+        (0.011, dev(14, "USB Mic", "Windows DirectSound")),
+        (0.02, dev(4, "Webcam", "Windows WASAPI")),
+    ]
+
+    # The USB mic is the loudest microphone (0.03 on one of its entries), so
+    # all four of its entries come first, best host API first; the webcam,
+    # louder than three of them, is still a different and quieter microphone.
+    assert [d["index"] for d in rank_candidates(heard)] == [36, 1, 14, 55, 4]
+
+
+def test_rank_candidates_puts_an_unnamed_host_api_between_the_known_and_wdm_ks():
+    from Modules.Voice import rank_candidates
+
+    heard = [
+        (0.1, {"index": 1, "name": "Mic", "hostapi": "Windows WDM-KS"}),
+        (0.1, {"index": 2, "name": "Mic", "hostapi": "ALSA"}),
+        (0.1, {"index": 3, "name": "Mic", "hostapi": "Windows DirectSound"}),
+    ]
+
+    assert [d["index"] for d in rank_candidates(heard)] == [3, 2, 1]
 
 
 def test_a_click_before_the_answer_does_not_start_the_take():
@@ -232,13 +295,13 @@ def test_a_click_before_the_answer_does_not_start_the_take():
 
     quiet, loud = 0.0005, 0.2
     blocks = [_blk(quiet)] * 4 + [_blk(loud)] + [_blk(quiet)] * 6 + [_blk(loud)] * 5 + [_blk(quiet)] * 20
-    fake_sd, stream = _fake_stream_sd(blocks)
+    fake_sd, _ = _fake_stream_sd(blocks)
 
     with patch.dict(sys.modules, {"sounddevice": fake_sd}):
-        _, _, speech = _capture_until_silence(max_duration=5.0, device=None, silence_after=0.3)
+        samples, _, speech = _capture_until_silence(max_duration=5.0, device=None, silence_after=0.3)
 
     # 4 quiet + click + 6 quiet + 5 speech + 3 trailing quiet.
-    assert stream.read.call_count == 19, stream.read.call_count
+    assert _blocks_kept(samples) == 19
     assert speech is True
 
 
@@ -252,12 +315,12 @@ def test_a_fast_responder_is_heard_without_waiting_for_the_cap():
 
     quiet, loud = 0.0005, 0.2
     blocks = [_blk(quiet)] * 2 + [_blk(loud)] * 6 + [_blk(quiet)] * 40
-    fake_sd, stream = _fake_stream_sd(blocks)
+    fake_sd, _ = _fake_stream_sd(blocks)
 
     with patch.dict(sys.modules, {"sounddevice": fake_sd}):
-        _, _, speech = _capture_until_silence(max_duration=5.0, device=None, silence_after=0.3)
+        samples, _, speech = _capture_until_silence(max_duration=5.0, device=None, silence_after=0.3)
 
-    assert stream.read.call_count == 11, stream.read.call_count
+    assert _blocks_kept(samples) == 11
     assert speech is True
 
 

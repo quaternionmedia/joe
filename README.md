@@ -48,8 +48,9 @@ Open `http://localhost:3000/joe`, click **Results → Fetch Latest**.
 | `uv run joe voice level [--device N] [--every]` | How loud an input is right now |
 
 **Voice, the first time:** run `uv run joe voice setup` and keep talking when
-it says so. It saves the microphone that heard you to
-`Data/voice-device.json`, and every recording — the CLI's and the backend's —
+it says so. Once a test sentence has recorded from the microphone that heard
+you, it saves that microphone to `Data/voice-device.json`, and every
+recording — the CLI's and the backend's —
 uses it from then on, with no environment variable to set and no restart.
 `JOE_INPUT_DEVICE`, where set, still overrides it.
 

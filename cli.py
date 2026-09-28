@@ -151,9 +151,10 @@ def voice_setup(
 ):
     """Find your microphone, save it, and prove it with a test sentence.
 
-    Tries every input while you talk, keeps the loudest one that heard you,
-    and saves it so recording uses it from then on -- no environment
-    variable, and no restart of a running backend.
+    Tries every input while you talk, keeps the microphone that heard you
+    loudest -- on the most reliable host API it appears under -- and saves
+    it so recording uses it from then on: no environment variable, and no
+    restart of a running backend.
     """
     import time
 
@@ -162,6 +163,7 @@ def voice_setup(
         Voice,
         input_level,
         list_input_devices,
+        rank_candidates,
         save_input_device,
     )
 
@@ -199,22 +201,37 @@ def voice_setup(
               "keep talking through the whole sweep. Then run this again.", err=True)
         raise typer.Exit(1)
 
-    best = max(heard, key=lambda pair: pair[0])[1]
-    path = save_input_device(best)
-    _echo()
-    _echo(f"Your microphone: [{best['index']}] {best['name']} ({best['hostapi']}).")
-    _echo(f"Saved to {path}. Recording uses it from now on.")
+    candidates = rank_candidates(heard)
+
+    def chosen(d, path):
+        _echo()
+        _echo(f"Your microphone: [{d['index']}] {d['name']} ({d['hostapi']}).")
+        _echo(f"Saved to {path}. Recording uses it from now on.")
 
     if not confirm:
+        chosen(candidates[0], save_input_device(candidates[0]))
         return
+
+    # Nothing is saved until a device has recorded the sentence: the sweep
+    # hearing a device is not proof that a recording can open it.
     _echo()
     _echo("Last check: say a short sentence now. Recording stops when you do. "
           "(The first run loads the speech model, which takes a moment.)")
-    try:
-        result = Voice().listen(duration=10.0, device=best["index"], until_silence=True)
-    except NoMicrophoneError as exc:
-        _echo(str(exc), err=True)
+    for d in candidates:
+        try:
+            result = Voice().listen(duration=10.0, device=d["index"], until_silence=True)
+        except NoMicrophoneError as exc:
+            _echo(f"  [{d['index']}] {d['name']} ({d['hostapi']}) could not record: {exc}")
+            continue
+        chosen(d, save_input_device(d))
+        break
+    else:
+        _echo()
+        _echo("No input that heard you could record. Nothing was saved. "
+              "`joe voice devices` lists them; `joe voice listen --device N` "
+              "tries one.", err=True)
         raise typer.Exit(1)
+
     text = result.get("text", "").strip()
     if result.get("speech_detected") is False or not text:
         _echo("Heard nothing that time. The microphone is saved; run `joe voice "

@@ -7,6 +7,7 @@ rather than beside it as a separate tool.
 
 import json
 import os
+import queue
 from datetime import datetime
 from pathlib import Path
 
@@ -211,6 +212,12 @@ def _reject_unusable(frames, index: int | None) -> None:
         )
 
 
+# How long an open stream may go without delivering a block before the take
+# is abandoned. Some devices open cleanly and never call back; without a bound
+# the dialog above would wait on them forever.
+STALL_SECONDS = 2.0
+
+
 def _capture_until_silence(
     max_duration: float,
     device: int | str | None,
@@ -241,6 +248,13 @@ def _capture_until_silence(
 
     Every block from the stream's start is kept, so the onset is never
     clipped and no separate pre-roll buffer is needed.
+
+    **BLOCKS ARRIVE THROUGH A CALLBACK, NOT `stream.read()`.** PortAudio's
+    WDM-KS host API does not implement blocking reads: `stream.read` fails
+    there with "Blocking API not supported yet", while `sd.rec` -- itself
+    callback-driven -- records from the same device. The level sweep used
+    one path and this used the other, so `joe voice setup` chose a device by
+    its sweep and then could not record from it.
     """
     index = resolve_input_device(device)
     rate, channels = _native_format(index)
@@ -270,12 +284,30 @@ def _capture_until_silence(
     needed_onset = max(1, round(min_speech / block_seconds))
     needed_quiet = max(1, round(silence_after / block_seconds))
 
+    arrived: queue.Queue = queue.Queue()
+
+    def on_block(indata, frames, time_info, status):
+        # PortAudio reuses `indata` once this returns, so the queue gets a copy.
+        arrived.put(indata.copy())
+
     try:
         with sd.InputStream(
-            samplerate=rate, channels=channels, dtype="float32", device=index
-        ) as stream:
+            samplerate=rate,
+            channels=channels,
+            dtype="float32",
+            device=index,
+            blocksize=block_frames,
+            callback=on_block,
+        ):
             for _ in range(max_blocks):
-                block, _overflow = stream.read(block_frames)
+                try:
+                    block = arrived.get(timeout=STALL_SECONDS)
+                except queue.Empty:
+                    raise NoMicrophoneError(
+                        f"Device {index if index is not None else 'default'} opened and "
+                        f"delivered no audio for {STALL_SECONDS:g} s. Try the same "
+                        f"microphone on another host API: `joe voice setup`."
+                    ) from None
                 block = np.asarray(block, dtype="float32")
                 _reject_unusable(block, index)
                 taken.append(block)
@@ -310,6 +342,44 @@ def _capture_until_silence(
 
     frames = np.concatenate(taken) if taken else np.zeros((0, 1), dtype="float32")
     return _to_mono_16k(frames, rate, target_rate), index, speech_started
+
+
+# Host APIs in the order a recording should prefer them, for one microphone
+# listed under several. WDM-KS is last: it is where devices here open and
+# return uninitialised memory, and where blocking reads are not implemented.
+# A host API not named here (ALSA, Core Audio, ...) is usually the only one
+# its microphone appears under, so its place matters little.
+HOSTAPI_PREFERENCE = ("Windows WASAPI", "MME", "Windows DirectSound")
+_HOSTAPI_LAST = ("Windows WDM-KS",)
+
+
+def rank_candidates(heard: list[tuple[float, dict]]) -> list[dict]:
+    """Order the devices a sweep heard, best first.
+
+    `heard` is `(rms, device)` for every input that was not silent.
+
+    **LOUDNESS CHOOSES THE MICROPHONE; THE HOST API CHOOSES THE ENTRY.** One
+    microphone appears once per host API under a byte-identical name, and the
+    entries differ in level only by gain staging -- WDM-KS bypasses the
+    system mixer and reads loudest. Taking the loudest entry outright chose
+    the least reliable way to reach the right microphone. So microphones are
+    ranked by the loudest of their entries, and each one's entries by
+    `HOSTAPI_PREFERENCE`; every heard entry stays in the list, so a caller
+    that cannot record from one falls through to the next.
+    """
+    loudest: dict[str, float] = {}
+    for rms, d in heard:
+        loudest[d["name"]] = max(rms, loudest.get(d["name"], 0.0))
+
+    def api_rank(d: dict) -> int:
+        if d["hostapi"] in HOSTAPI_PREFERENCE:
+            return HOSTAPI_PREFERENCE.index(d["hostapi"])
+        if d["hostapi"] in _HOSTAPI_LAST:
+            return len(HOSTAPI_PREFERENCE) + 1
+        return len(HOSTAPI_PREFERENCE)
+
+    ordered = sorted(heard, key=lambda pair: (-loudest[pair[1]["name"]], api_rank(pair[1])))
+    return [d for _, d in ordered]
 
 
 # Where `joe voice setup` keeps the chosen microphone. Under Data/, which is
