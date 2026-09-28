@@ -41,28 +41,24 @@ Open `http://localhost:3000/joe`, click **Results → Fetch Latest**.
 | `uv run joe backend` | FastAPI API server only (`localhost:8000`) |
 | `uv run joe dev` | Both servers (Ctrl+C to stop) |
 | `uv run joe run` | Run the pipeline once |
+| `uv run joe voice setup` | **Start here for voice.** Find your microphone while you talk, save it, and prove it with a transcribed sentence |
+| `uv run joe voice listen [--device N] [--fixed]` | Record until you stop talking, then transcribe (`--fixed` records the whole `--duration`) |
 | `uv run joe voice transcribe <path>` | Transcribe an audio file to text |
-| `uv run joe voice listen [--duration 5] [--device N]` | Record from an input device and transcribe it |
-| `uv run joe voice devices` | List audio input devices, with the host API that distinguishes same-named ones |
-| `uv run joe voice level [--device N] [--every]` | How loud an input is right now — which one a voice arrives on |
+| `uv run joe voice devices` | List audio input devices, with the host API that distinguishes same-named ones; `S` marks the saved microphone |
+| `uv run joe voice level [--device N] [--every]` | How loud an input is right now |
+
+**Voice, the first time:** run `uv run joe voice setup` and keep talking when
+it says so. It saves the microphone that heard you to
+`Data/voice-device.json`, and every recording — the CLI's and the backend's —
+uses it from then on, with no environment variable to set and no restart.
+`JOE_INPUT_DEVICE`, where set, still overrides it.
 
 See [docs/api.md](docs/api.md) for the full API endpoint reference.
 
-### Python setup (fallback: pdm)
+### Python setup
 
-```powershell
-pdm install
-pdm run python main.py
-```
-
-### Python setup (fallback: venv + pip)
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\activate
-pip install -r requirements.txt
-python main.py
-```
+`uv.lock` is the one source of truth for Python dependencies; `uv sync`
+installs them and `uv run` runs inside that environment.
 
 ### Frontend setup (standalone)
 
@@ -114,7 +110,7 @@ Input audio is read from `Data/Audio/`.
 - `tests/`: Python unit tests; `tests/e2e/` for Playwright E2E tests
 - `docs/`: contributor guide, module reference, API reference
 - `api.py`: FastAPI server wrapping the pipeline — see [docs/api.md](docs/api.md)
-- `cli.py`: Typer CLI (`joe frontend | backend | dev | run | voice transcribe | voice listen | voice devices | voice level`)
+- `cli.py`: Typer CLI (`joe frontend | backend | dev | run | voice setup | voice listen | voice transcribe | voice devices | voice level`)
 - `main.py`: backend pipeline entrypoint
 
 ## Frontend Architecture
