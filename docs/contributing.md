@@ -11,21 +11,9 @@ uv sync          # install Python deps (including fastapi, uvicorn, typer)
 npm install      # install Node deps
 ```
 
-### Fallback: pdm
-
-```powershell
-pdm install
-```
-
-### Fallback: venv + pip
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\activate
-pip install -r requirements.txt
-```
-
-Use Python `3.11.x` for compatibility with `pyproject.toml`.
+`uv.lock` is the one source of truth for Python dependencies; there is no
+pip or pdm fallback. Use Python `3.11.x` for compatibility with
+`pyproject.toml`.
 
 ### Playwright (one-time)
 
