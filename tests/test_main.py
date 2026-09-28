@@ -71,7 +71,7 @@ def test_make_directories_creates_expected_structure(tmp_path):
 
     directories = make_directories(base)
 
-    assert directories["audio_dir"].endswith("Data\\Audio\\")
+    assert directories["audio_dir"].endswith(os.path.join("Data", "Audio") + os.sep)
     assert os.path.isdir(directories["audio_dir"])
     assert os.path.isdir(directories["iter_dir"])
     assert os.path.isdir(directories["midi_dir"])
@@ -93,7 +93,7 @@ def test_get_audio_files_returns_all_audio_files(tmp_path):
     (audio_dir / "track1.wav").write_bytes(b"")
     (audio_dir / "track2.mp3").write_bytes(b"")
 
-    files = get_audio_files(str(audio_dir) + "\\")
+    files = get_audio_files(str(audio_dir) + os.sep)
 
     assert len(files) == 2
     assert any("track1.wav" in f for f in files)
@@ -106,7 +106,7 @@ def test_get_audio_files_just_one_file_flag(tmp_path):
     (audio_dir / "a.wav").write_bytes(b"")
     (audio_dir / "b.wav").write_bytes(b"")
 
-    files = get_audio_files(str(audio_dir) + "\\", just_one_file=True)
+    files = get_audio_files(str(audio_dir) + os.sep, just_one_file=True)
 
     assert len(files) == 1
 
