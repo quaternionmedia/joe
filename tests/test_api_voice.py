@@ -44,3 +44,22 @@ def test_voice_listen_returns_503_when_no_microphone(monkeypatch):
         api.voice_listen(duration=5.0)
 
     assert exc_info.value.status_code == 503
+
+
+def test_voice_listen_endpoints_by_default():
+    """The HTTP route is the human-facing seam, so the polite default lives
+    here: duration is the cap, and the recording ends when the speaker
+    does. `until_silence=false` restores the fixed window."""
+    with patch("api.Voice") as fake_voice_cls:
+        fake_voice_cls.return_value.listen.return_value = {"text": "ok"}
+        api.voice_listen(duration=6.0)
+        fake_voice_cls.return_value.listen.assert_called_once_with(
+            duration=6.0, device=None, until_silence=True, silence_after=0.8
+        )
+
+    with patch("api.Voice") as fake_voice_cls:
+        fake_voice_cls.return_value.listen.return_value = {"text": "ok"}
+        api.voice_listen(duration=6.0, until_silence=False)
+        assert (
+            fake_voice_cls.return_value.listen.call_args.kwargs["until_silence"] is False
+        )
