@@ -321,14 +321,21 @@ less.
 
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
-| `duration` | float | `5.0` | seconds to record, `0 < duration <= 60` |
-| `device` | string | *the backend default* | an input index, or a fragment of a device name. A fragment matching several devices is a `503` rather than a guess. Falls back to `JOE_INPUT_DEVICE`. |
+| `duration` | float | `5.0` | the most seconds to record, `0 < duration <= 60` |
+| `until_silence` | bool | `true` | stop when the speaker stops: sustained speech starts the take and `silence_ms` of quiet after it ends it. `false` records the whole `duration` |
+| `silence_ms` | int | `800` | trailing quiet that ends an endpointed take, `100..5000` |
+| `device` | string | *see below* | an input index, or a fragment of a device name. A fragment matching several devices is a `503` rather than a guess. Omitted: `JOE_INPUT_DEVICE` if set, else the microphone `joe voice setup` saved, else the backend default. |
 
 **Response** — `200 OK`
 
 ```json
-{ "text": "...", "segments": [...], "language": "en", "audio_path": "Data/Voice/capture_...wav" }
+{ "text": "...", "segments": [...], "language": "en", "audio_path": "Data/Voice/capture_...wav", "speech_detected": true }
 ```
+
+`speech_detected` is `true` or `false` for an endpointed take and `null` for a
+fixed one. When the endpointer heard no speech, the transcriber is not run and
+`text` is empty -- no speech is a known answer, which a caller can report as
+"heard nothing" rather than as a failed transcription.
 
 **Errors**
 

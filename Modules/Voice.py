@@ -5,8 +5,10 @@ concern — so joe's speech-analysis path sits next to its music-analysis path
 rather than beside it as a separate tool.
 """
 
+import json
 import os
 from datetime import datetime
+from pathlib import Path
 
 import numpy as np
 from scipy.io import wavfile
@@ -310,6 +312,47 @@ def _capture_until_silence(
     return _to_mono_16k(frames, rate, target_rate), index, speech_started
 
 
+# Where `joe voice setup` keeps the chosen microphone. Under Data/, which is
+# ignored, because the choice is a fact about one machine and not the project.
+SAVED_DEVICE = Path(__file__).resolve().parents[1] / "Data" / "voice-device.json"
+
+
+def save_input_device(device: dict) -> Path:
+    """Remember `device` as this machine's microphone. Returns the file written.
+
+    The name and host API are kept beside the index because PortAudio renumbers
+    devices when one is plugged in or out; the index is a hint, the name and
+    host API are the identity.
+    """
+    SAVED_DEVICE.parent.mkdir(parents=True, exist_ok=True)
+    record = {k: device[k] for k in ("index", "name", "hostapi")}
+    SAVED_DEVICE.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8", newline="\n")
+    return SAVED_DEVICE
+
+
+def saved_input_device() -> int | None:
+    """The index of the saved microphone as the devices stand now, or None.
+
+    Read at record time, so a choice made while the backend runs takes
+    effect on its next recording with no restart. A device that has moved
+    is found by name and host API; one that is gone yields None and the
+    backend's default, rather than a stale index naming another device.
+    """
+    try:
+        saved = json.loads(SAVED_DEVICE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    identity = (saved.get("name"), saved.get("hostapi"))
+    devices = list_input_devices()
+    for d in devices:
+        if d["index"] == saved.get("index") and (d["name"], d["hostapi"]) == identity:
+            return d["index"]
+    for d in devices:
+        if (d["name"], d["hostapi"]) == identity:
+            return d["index"]
+    return None
+
+
 def default_input_device() -> dict | None:
     """The device `record()` would actually use, or None if there isn't one."""
     devices = list_input_devices()
@@ -412,7 +455,9 @@ class Voice:
         `speech_detected` is None for a fixed window, which does not judge.
         """
         if device is None:
-            device = os.environ.get("JOE_INPUT_DEVICE") or None
+            # An explicit device wins, then the environment, then the choice
+            # `joe voice setup` saved, then the backend's default.
+            device = os.environ.get("JOE_INPUT_DEVICE") or saved_input_device()
 
         if resolve_input_device(device) is None and not microphone_available():
             raise NoMicrophoneError(

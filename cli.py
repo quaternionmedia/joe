@@ -125,16 +125,103 @@ def voice_devices():
     # Host API in the line because the name is not unique: the same
     # microphone appears once per API, and a list you cannot choose from is
     # not a list.
+    from Modules.Voice import saved_input_device
+
+    saved = saved_input_device()
     width = max(len(d["name"]) for d in devices)
     for d in devices:
-        mark = "*" if d["default"] else " "
+        mark = "S" if d["index"] == saved else ("*" if d["default"] else " ")
         _echo(
             f"{mark} [{d['index']:3d}] {d['name']:{width}s}  "
             f"{d['channels']}ch  {d['hostapi']}"
         )
     _echo()
+    if saved is not None:
+        _echo("S is the microphone `joe voice setup` saved; recording uses it.")
     _echo("* is this backend's default, which is not always a microphone.")
-    _echo("`joe voice level --device N` says which one a voice arrives on.")
+    _echo("`joe voice setup` finds and saves the one a voice arrives on.")
+
+
+@voice_app.command("setup")
+def voice_setup(
+    seconds: float = typer.Option(1.5, help="Seconds to listen on each input"),
+    confirm: bool = typer.Option(
+        True, "--confirm/--no-confirm", help="Finish by transcribing a test sentence"
+    ),
+):
+    """Find your microphone, save it, and prove it with a test sentence.
+
+    Tries every input while you talk, keeps the loudest one that heard you,
+    and saves it so recording uses it from then on -- no environment
+    variable, and no restart of a running backend.
+    """
+    import time
+
+    from Modules.Voice import (
+        NoMicrophoneError,
+        Voice,
+        input_level,
+        list_input_devices,
+        save_input_device,
+    )
+
+    devices = list_input_devices()
+    if not devices:
+        _echo("No input devices found. Is a microphone connected, and does the "
+              "operating system see it?", err=True)
+        raise typer.Exit(1)
+
+    _echo(f"Finding your microphone among {len(devices)} inputs.")
+    _echo(f"When the countdown ends, keep talking -- count slowly to thirty -- "
+          f"for about {round(len(devices) * seconds)} seconds while each is tried.")
+    for n in (3, 2, 1):
+        _echo(f"  {n}...")
+        time.sleep(1)
+    _echo("  Talk now.")
+
+    heard = []
+    for i, d in enumerate(devices, 1):
+        label = f"  [{i}/{len(devices)}] [{d['index']:3d}] {d['name']} ({d['hostapi']})"
+        try:
+            report = input_level(duration=seconds, device=d["index"])
+        except NoMicrophoneError:
+            _echo(f"{label}  unavailable")
+            continue
+        _echo(f"{label}  rms {report['rms']:.4f}  {'silent' if report['silent'] else 'heard'}")
+        if not report["silent"]:
+            heard.append((report["rms"], d))
+
+    if not heard:
+        _echo()
+        _echo("No input heard you. Check that the microphone is not muted -- a "
+              "hardware switch, or the operating system's own mute -- that desktop "
+              "apps may use it (Windows: Settings > Privacy > Microphone), and "
+              "keep talking through the whole sweep. Then run this again.", err=True)
+        raise typer.Exit(1)
+
+    best = max(heard, key=lambda pair: pair[0])[1]
+    path = save_input_device(best)
+    _echo()
+    _echo(f"Your microphone: [{best['index']}] {best['name']} ({best['hostapi']}).")
+    _echo(f"Saved to {path}. Recording uses it from now on.")
+
+    if not confirm:
+        return
+    _echo()
+    _echo("Last check: say a short sentence now. Recording stops when you do. "
+          "(The first run loads the speech model, which takes a moment.)")
+    try:
+        result = Voice().listen(duration=10.0, device=best["index"], until_silence=True)
+    except NoMicrophoneError as exc:
+        _echo(str(exc), err=True)
+        raise typer.Exit(1)
+    text = result.get("text", "").strip()
+    if result.get("speech_detected") is False or not text:
+        _echo("Heard nothing that time. The microphone is saved; run `joe voice "
+              "listen` to try again, or `joe voice setup` to choose again.", err=True)
+        raise typer.Exit(1)
+    _echo(f'Heard: "{text}"')
+    _echo("If that is what you said, the voice loop will hear you.")
 
 
 @voice_app.command("transcribe")
@@ -148,24 +235,36 @@ def voice_transcribe(path: str, model_size: str = "base"):
 
 @voice_app.command("listen")
 def voice_listen(
-    duration: float = 5.0,
+    duration: float = typer.Option(10.0, help="The most seconds to record"),
     model_size: str = "base",
     device: str = typer.Option(None, help="Input device index or name fragment"),
+    until_silence: bool = typer.Option(
+        True, "--until-silence/--fixed", help="Stop when the speaker stops, or record the full duration"
+    ),
 ):
     """Record from an input device and transcribe the result.
 
-    Without `--device`, the backend's default is used, or `JOE_INPUT_DEVICE`
-    if it is set.
+    Recording stops when you stop talking, up to `--duration`; `--fixed`
+    records the whole duration. Without `--device`: `JOE_INPUT_DEVICE` if
+    set, else the microphone `joe voice setup` saved, else the default.
     """
     from Modules.Voice import NoMicrophoneError, Voice
 
-    _echo(f"Listening for {duration}s...")
+    if until_silence:
+        _echo(f"Listening -- recording stops when you do (at most {duration:g}s)...")
+    else:
+        _echo(f"Listening for {duration:g}s...")
     try:
-        result = Voice(model_size=model_size).listen(duration=duration, device=device)
+        result = Voice(model_size=model_size).listen(
+            duration=duration, device=device, until_silence=until_silence
+        )
     except NoMicrophoneError as exc:
         _echo(str(exc), err=True)
         raise typer.Exit(1)
     _echo(f"Saved: {result['audio_path']}")
+    if result.get("speech_detected") is False:
+        _echo("Heard no speech. `joe voice setup` checks which microphone hears you.", err=True)
+        raise typer.Exit(1)
     _echo(result["text"])
 
 
