@@ -50,3 +50,33 @@ def test_voice_devices_exits_nonzero_when_none_found():
 
     assert result.exit_code == 1
     assert "No input devices found." in result.output
+
+
+def test_a_diagnostic_survives_a_console_that_cannot_take_it(monkeypatch):
+    """Under a MinTTY terminal, click's Windows console writer can raise
+    OSError (Windows error 6) on the wrapped stderr — and the one message
+    that mattered ("nothing above silence") died inside its own printing.
+    The message outranks its styling: it falls back to the interpreter's
+    original stream, and the command still exits 1 rather than crashing."""
+    import io
+    import sys as real_sys
+
+    silent = {"device": 3, "name": "Mic", "peak": 0.0, "rms": 0.0, "silent": True}
+    fallback = io.StringIO()
+    monkeypatch.setattr(real_sys, "__stderr__", fallback)
+
+    real_echo = cli.typer.echo
+
+    def broken_stderr_echo(message="", err=False, **kwargs):
+        if err:
+            raise OSError(6, "The handle is invalid")
+        real_echo(message, err=err, **kwargs)
+
+    with patch("Modules.Voice.list_input_devices", return_value=[{"index": 3}]), patch(
+        "Modules.Voice.input_level", return_value=silent
+    ), patch.object(cli.typer, "echo", side_effect=broken_stderr_echo):
+        result = runner.invoke(cli.app, ["voice", "level", "--every"])
+
+    assert not isinstance(result.exception, OSError), "the console writer's OSError escaped"
+    assert result.exit_code == 1
+    assert "Nothing above silence" in fallback.getvalue()
