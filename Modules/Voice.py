@@ -181,12 +181,21 @@ def _capture(duration: float, device: int | str | None, target_rate: int = 16000
             f"at {rate} Hz / {channels}ch: {exc}"
         ) from exc
 
-    # **A DEVICE CAN OPEN AND STILL HAND BACK NOTHING USABLE.** float32
-    # capture is in [-1, 1]. One WDM-KS input here opens without error and
-    # returns values around -2e38 -- uninitialised memory, not sound. The
-    # level meter read that as the loudest device on the machine and
-    # reported it as the one to use, which is worse than the silence it was
-    # written to find: a confident wrong answer instead of no answer.
+    _reject_unusable(frames, index)
+
+    return _to_mono_16k(frames, rate, target_rate), index
+
+
+def _reject_unusable(frames, index: int | None) -> None:
+    """Refuse samples no microphone produced.
+
+    **A DEVICE CAN OPEN AND STILL HAND BACK NOTHING USABLE.** float32
+    capture is in [-1, 1]. One WDM-KS input here opens without error and
+    returns values around -2e38 -- uninitialised memory, not sound. The
+    level meter read that as the loudest device on the machine and
+    reported it as the one to use, which is worse than the silence it was
+    written to find: a confident wrong answer instead of no answer.
+    """
     peak = float(np.abs(frames).max()) if frames.size else 0.0
     # `not (peak <= 1.5)` rather than `peak > 1.5`, because the same devices
     # also return NaN, and every comparison with NaN is False. The first
@@ -199,6 +208,75 @@ def _capture(duration: float, device: int | str | None, target_rate: int = 16000
             f"not deliver audio; try the same microphone on another host API."
         )
 
+
+def _capture_until_silence(
+    max_duration: float,
+    device: int | str | None,
+    target_rate: int = 16000,
+    silence_after: float = 0.8,
+) -> tuple["np.ndarray", int | None]:
+    """Record until the speaker stops, or `max_duration`, whichever is first.
+
+    A fixed window is an impolite listener: it truncates a slow answer and
+    keeps recording after a quick one. This reads ~100 ms blocks and applies
+    one rule: the first blocks set the ambient level, speech is a block well
+    above it, and `silence_after` seconds back at ambient after speech ends
+    the take. Nobody speaking runs to the cap, because hanging up early on a
+    slow responder is the failure this exists to remove.
+    """
+    index = resolve_input_device(device)
+    rate, channels = _native_format(index)
+
+    import sounddevice as sd
+
+    block_seconds = 0.1
+    block_frames = max(1, int(rate * block_seconds))
+    # round, not int: 0.3 / 0.1 is 2.999… in floats, and truncation quietly
+    # shortened every wait by one block.
+    max_blocks = max(1, round(max_duration / block_seconds))
+    ambient_blocks = 3
+    # Speech is judged against the room, not an absolute: devices and rooms
+    # differ by orders of magnitude, and the floor only guards a dead-quiet
+    # ambient from making breath sound like speech.
+    speech_factor = 4.0
+    floor = 1e-3
+
+    taken: list = []
+    ambient: list[float] = []
+    speech_started = False
+    quiet_blocks = 0
+    needed_quiet = max(1, round(silence_after / block_seconds))
+
+    try:
+        with sd.InputStream(
+            samplerate=rate, channels=channels, dtype="float32", device=index
+        ) as stream:
+            for _ in range(max_blocks):
+                block, _overflow = stream.read(block_frames)
+                block = np.asarray(block, dtype="float32")
+                _reject_unusable(block, index)
+                taken.append(block)
+                rms = float(np.sqrt((block.astype("float64") ** 2).mean())) if block.size else 0.0
+                if len(ambient) < ambient_blocks:
+                    ambient.append(rms)
+                    continue
+                threshold = max(max(ambient) * speech_factor, floor)
+                if rms >= threshold:
+                    speech_started = True
+                    quiet_blocks = 0
+                elif speech_started:
+                    quiet_blocks += 1
+                    if quiet_blocks >= needed_quiet:
+                        break
+    except NoMicrophoneError:
+        raise
+    except Exception as exc:
+        raise NoMicrophoneError(
+            f"Recording failed on device {index if index is not None else 'default'} "
+            f"at {rate} Hz / {channels}ch: {exc}"
+        ) from exc
+
+    frames = np.concatenate(taken) if taken else np.zeros((0, 1), dtype="float32")
     return _to_mono_16k(frames, rate, target_rate), index
 
 
@@ -265,10 +343,15 @@ class Voice:
         duration: float = 5.0,
         sample_rate: int = 16000,
         device: int | str | None = None,
+        until_silence: bool = False,
+        silence_after: float = 0.8,
     ) -> str:
         """Record `duration` seconds from an input device to a WAV file.
 
-        Returns the path written to.
+        Returns the path written to. With `until_silence`, `duration`
+        becomes the cap and the recording ends `silence_after` seconds
+        after the speaker stops — the polite listener, off by default here
+        so library callers keep exact-length semantics.
 
         `device` is an index or a name fragment; `None` takes the backend's
         default, which is what this did unconditionally before. The default
@@ -293,7 +376,15 @@ class Voice:
                 "machine's audio backend can see."
             )
 
-        frames, _ = _capture(duration, device, target_rate=sample_rate)
+        if until_silence:
+            frames, _ = _capture_until_silence(
+                max_duration=duration,
+                device=device,
+                target_rate=sample_rate,
+                silence_after=silence_after,
+            )
+        else:
+            frames, _ = _capture(duration, device, target_rate=sample_rate)
 
         os.makedirs(self.capture_dir, exist_ok=True)
         stamp = datetime.now().strftime("%m-%d-%y_%H-%M-%S")
@@ -309,9 +400,17 @@ class Voice:
         duration: float = 5.0,
         sample_rate: int = 16000,
         device: int | str | None = None,
+        until_silence: bool = False,
+        silence_after: float = 0.8,
     ) -> dict:
         """Record from an input device and transcribe the result in one step."""
-        wav_path = self.record(duration=duration, sample_rate=sample_rate, device=device)
+        wav_path = self.record(
+            duration=duration,
+            sample_rate=sample_rate,
+            device=device,
+            until_silence=until_silence,
+            silence_after=silence_after,
+        )
         result = self.transcribe(wav_path)
         result["audio_path"] = wav_path
         return result

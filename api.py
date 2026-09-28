@@ -354,17 +354,35 @@ def voice_transcribe(filename: str):
 
 
 @app.post("/api/voice/listen")
-def voice_listen(duration: float = 5.0, device: str | None = None):
-    """Records `duration` seconds from an input device and transcribes it.
+def voice_listen(
+    duration: float = 5.0,
+    device: str | None = None,
+    until_silence: bool = True,
+    silence_ms: int = 800,
+):
+    """Records from an input device and transcribes it.
+
+    This is the human-facing seam, so the polite default lives here:
+    `duration` is the cap, and the recording ends `silence_ms` after the
+    speaker stops — a fixed window truncates a slow answer and keeps
+    recording after a quick one. `until_silence=false` restores the
+    exact-length window.
 
     `device` is an index or a name fragment; omitted, the server's default
     input is used, or `JOE_INPUT_DEVICE` if that is set.
     """
     if not 0 < duration <= 60:
         raise HTTPException(status_code=400, detail="duration must be between 0 and 60 seconds")
+    if not 100 <= silence_ms <= 5000:
+        raise HTTPException(status_code=400, detail="silence_ms must be between 100 and 5000")
     voice = Voice()
     try:
-        return voice.listen(duration=duration, device=device)
+        return voice.listen(
+            duration=duration,
+            device=device,
+            until_silence=until_silence,
+            silence_after=silence_ms / 1000,
+        )
     except NoMicrophoneError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
 

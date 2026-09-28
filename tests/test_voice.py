@@ -141,3 +141,80 @@ def test_listen_combines_record_and_transcribe(tmp_path):
 
     assert result["text"] == "go"
     assert result["audio_path"].startswith(str(tmp_path))
+
+
+# --- endpointed capture -------------------------------------------------------
+#
+# The polite listener: a fixed window truncates a slow answer and records
+# leading silence. These drive `_capture_until_silence` with a scripted
+# stream -- no audio device -- and pin the state machine: ambient first,
+# speech, then enough trailing quiet ends the recording.
+
+
+def _fake_stream_sd(blocks):
+    """A sounddevice whose InputStream feeds scripted blocks, then silence."""
+    fake_sd = _fake_sounddevice(
+        [{"name": "Mic", "max_input_channels": 1, "max_output_channels": 0}],
+        default_input_index=0,
+    )
+    stream = MagicMock()
+    feed = iter(blocks)
+
+    def read(nframes):
+        try:
+            return next(feed), False
+        except StopIteration:
+            return np.zeros((nframes, 1), dtype="float32"), False
+
+    stream.read.side_effect = read
+    stream.__enter__ = MagicMock(return_value=stream)
+    stream.__exit__ = MagicMock(return_value=False)
+    fake_sd.InputStream.return_value = stream
+    return fake_sd, stream
+
+
+def _blk(level, frames=4410):
+    return np.full((frames, 1), level, dtype="float32")
+
+
+def test_capture_until_silence_stops_when_the_speaker_stops():
+    from Modules.Voice import _capture_until_silence
+
+    quiet, loud = 0.0005, 0.2
+    blocks = [_blk(quiet)] * 3 + [_blk(loud)] * 5 + [_blk(quiet)] * 20
+    fake_sd, stream = _fake_stream_sd(blocks)
+
+    with patch.dict(sys.modules, {"sounddevice": fake_sd}):
+        samples, index = _capture_until_silence(
+            max_duration=10.0, device=None, silence_after=0.3
+        )
+
+    # 3 ambient + 5 speech + 3 trailing-quiet blocks (0.3 s at ~100 ms each),
+    # and not the 20 the script would have gone on feeding.
+    assert stream.read.call_count == 11, stream.read.call_count
+    assert samples.size > 0
+    # None is the backend default, the same contract `_capture` returns.
+    assert index is None
+
+
+def test_capture_until_silence_waits_out_a_slow_start_to_the_cap():
+    from Modules.Voice import _capture_until_silence
+
+    fake_sd, stream = _fake_stream_sd([_blk(0.0005)] * 200)
+
+    with patch.dict(sys.modules, {"sounddevice": fake_sd}):
+        _capture_until_silence(max_duration=1.0, device=None, silence_after=0.3)
+
+    # Nobody spoke: the recording runs to the cap and no further, because
+    # ending early on silence alone would hang up on a slow responder.
+    assert stream.read.call_count == 10, stream.read.call_count
+
+
+def test_capture_until_silence_rejects_a_garbage_device():
+    from Modules.Voice import NoMicrophoneError, _capture_until_silence
+
+    fake_sd, _ = _fake_stream_sd([_blk(-2e38)])
+
+    with patch.dict(sys.modules, {"sounddevice": fake_sd}):
+        with pytest.raises(NoMicrophoneError):
+            _capture_until_silence(max_duration=1.0, device=None)
