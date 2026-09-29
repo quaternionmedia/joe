@@ -17,9 +17,9 @@ runner = CliRunner()
 
 DEVICES = [
     {"index": 3, "name": "Capture Card", "channels": 2, "default": True, "hostapi": "MME"},
-    {"index": 7, "name": "Headset Mic", "channels": 1, "default": False, "hostapi": "WASAPI"},
+    {"index": 7, "name": "Headset Mic", "channels": 1, "default": False, "hostapi": "Windows WASAPI"},
     {"index": 9, "name": "Headset Mic", "channels": 1, "default": False, "hostapi": "MME"},
-    {"index": 12, "name": "Broken Input", "channels": 1, "default": False, "hostapi": "WDM-KS"},
+    {"index": 12, "name": "Broken Input", "channels": 1, "default": False, "hostapi": "Windows WDM-KS"},
 ]
 LEVELS = {3: 0.0, 7: 0.08, 9: 0.03}  # 12 raises: it opens and returns garbage
 
@@ -46,8 +46,8 @@ def test_setup_saves_the_loudest_input_that_heard_you(saved_file):
         result = runner.invoke(cli.app, ["voice", "setup", "--no-confirm"])
 
     assert result.exit_code == 0, result.output
-    assert json.loads(saved_file.read_text()) == {"index": 7, "name": "Headset Mic", "hostapi": "WASAPI"}
-    assert "Your microphone: [7] Headset Mic (WASAPI)" in result.output
+    assert json.loads(saved_file.read_text()) == {"index": 7, "name": "Headset Mic", "hostapi": "Windows WASAPI"}
+    assert "Your microphone: [7] Headset Mic (Windows WASAPI)" in result.output
     assert "unavailable" in result.output  # the garbage device is reported, not chosen
     assert "Talk now" in result.output
 
@@ -78,6 +78,65 @@ def test_setup_proves_the_choice_with_a_transcribed_sentence(saved_file):
     assert 'Heard: "testing one two three"' in result.output
     assert listen.call_args.kwargs["until_silence"] is True
     assert listen.call_args.kwargs["device"] == 7
+
+
+ONE_MIC_FOUR_WAYS = [
+    {"index": 1, "name": "USB Mic", "channels": 2, "default": True, "hostapi": "MME"},
+    {"index": 14, "name": "USB Mic", "channels": 2, "default": False, "hostapi": "Windows DirectSound"},
+    {"index": 36, "name": "USB Mic", "channels": 2, "default": False, "hostapi": "Windows WASAPI"},
+    {"index": 55, "name": "USB Mic", "channels": 2, "default": False, "hostapi": "Windows WDM-KS"},
+]
+# WDM-KS bypasses the system mixer and reads loudest: the level says which
+# microphone, not which way to reach it.
+FOUR_WAY_LEVELS = {1: 0.011, 14: 0.011, 36: 0.009, 55: 0.03}
+
+
+def _four_way_level(duration, device):
+    rms = FOUR_WAY_LEVELS[device]
+    return {"device": device, "name": "USB Mic", "peak": rms * 3, "rms": rms, "silent": False}
+
+
+def test_setup_reaches_the_loudest_microphone_through_its_most_reliable_host_api(saved_file):
+    """The failure this pins: the sweep chose WDM-KS because it read loudest,
+    saved it, and the recording that followed could not open it."""
+    with patch("Modules.Voice.list_input_devices", return_value=ONE_MIC_FOUR_WAYS), patch(
+        "Modules.Voice.input_level", side_effect=_four_way_level
+    ):
+        result = runner.invoke(cli.app, ["voice", "setup", "--no-confirm"])
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(saved_file.read_text())["index"] == 36
+
+
+def test_setup_falls_through_to_the_next_entry_when_the_proof_cannot_record(saved_file):
+    def listen(self, duration, device, until_silence):
+        if device == 36:
+            raise voice_module.NoMicrophoneError("Blocking API not supported yet")
+        return {"text": "testing", "speech_detected": True}
+
+    with patch("Modules.Voice.list_input_devices", return_value=ONE_MIC_FOUR_WAYS), patch(
+        "Modules.Voice.input_level", side_effect=_four_way_level
+    ), patch("Modules.Voice.Voice.listen", listen):
+        result = runner.invoke(cli.app, ["voice", "setup"])
+
+    assert result.exit_code == 0, result.output
+    assert "[36] USB Mic (Windows WASAPI) could not record" in result.output
+    assert json.loads(saved_file.read_text())["index"] == 1  # MME, next in line
+    assert 'Heard: "testing"' in result.output
+
+
+def test_setup_saves_nothing_when_no_entry_can_record(saved_file):
+    with patch("Modules.Voice.list_input_devices", return_value=ONE_MIC_FOUR_WAYS), patch(
+        "Modules.Voice.input_level", side_effect=_four_way_level
+    ), patch(
+        "Modules.Voice.Voice.listen",
+        side_effect=voice_module.NoMicrophoneError("cannot open"),
+    ):
+        result = runner.invoke(cli.app, ["voice", "setup"])
+
+    assert result.exit_code == 1
+    assert "Nothing was saved" in result.output
+    assert not saved_file.exists()
 
 
 def test_setup_says_so_when_the_test_sentence_was_not_heard(saved_file):
