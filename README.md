@@ -54,6 +54,13 @@ recording — the CLI's and the backend's —
 uses it from then on, with no environment variable to set and no restart.
 `JOE_INPUT_DEVICE`, where set, still overrides it.
 
+**Watching a conversation:** with `uv run joe dev` running, the page at
+`http://localhost:3000/joe` shows a voice panel whenever something is spoken
+through the backend: asking, your turn, hearing you, pause, reading, and the
+answer. Each state has its own colour, motion and label. The backend reports
+the microphone's states itself; the program asking the question posts the
+rest (`docs/api.md`, `/api/voice/conversation`).
+
 See [docs/api.md](docs/api.md) for the full API endpoint reference.
 
 ### Python setup

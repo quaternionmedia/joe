@@ -393,6 +393,60 @@ curl -X POST "http://localhost:8000/api/voice/level?device=12"
 
 ---
 
+### `GET /api/voice/conversation`
+
+The conversation's states as they happen, as server-sent events. The front
+end's voice panel reads this stream.
+
+The states follow the polite conversation protocol, in the order a turn moves
+through them:
+
+| State | Meaning | Reported by |
+| --- | --- | --- |
+| `speaking` | the question is being asked; the microphone is closed | the dialog |
+| `listening` | the microphone is open; nobody has started talking | joe |
+| `hearing` | speech is sustained; the listener does not interrupt | joe |
+| `pausing` | the speech stopped; the turn is held open a moment longer | joe |
+| `transcribing` | the turn has ended; the words are being read | joe |
+| `heard` | what was said, in `text` | joe |
+| `no_speech` | the turn ran to its cap and nobody spoke | joe |
+| `recorded` | an answer was accepted, in `text` | the dialog |
+| `gave_up` | no usable answer; nothing recorded | the dialog |
+| `idle` | nothing is happening | the dialog, or joe when the microphone fails |
+
+Each event is `{"seq", "state", "text", "at"}`, plus `reason` (`noinput` or
+`nomatch`) on a `speaking` event that re-asks. A connection first receives the
+recent events, then each new one; a reconnect sending `Last-Event-ID` resumes
+after it. The microphone's level arrives as its own event type, `level`, with
+`{"rms", "threshold", "seq"}`; `threshold` is null while the room is measured.
+
+```bash
+curl -N http://localhost:8000/api/voice/conversation
+```
+
+### `GET /api/voice/conversation/state`
+
+The current state, the recent events and the level, once:
+`{"state", "events": [...], "level": {...}}`.
+
+### `POST /api/voice/conversation`
+
+A dialog's own state, posted by the program asking the question.
+
+**Body** — `{"state": "speaking", "text": "Voice check. Say approve or hold.", "reason": null}`
+
+Only `speaking`, `recorded`, `gave_up` and `idle` are accepted. The other
+states are the microphone's, and joe reports them itself while
+`/api/voice/listen` records.
+
+**Errors**
+
+| Status | Reason |
+| --- | --- |
+| `400` | A body that is not JSON, or a state the dialog may not post |
+
+---
+
 ## Interactive docs
 
 FastAPI auto-generates an interactive API explorer at:

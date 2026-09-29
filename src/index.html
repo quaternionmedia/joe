@@ -67,6 +67,31 @@
       </div>
     </div>
 
+    <!-- ─── Voice conversation: a spoken exchange, live ────────────────── -->
+    <section id="voice-panel" data-testid="voice-panel" data-state="idle" hidden
+             aria-label="Voice conversation">
+      <div class="voice-status" role="status" aria-live="polite">
+        <span class="voice-orb" aria-hidden="true"></span>
+        <span class="voice-words">
+          <span class="voice-label" data-testid="voice-label">Idle</span>
+          <span class="voice-hint" data-testid="voice-hint"></span>
+        </span>
+      </div>
+      <div class="voice-level" aria-hidden="true">
+        <div class="voice-level-fill"></div>
+        <div class="voice-level-gate"></div>
+      </div>
+      <ol class="voice-track" data-testid="voice-track" aria-hidden="true">
+        <li data-step="speaking">Ask</li>
+        <li data-step="listening">Listen</li>
+        <li data-step="hearing">Hear</li>
+        <li data-step="pausing">Pause</li>
+        <li data-step="transcribing">Read</li>
+        <li data-step="outcome">Answer</li>
+      </ol>
+      <ul class="voice-log" data-testid="voice-log"></ul>
+    </section>
+
     <!-- ─── First-run hint (dismissed via localStorage) ─────────────────── -->
     <div id="first-run-hint" class="first-run-hint" role="note" aria-label="Quick start guide">
       <span class="hint-steps">
