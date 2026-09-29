@@ -6,8 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.2/lib/p5.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.2/lib/addons/p5.sound.js"></script>
-    <script type="module" crossorigin src="/joe/assets/index-CvycnoWL.js"></script>
-    <link rel="stylesheet" crossorigin href="/joe/assets/index-Bw65Uprx.css">
+    <script type="module" crossorigin src="/joe/assets/index-dpwzrlsI.js"></script>
+    <link rel="stylesheet" crossorigin href="/joe/assets/index-BCgxexD9.css">
   </head>
 
   <body>
@@ -91,6 +91,14 @@
         <li data-step="outcome">Answer</li>
       </ol>
       <ul class="voice-log" data-testid="voice-log"></ul>
+      <div class="voice-queue" data-testid="voice-queue" hidden>
+        <div class="voice-queue-head">
+          <span data-testid="voice-queue-count"></span>
+          <button type="button" data-testid="voice-answer">Answer by voice</button>
+        </div>
+        <div class="voice-queue-prompt" data-testid="voice-queue-prompt"></div>
+        <div class="voice-queue-note" data-testid="voice-queue-note"></div>
+      </div>
     </section>
 
     <!-- ─── First-run hint (dismissed via localStorage) ─────────────────── -->
