@@ -90,6 +90,14 @@
         <li data-step="outcome">Answer</li>
       </ol>
       <ul class="voice-log" data-testid="voice-log"></ul>
+      <div class="voice-queue" data-testid="voice-queue" hidden>
+        <div class="voice-queue-head">
+          <span data-testid="voice-queue-count"></span>
+          <button type="button" data-testid="voice-answer">Answer by voice</button>
+        </div>
+        <div class="voice-queue-prompt" data-testid="voice-queue-prompt"></div>
+        <div class="voice-queue-note" data-testid="voice-queue-note"></div>
+      </div>
     </section>
 
     <!-- ─── First-run hint (dismissed via localStorage) ─────────────────── -->

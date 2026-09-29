@@ -61,6 +61,14 @@ answer. Each state has its own colour, motion and label. The backend reports
 the microphone's states itself; the program asking the question posts the
 rest (`docs/api.md`, `/api/voice/conversation`).
 
+**Answering by voice from the page:** with qmcp's server running as well
+(`uv run python -m qmcp serve` in its checkout), whatever is waiting on you in
+qmcp appears in the panel, oldest first, with **Answer by voice**. Pressing it
+has qmcp ask the question aloud while joe's microphone hears the answer, and
+the panel shows the turn as it happens. Nothing is spoken until the button is
+pressed. If the conversation cannot start, the panel shows qmcp's own reason.
+The dev server reaches qmcp at `http://localhost:3141`; `QMCP_URL` moves it.
+
 See [docs/api.md](docs/api.md) for the full API endpoint reference.
 
 ### Python setup

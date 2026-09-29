@@ -35,6 +35,7 @@ const REASKS = {
 
 // A finished exchange stays on screen this long before the panel steps aside.
 const LINGER_MS = 10000;
+const FINISHED = ['recorded', 'gave_up', 'idle', 'no_speech'];
 const LOG_LINES = 8;
 
 export class VoicePanel {
@@ -55,6 +56,20 @@ export class VoicePanel {
     this._source  = null;
     this._retryMs = 2000;
     this._linger  = null;
+    // Set by whatever else lives in the panel: while it returns true, a
+    // finished exchange does not take the panel away.
+    this.keepOpen = () => false;
+  }
+
+  /** Show the panel, whatever state it is in. */
+  reveal() {
+    this._el.hidden = false;
+  }
+
+  /** Step aside if nothing is happening and nothing needs the panel. */
+  settle() {
+    const finished = FINISHED.includes(this._el.dataset.state);
+    if (finished && this._linger === null && !this.keepOpen()) this._el.hidden = true;
   }
 
   mount() {
@@ -88,8 +103,12 @@ export class VoicePanel {
     this._append(event);
 
     clearTimeout(this._linger);
-    if (['recorded', 'gave_up', 'idle', 'no_speech'].includes(event.state)) {
-      this._linger = setTimeout(() => { this._el.hidden = true; }, LINGER_MS);
+    this._linger = null;
+    if (FINISHED.includes(event.state)) {
+      this._linger = setTimeout(() => {
+        this._linger = null;
+        if (!this.keepOpen()) this._el.hidden = true;
+      }, LINGER_MS);
     }
   }
 
