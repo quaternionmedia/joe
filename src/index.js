@@ -7,6 +7,7 @@ import { CapturePanel } from './components/CapturePanel.js';
 import { MainCanvas }   from './components/MainCanvas.js';
 import { Transport }    from './components/Transport.js';
 import { VoicePanel }   from './components/VoicePanel.js';
+import { VoiceQueue }   from './components/VoiceQueue.js';
 import { setlist }      from './config/setlists.js';
 
 // Must match MainCanvas.js LABEL_W — used for p5 playhead pixel calculation.
@@ -41,6 +42,8 @@ capturePanel.mount();
 // ─── Voice conversation ──────────────────────────────────────────────────────
 const voicePanel = new VoicePanel(document.getElementById('voice-panel'));
 voicePanel.mount();
+const voiceQueue = new VoiceQueue(document.querySelector('#voice-panel .voice-queue'), voicePanel);
+voiceQueue.mount();
 
 // ─── First-run hint ───────────────────────────────────────────────────────────
 {
