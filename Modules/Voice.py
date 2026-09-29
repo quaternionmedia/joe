@@ -212,6 +212,17 @@ def _reject_unusable(frames, index: int | None) -> None:
         )
 
 
+def _tell(on_event, state: str, **detail) -> None:
+    """Report a state to a watcher, if there is one. Never raises: visual
+    feedback must not cost the recording or the transcript it describes."""
+    if on_event is None:
+        return
+    try:
+        on_event(state, **detail)
+    except Exception:
+        pass
+
+
 # How long an open stream may go without delivering a block before the take
 # is abandoned. Some devices open cleanly and never call back; without a bound
 # the dialog above would wait on them forever.
@@ -224,10 +235,18 @@ def _capture_until_silence(
     target_rate: int = 16000,
     silence_after: float = 0.8,
     min_speech: float = 0.2,
+    on_event=None,
 ) -> tuple["np.ndarray", int | None, bool]:
     """Record until the speaker stops, or `max_duration`, whichever is first.
 
     Returns `(samples, index, speech_detected)`.
+
+    `on_event(state, **detail)`, when given, hears the turn as it happens:
+    `listening` once the stream is open, `hearing` when speech has been
+    sustained, `pausing` when it stops, `hearing` again if it resumes, and
+    `level` with each block's `rms` and the `threshold` it is judged against
+    (None while the room is being measured). Only transitions are reported,
+    so a watcher sees the protocol rather than the block rate.
 
     A fixed window is an impolite listener: it truncates a slow answer and
     keeps recording after a quick one. This reads ~100 ms blocks through a
@@ -284,6 +303,9 @@ def _capture_until_silence(
     needed_onset = max(1, round(min_speech / block_seconds))
     needed_quiet = max(1, round(silence_after / block_seconds))
 
+    def report(state: str, **detail) -> None:
+        _tell(on_event, state, **detail)
+
     arrived: queue.Queue = queue.Queue()
 
     def on_block(indata, frames, time_info, status):
@@ -299,6 +321,7 @@ def _capture_until_silence(
             blocksize=block_frames,
             callback=on_block,
         ):
+            report("listening")
             for _ in range(max_blocks):
                 try:
                     block = arrived.get(timeout=STALL_SECONDS)
@@ -315,21 +338,28 @@ def _capture_until_silence(
                 if len(calibration) < calibration_blocks:
                     calibration.append(rms)
                     noise = min(calibration)
+                    report("level", rms=rms, threshold=None)
                     continue
                 threshold = max(noise * speech_factor, absolute_floor)
+                report("level", rms=rms, threshold=threshold)
                 loud = rms >= threshold
                 if not speech_started:
                     if loud:
                         onset_blocks += 1
                         if onset_blocks >= needed_onset:
                             speech_started = True
+                            report("hearing")
                     else:
                         onset_blocks = 0
                         noise = noise * damping + rms * (1 - damping)
                 elif loud:
+                    if quiet_blocks:
+                        report("hearing")
                     quiet_blocks = 0
                 else:
                     quiet_blocks += 1
+                    if quiet_blocks == 1:
+                        report("pausing")
                     if quiet_blocks >= needed_quiet:
                         break
     except NoMicrophoneError:
@@ -519,6 +549,7 @@ class Voice:
         device: int | str | None,
         until_silence: bool,
         silence_after: float,
+        on_event=None,
     ) -> tuple[str, bool | None]:
         """Record, write the WAV, and say whether speech was detected.
 
@@ -542,8 +573,10 @@ class Voice:
                 device=device,
                 target_rate=sample_rate,
                 silence_after=silence_after,
+                on_event=on_event,
             )
         else:
+            _tell(on_event, "listening")
             frames, _ = _capture(duration, device, target_rate=sample_rate)
 
         os.makedirs(self.capture_dir, exist_ok=True)
@@ -562,6 +595,7 @@ class Voice:
         device: int | str | None = None,
         until_silence: bool = False,
         silence_after: float = 0.8,
+        on_event=None,
     ) -> dict:
         """Record from an input device and transcribe the result in one step.
 
@@ -570,14 +604,20 @@ class Voice:
         the transcriber is not run and `text` is empty — no speech is a
         known answer, and a dialog above needs "heard nothing" as a fact
         distinct from "heard something it could not use".
+
+        `on_event` hears the turn as `_capture_until_silence` describes,
+        then `no_speech`, or `transcribing` and `heard` with the text.
         """
         wav_path, speech_detected = self._take(
-            duration, sample_rate, device, until_silence, silence_after
+            duration, sample_rate, device, until_silence, silence_after, on_event
         )
         if speech_detected is False:
+            _tell(on_event, "no_speech")
             result = {"text": "", "segments": [], "language": None}
         else:
+            _tell(on_event, "transcribing")
             result = self.transcribe(wav_path)
+            _tell(on_event, "heard", text=result.get("text", ""))
         result["audio_path"] = wav_path
         result["speech_detected"] = speech_detected
         return result

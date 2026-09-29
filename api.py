@@ -15,6 +15,9 @@ Endpoints:
     POST /api/voice/transcribe      Transcribes an audio file under Data/Audio/ or Data/Voice/
     POST /api/voice/listen          Records from an input device and transcribes it
     POST /api/voice/level           How loud one input device is right now
+    GET  /api/voice/conversation    The conversation's states as they happen (server-sent events)
+    GET  /api/voice/conversation/state  The current state and recent events, once
+    POST /api/voice/conversation    A dialog's own state: speaking, recorded, gave_up, idle
 
 Run directly:
     python -m uvicorn api:app --reload --port 8000
@@ -32,10 +35,11 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from capture import AudioCapture
 
+from Modules.Conversation import POSTED, Conversation
 from Modules.Voice import NoMicrophoneError, Voice, input_level, list_input_devices
 
 app = FastAPI(title="Joe API", version="0.1.0")
@@ -66,6 +70,9 @@ MEDIA_TYPES = {
 }
 
 _capture = AudioCapture()
+
+# The one conversation this process has: its microphone is the only one.
+conversation = Conversation()
 
 
 # ─── Existing endpoints ───────────────────────────────────────────────────────
@@ -382,9 +389,76 @@ def voice_listen(
             device=device,
             until_silence=until_silence,
             silence_after=silence_ms / 1000,
+            on_event=_report,
         )
     except NoMicrophoneError as exc:
+        conversation.publish("idle", text=f"The microphone could not record: {exc}")
         raise HTTPException(status_code=503, detail=str(exc))
+
+
+def _report(state: str, **detail) -> None:
+    """The listen route's watcher: levels to the level, states to the log."""
+    if state == "level":
+        conversation.level(detail.get("rms", 0.0), detail.get("threshold"))
+    else:
+        conversation.publish(state, **detail)
+
+
+@app.get("/api/voice/conversation/state")
+def voice_conversation_state():
+    """The current state, the recent events, and the microphone level, once."""
+    return conversation.snapshot()
+
+
+@app.post("/api/voice/conversation")
+async def voice_conversation_post(request: Request):
+    """A dialog's own state, posted by the program asking the question.
+
+    Body: `{"state": ..., "text": ..., "reason": ...}`. Only the dialog's
+    states are accepted (`speaking`, `recorded`, `gave_up`, `idle`); the
+    microphone's are joe's to report.
+    """
+    try:
+        body = await request.json()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="body must be JSON")
+    state = body.get("state") if isinstance(body, dict) else None
+    if state not in POSTED:
+        raise HTTPException(
+            status_code=400,
+            detail=f"state must be one of {', '.join(POSTED)}; the others are the microphone's",
+        )
+    detail = {k: str(v) for k, v in body.items() if k in ("reason",) and v is not None}
+    return conversation.publish(state, text=str(body.get("text") or ""), **detail)
+
+
+async def _conversation_events(request: Request, poll: float = 0.05):
+    """Server-sent events: every kept event after the client's last, then each
+    new one as it happens, with the level as its own event type."""
+    try:
+        last = int(request.headers.get("last-event-id") or 0)
+    except ValueError:
+        last = 0
+    level_seq = -1
+    while not await request.is_disconnected():
+        for event in conversation.since(last):
+            last = event["seq"]
+            yield f"id: {last}\ndata: {json.dumps(event)}\n\n"
+        level = conversation.current_level()
+        if level["seq"] != level_seq:
+            level_seq = level["seq"]
+            yield f"event: level\ndata: {json.dumps(level)}\n\n"
+        await asyncio.sleep(poll)
+
+
+@app.get("/api/voice/conversation")
+async def voice_conversation(request: Request):
+    """The conversation's states as they happen, as server-sent events."""
+    return StreamingResponse(
+        _conversation_events(request),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache"},
+    )
 
 
 @app.post("/api/voice/level")
