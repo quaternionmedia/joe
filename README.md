@@ -8,9 +8,9 @@ Joe (named after Joseph Fourier) does two jobs on one workstation:
 - **The speech engine of a voice-driven development loop.** It owns the
   microphone, transcribes what is said with whisper, and shows each turn of a
   spoken conversation on its page. [qmcp](https://github.com/quaternionmedia/qmcp),
-  the local backend, runs from its own checkout: it asks the questions,
-  records instructions, asks consent and runs the work, and joe hears the
-  answers.
+  the local model backend, runs from its own checkout: it asks the questions,
+  records instructions, asks consent, and has the local model it stands up
+  read the project and answer, and joe hears the answers.
 
 The repo has three parts:
 
@@ -64,8 +64,9 @@ Open `http://localhost:3000/joe`, click **Results → Fetch Latest**.
 Two servers, one per checkout: `uv run joe dev` here and `uv run qmcp serve`
 in qmcp's. Everything below then happens in joe's page, except acting on a
 recorded instruction, which is qmcp's command: it asks consent aloud through
-joe's microphone, runs the work only on approve, and says the result back.
-qmcp's `docs/integrations/voice.md` is the page for that half.
+joe's microphone, has the local model read the project only on approve, and
+says the answer back. qmcp's `docs/integrations/voice.md` is the page for that
+half.
 
 **Voice, the first time:** run `uv run joe voice setup` and keep talking when
 it says so. Once a test sentence has recorded from the microphone that heard
