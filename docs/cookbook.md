@@ -177,7 +177,9 @@ voice panel shows every turn.
    may start first; the conversation waits for the other.
 4. qmcp says *"Ready. What should be done?"* and the voice panel opens. Say an
    instruction that names a project -- "Which file in qmcp says what qmcp is?"
-   -- then "record" when it is read back, and "approve" to the consent.
+   -- and it is read back. Heard confidently, a moment of silence agrees;
+   otherwise say "agree" (or "again" to say it once more). Then "approve" to
+   the consent.
 5. The answer is said back, then *"Anything else?"*: "yes" for another, "no" to
    leave it listening, "stop listening" to end it.
 
