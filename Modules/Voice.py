@@ -243,6 +243,7 @@ def _capture_until_silence(
     control=None,
     on_segment=None,
     segment_pause: float = SEGMENT_PAUSE,
+    watch=None,
 ) -> tuple["np.ndarray", int | None, bool]:
     """Record until the speaker stops, or `max_duration`, whichever is first.
 
@@ -286,6 +287,19 @@ def _capture_until_silence(
     and the take's end closes the last. `stats` are its levels against the
     threshold it was judged by. A watcher that raises costs the take nothing.
 
+    **A take can be opened while a question is still being said** (`watch`,
+    a `Modules.Watch.Watch`). Until someone begins it, it counts toward no
+    cap, takes no answer by key -- that belongs to the take replacing it --
+    and judges speech against the question's echo and the quiet room before
+    it, not the moving floor: the loudest block of the question's opening
+    `watch.learn_seconds`, held, times `watch.factor`, with nothing beginning
+    while it is learned. Nothing after is learned, so a voice rising into its
+    first word is not taken for more of the question. Speech
+    sustained above that, or a held key, begins it: the blocks before the
+    onset are dropped, `watch.began()` lets the question stop, and the take
+    runs from there as any other. A watch closed at any point raises
+    `Unwatched` at the next block.
+
     **BLOCKS ARRIVE THROUGH A CALLBACK, NOT `stream.read()`.** PortAudio's
     WDM-KS host API does not implement blocking reads: `stream.read` fails
     there with "Blocking API not supported yet", while `sd.rec` -- itself
@@ -307,6 +321,12 @@ def _capture_until_silence(
 
     hold_blocks = max(max_blocks, round(HOLD_SECONDS / block_seconds))
     hold_seen = False
+    from Modules.Watch import Unwatched
+
+    watching = watch is not None
+    watch_blocks = 0
+    echo = room = 0.0
+    learn_blocks = round(watch.learn_seconds / block_seconds) if watching else 0
     calibration_blocks = 2
     # Speech is judged against the room, not an absolute: devices and rooms
     # differ by orders of magnitude, and the absolute floor only guards a
@@ -348,6 +368,18 @@ def _capture_until_silence(
     def report(state: str, **detail) -> None:
         _tell(on_event, state, **detail)
 
+    def begin(keep: int) -> None:
+        """Someone spoke over the question: the take is theirs from here,
+        keeping only the last `keep` blocks before it."""
+        nonlocal watching, blocks
+        if not watch.began():
+            raise Unwatched()
+        cut = max(0, len(taken) - keep)
+        del taken[:cut]
+        del levels[:cut]
+        watching = False
+        blocks = 0
+
     arrived: queue.Queue = queue.Queue()
 
     def on_block(indata, frames, time_info, status):
@@ -366,13 +398,22 @@ def _capture_until_silence(
             report("listening")
             blocks = 0
             while blocks < (hold_blocks if hold_seen and control.held else max_blocks):
-                blocks += 1
+                if watch is not None and watch.closed():
+                    raise Unwatched()
+                if watching:
+                    watch_blocks += 1
+                    if watch_blocks > hold_blocks:
+                        raise Unwatched()  # nobody began within the longest a take may run
+                else:
+                    blocks += 1
                 if control is not None:
-                    answer = control.take_answer()
+                    answer = None if watching else control.take_answer()
                     if answer is not None:
                         raise Answered(answer)
                     if control.held and not hold_seen:
                         hold_seen = True
+                        if watching:
+                            begin(keep=2)
                         report("holding")
                     elif hold_seen and not control.held:
                         # Released: the person has finished.
@@ -393,13 +434,21 @@ def _capture_until_silence(
                 levels.append(rms)
                 if len(calibration) < calibration_blocks:
                     calibration.append(rms)
-                    noise = min(calibration)
+                    noise = room = min(calibration)
                     report("level", rms=rms, threshold=None)
                     continue
                 threshold = max(noise * speech_factor, absolute_floor)
+                if watching:
+                    learning = watch_blocks <= learn_blocks
+                    threshold = max(room * speech_factor, absolute_floor, echo * watch.factor)
                 threshold_now = threshold
                 report("level", rms=rms, threshold=threshold)
                 loud = rms >= threshold
+                if watching:
+                    if learning:
+                        echo = max(echo, rms)
+                    if learning or not watch.voice:
+                        loud = False
                 # Segments for the live transcript, counted apart from the
                 # take's own end so a held take still arrives in pieces.
                 if loud:
@@ -412,6 +461,8 @@ def _capture_until_silence(
                     if loud:
                         onset_blocks += 1
                         if onset_blocks >= needed_onset:
+                            if watching:
+                                begin(keep=needed_onset + 1)
                             speech_started = True
                             report("hearing")
                             segment_from = max(0, len(taken) - needed_onset - 1)
@@ -432,7 +483,7 @@ def _capture_until_silence(
                         report("pausing")
                     if quiet_blocks >= needed_quiet:
                         break
-    except (NoMicrophoneError, Answered):
+    except (NoMicrophoneError, Answered, Unwatched):
         raise
     except Exception as exc:
         raise NoMicrophoneError(
@@ -718,6 +769,7 @@ class Voice:
         on_event=None,
         control=None,
         on_segment=None,
+        watch=None,
     ) -> tuple[str, bool | None]:
         """Record, write the WAV, and say whether speech was detected.
 
@@ -744,6 +796,7 @@ class Voice:
                 on_event=on_event,
                 control=control,
                 on_segment=on_segment,
+                watch=watch,
             )
         else:
             _tell(on_event, "listening")
@@ -769,6 +822,7 @@ class Voice:
         hint: str | None = None,
         control=None,
         live=None,
+        watch=None,
     ) -> dict:
         """Record from an input device and transcribe the result in one step.
 
@@ -791,16 +845,20 @@ class Voice:
         text is the live transcript's: the segments' words minus what was
         struck. A take with speech and no segment falls back to transcribing
         the whole recording.
+
+        With `watch`, the take is opened while a question is still being
+        said, as `_capture_until_silence` describes; an answer waiting by key
+        is left for the take that replaces it.
         """
         from Modules.Control import Answered
 
-        answer = control.take_answer() if control is not None else None
+        answer = control.take_answer() if control is not None and watch is None else None
         try:
             if answer is not None:
                 raise Answered(answer)
             wav_path, speech_detected = self._take(
                 duration, sample_rate, device, until_silence, silence_after, on_event, control,
-                on_segment=live.add if live is not None else None,
+                on_segment=live.add if live is not None else None, watch=watch,
             )
         except Answered as given:
             _tell(on_event, "heard", text=given.text, source="key")
