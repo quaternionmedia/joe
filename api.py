@@ -436,7 +436,8 @@ def voice_listen(
             last_take = result.get("take") or live.take
             datapoints.write("take", take=last_take, audio=result.get("audio_path") or None,
                              source=result.get("source", "voice"), hint=hint,
-                             text=result.get("text", ""), segments=len(live.segments),
+                             text=result.get("text", ""), confidence=result.get("confidence"),
+                             segments=len(live.segments),
                              struck={s.index: sorted(s.struck) for s in live.segments if s.struck})
         return result
     except NoMicrophoneError as exc:

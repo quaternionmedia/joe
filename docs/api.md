@@ -340,6 +340,12 @@ audio names every option, which a dialog reads as no match and asks again.
 { "text": "...", "segments": [...], "language": "en", "audio_path": "Data/Voice/capture_...wav", "speech_detected": true }
 ```
 
+`confidence` says how sure the transcriber was, from 0 to 1: the lowest of its
+segments' mean token probabilities (whisper's `exp(avg_logprob)`), struck
+segments left out, `1.0` for an answer given by key, and `null` when nothing
+was weighed. A dialog can skip asking for confirmation above a threshold of its
+own.
+
 `speech_detected` is `true` or `false` for an endpointed take and `null` for a
 fixed one. When the endpointer heard no speech, the transcriber is not run and
 `text` is empty -- no speech is a known answer, which a caller can report as
