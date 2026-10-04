@@ -61,12 +61,16 @@ Open `http://localhost:3000/joe`, click **Results → Fetch Latest**.
 
 ### The voice loop
 
-Two servers, one per checkout: `uv run joe dev` here and `uv run qmcp serve`
-in qmcp's. Everything below then happens in joe's page, except acting on a
-recorded instruction, which is qmcp's command: it asks consent aloud through
-joe's microphone, has the local model read the project only on approve, and
-says the answer back. qmcp's `docs/integrations/voice.md` is the page for that
-half.
+Two servers, one per checkout: `uv run joe dev` here and, in qmcp's,
+`uv run qmcp serve --converse --runtime local`. Nothing after those two is
+typed. qmcp says it is ready and asks what should be done; an instruction is
+read back and recorded on "record", consent is asked aloud and given with
+"approve", the local model reads the project, the answer is said back, and it
+asks whether there is anything else. Questions agents have queued are asked in
+between, and "stop listening" ends it. This page shows every turn live. Started
+without `--converse`, the buttons below start one turn each instead. qmcp's
+`docs/voice-loop-demo.md` and `docs/integrations/voice.md` are the pages for
+that half.
 
 **Voice, the first time:** run `uv run joe voice setup` and keep talking when
 it says so. Once a test sentence has recorded from the microphone that heard
