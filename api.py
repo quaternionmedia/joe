@@ -18,6 +18,9 @@ Endpoints:
     GET  /api/voice/conversation    The conversation's states as they happen (server-sent events)
     GET  /api/voice/conversation/state  The current state and recent events, once
     POST /api/voice/conversation    A dialog's own state: speaking, recorded, gave_up, idle
+    POST /api/voice/answer          An answer given by key or button, as if said
+    POST /api/voice/hold            A held key: the turn stays open until it is released
+    GET  /api/voice/control         Whether a key is held and an answer is waiting
 
 Run directly:
     python -m uvicorn api:app --reload --port 8000
@@ -39,6 +42,8 @@ from fastapi.responses import FileResponse, StreamingResponse
 
 from capture import AudioCapture
 
+from Modules import Cue
+from Modules.Control import Control
 from Modules.Conversation import POSTED, Conversation
 from Modules.Voice import NoMicrophoneError, Voice, input_level, list_input_devices
 
@@ -73,6 +78,10 @@ _capture = AudioCapture()
 
 # The one conversation this process has: its microphone is the only one.
 conversation = Conversation()
+control = Control()
+# The most answers a question can offer as controls: one per number key.
+MAX_OPTIONS = 9
+ANSWER_CHARS = 100
 
 
 # ─── Existing endpoints ───────────────────────────────────────────────────────
@@ -366,6 +375,7 @@ def voice_listen(
     device: str | None = None,
     until_silence: bool = True,
     silence_ms: int = 800,
+    hint: str | None = None,
 ):
     """Records from an input device and transcribes it.
 
@@ -377,31 +387,92 @@ def voice_listen(
 
     `device` is an index or a name fragment; omitted, the server's default
     input is used, or `JOE_INPUT_DEVICE` if that is set.
+
+    `hint` is the words a short answer is expected to be, comma-separated --
+    "approve, hold" -- handed to the transcriber as its prompt. It biases and
+    never constrains: what was heard is what comes back.
     """
     if not 0 < duration <= 60:
         raise HTTPException(status_code=400, detail="duration must be between 0 and 60 seconds")
     if not 100 <= silence_ms <= 5000:
         raise HTTPException(status_code=400, detail="silence_ms must be between 100 and 5000")
+    if hint is not None and len(hint) > 500:
+        raise HTTPException(status_code=400, detail="hint must be at most 500 characters")
     voice = Voice()
+    # A question was just asked: the cue to speak, finished before the
+    # microphone opens so it is never recorded.
+    if conversation.snapshot()["state"] == "speaking":
+        Cue.play("turn", settle=True)
     try:
-        return voice.listen(
+        result = voice.listen(
             duration=duration,
             device=device,
             until_silence=until_silence,
             silence_after=silence_ms / 1000,
             on_event=_report,
+            hint=hint,
+            control=control,
         )
+        if result.get("source") == "key":
+            Cue.play("heard")
+        return result
     except NoMicrophoneError as exc:
         conversation.publish("idle", text=f"The microphone could not record: {exc}")
         raise HTTPException(status_code=503, detail=str(exc))
 
 
 def _report(state: str, **detail) -> None:
-    """The listen route's watcher: levels to the level, states to the log."""
+    """The listen route's watcher: levels to the level, states to the log, and
+    the heard cue once a take with speech has closed."""
     if state == "level":
         conversation.level(detail.get("rms", 0.0), detail.get("threshold"))
     else:
         conversation.publish(state, **detail)
+        if state == "transcribing":
+            Cue.play("heard")
+
+
+@app.post("/api/voice/answer")
+async def voice_answer(request: Request):
+    """An answer given without speaking -- a key or a button -- taken as if said.
+
+    Body: `{"text": "approve"}`. The take in progress ends at once and returns
+    it; with none in progress, the next take returns it without opening the
+    microphone, if it starts within `Modules.Control.ANSWER_SECONDS`.
+    """
+    body = await _json_body(request)
+    text = body.get("text") if isinstance(body, dict) else None
+    if not isinstance(text, str) or not text.strip() or len(text) > ANSWER_CHARS:
+        raise HTTPException(status_code=400,
+                            detail=f"text must be a word or phrase of at most {ANSWER_CHARS} characters")
+    control.answer(text.strip())
+    return control.snapshot()
+
+
+@app.post("/api/voice/hold")
+async def voice_hold(request: Request):
+    """A held key. Body: `{"held": true}` when pressed, `{"held": false}` when
+    released. While held, a take does not end on a pause or at its cap; the
+    release ends it."""
+    body = await _json_body(request)
+    held = body.get("held") if isinstance(body, dict) else None
+    if not isinstance(held, bool):
+        raise HTTPException(status_code=400, detail="held must be true or false")
+    control.hold(held)
+    return control.snapshot()
+
+
+@app.get("/api/voice/control")
+def voice_control():
+    """Whether a key is held and whether an answer is waiting for a take."""
+    return control.snapshot()
+
+
+async def _json_body(request: Request):
+    try:
+        return await request.json()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="body must be JSON")
 
 
 @app.get("/api/voice/conversation/state")
@@ -429,6 +500,15 @@ async def voice_conversation_post(request: Request):
             detail=f"state must be one of {', '.join(POSTED)}; the others are the microphone's",
         )
     detail = {k: str(v) for k, v in body.items() if k in ("reason",) and v is not None}
+    options = body.get("options")
+    if options is not None:
+        if (state != "speaking" or not isinstance(options, list) or len(options) > MAX_OPTIONS
+                or not all(isinstance(o, str) and o.strip() for o in options)):
+            raise HTTPException(
+                status_code=400,
+                detail=f"options go on a speaking state, as at most {MAX_OPTIONS} non-empty strings",
+            )
+        detail["options"] = [o.strip() for o in options]
     return conversation.publish(state, text=str(body.get("text") or ""), **detail)
 
 

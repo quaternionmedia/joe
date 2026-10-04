@@ -90,6 +90,14 @@
         <li data-step="outcome">Answer</li>
       </ol>
       <ul class="voice-log" data-testid="voice-log"></ul>
+      <div class="voice-controls" data-testid="voice-controls">
+        <div class="voice-options" data-testid="voice-options" hidden></div>
+        <div class="voice-keys">
+          <button type="button" data-testid="voice-repeat" title="Say that again">Repeat <kbd>R</kbd></button>
+          <button type="button" data-testid="voice-stop" title="Stop listening">Stop <kbd>Shift</kbd>+<kbd>Esc</kbd></button>
+          <span class="voice-hold" data-testid="voice-hold">Hold <kbd>~</kbd> to keep talking</span>
+        </div>
+      </div>
       <div class="voice-queue" data-testid="voice-queue" hidden>
         <div class="voice-queue-head">
           <span data-testid="voice-queue-count"></span>

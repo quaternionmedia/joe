@@ -55,7 +55,7 @@ def test_voice_listen_endpoints_by_default():
         api.voice_listen(duration=6.0)
         fake_voice_cls.return_value.listen.assert_called_once_with(
             duration=6.0, device=None, until_silence=True, silence_after=0.8,
-            on_event=api._report,
+            on_event=api._report, hint=None, control=api.control,
         )
 
     with patch("api.Voice") as fake_voice_cls:
@@ -64,3 +64,19 @@ def test_voice_listen_endpoints_by_default():
         assert (
             fake_voice_cls.return_value.listen.call_args.kwargs["until_silence"] is False
         )
+
+
+def test_voice_listen_hands_the_hint_to_the_transcriber():
+    """Mutation: drop `hint=hint` from the route's call -- red."""
+    with patch("api.Voice") as fake_voice_cls:
+        fake_voice_cls.return_value.listen.return_value = {"text": "approve"}
+        api.voice_listen(duration=4.0, hint="approve, hold")
+
+    assert fake_voice_cls.return_value.listen.call_args.kwargs["hint"] == "approve, hold"
+
+
+def test_voice_listen_refuses_a_hint_longer_than_its_bound():
+    with pytest.raises(HTTPException) as exc_info:
+        api.voice_listen(duration=4.0, hint="x" * 501)
+
+    assert exc_info.value.status_code == 400

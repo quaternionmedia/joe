@@ -242,11 +242,15 @@ def voice_setup(
 
 
 @voice_app.command("transcribe")
-def voice_transcribe(path: str, model_size: str = "base"):
+def voice_transcribe(
+    path: str,
+    model_size: str = "base",
+    hint: str = typer.Option(None, help="Words the audio is expected to be, comma-separated"),
+):
     """Transcribe an audio file to text."""
     from Modules.Voice import Voice
 
-    result = Voice(model_size=model_size).transcribe(path)
+    result = Voice(model_size=model_size).transcribe(path, hint=hint)
     _echo(result["text"])
 
 
@@ -258,6 +262,7 @@ def voice_listen(
     until_silence: bool = typer.Option(
         True, "--until-silence/--fixed", help="Stop when the speaker stops, or record the full duration"
     ),
+    hint: str = typer.Option(None, help="Words the answer is expected to be, comma-separated"),
 ):
     """Record from an input device and transcribe the result.
 
@@ -273,7 +278,7 @@ def voice_listen(
         _echo(f"Listening for {duration:g}s...")
     try:
         result = Voice(model_size=model_size).listen(
-            duration=duration, device=device, until_silence=until_silence
+            duration=duration, device=device, until_silence=until_silence, hint=hint
         )
     except NoMicrophoneError as exc:
         _echo(str(exc), err=True)

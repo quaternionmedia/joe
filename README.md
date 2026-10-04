@@ -101,6 +101,23 @@ in the inbox — the words, the project they resolved to or "no project", and
 whether the row is recorded or unresolved. A qmcp without the inbox answers
 404, and the panel says so; the queue above keeps working.
 
+**Answering without speaking, and following by ear:** a question's answers
+appear in the panel as numbered buttons, and with the page focused the keys do
+the same without looking:
+
+| Key | Does |
+| --- | --- |
+| `1`–`9` | answers with the question's options, in the order it says them |
+| `R` | asks for it to be said again |
+| `Shift`+`Esc` | stops listening |
+| `~`, held | keeps the turn open through pauses; releasing it ends the turn |
+
+A key or button counts as having said the word: the turn in progress ends at
+once. Two short tones carry what the panel shows: two rising notes just before
+the microphone opens for an answer, and one lower note once the turn has been
+heard. They play only after a question, never through a silent wait, and
+`JOE_CUES=0` turns them off.
+
 See [docs/api.md](docs/api.md) for the full API endpoint reference.
 
 ### Python setup

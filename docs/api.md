@@ -325,6 +325,14 @@ less.
 | `until_silence` | bool | `true` | stop when the speaker stops: sustained speech starts the take and `silence_ms` of quiet after it ends it. `false` records the whole `duration` |
 | `silence_ms` | int | `800` | trailing quiet that ends an endpointed take, `100..5000` |
 | `device` | string | *see below* | an input index, or a fragment of a device name. A fragment matching several devices is a `503` rather than a guess. Omitted: `JOE_INPUT_DEVICE` if set, else the microphone `joe voice setup` saved, else the backend default. |
+| `hint` | string | none | the words a short answer is expected to be, comma-separated (`approve, hold`), handed to the transcriber as its prompt. It biases and never constrains: what was heard is what comes back. At most 500 characters |
+
+A take is transcribed as English (`JOE_LANGUAGE` names another; `auto`
+detects), as one utterance, and, when it is short, with a beam search: a
+one-word answer gives whisper's language detection nothing to go on and a
+greedy first guess nothing to recover from. The expected words matter most
+where the first syllable was clipped. A prompt that is echoed back on unclear
+audio names every option, which a dialog reads as no match and asks again.
 
 **Response** — `200 OK`
 
@@ -341,7 +349,7 @@ fixed one. When the endpointer heard no speech, the transcriber is not run and
 
 | Status | Reason |
 | --- | --- |
-| `400` | `duration` outside `0 < duration <= 60` |
+| `400` | `duration` outside `0 < duration <= 60`, or a `hint` over 500 characters |
 | `503` | No microphone available, no device matching `device`, several devices matching it, or a device that opened and returned samples outside `[-1, 1]` |
 
 **curl**
@@ -405,6 +413,7 @@ through them:
 | --- | --- | --- |
 | `speaking` | the question is being asked; the microphone is closed | the dialog |
 | `listening` | the microphone is open; nobody has started talking | joe |
+| `holding` | a key is held: the turn stays open through pauses until it is released | joe |
 | `hearing` | speech is sustained; the listener does not interrupt | joe |
 | `pausing` | the speech stopped; the turn is held open a moment longer | joe |
 | `transcribing` | the turn has ended; the words are being read | joe |
@@ -433,17 +442,53 @@ The current state, the recent events and the level, once:
 
 A dialog's own state, posted by the program asking the question.
 
-**Body** — `{"state": "speaking", "text": "Voice check. Say approve or hold.", "reason": null}`
+**Body** — `{"state": "speaking", "text": "Voice check. Say approve or hold.", "reason": null, "options": ["approve", "hold"]}`
 
 Only `speaking`, `recorded`, `gave_up` and `idle` are accepted. The other
 states are the microphone's, and joe reports them itself while
-`/api/voice/listen` records.
+`/api/voice/listen` records. A `speaking` state may carry the question's
+`options`, at most nine, in the order it says them; the page offers each as a
+button and a number key.
 
 **Errors**
 
 | Status | Reason |
 | --- | --- |
-| `400` | A body that is not JSON, or a state the dialog may not post |
+| `400` | A body that is not JSON, a state the dialog may not post, or `options` on another state, over nine, or not all non-empty strings |
+
+### `POST /api/voice/answer`
+
+An answer given without speaking -- a button or a key on the page -- taken as
+if it had been said. The take in progress ends at once and `/api/voice/listen`
+returns the answer as its `text`, with `"source": "key"` and an empty
+`audio_path`; with no take in progress, the next one returns it without opening
+the microphone, if it starts within fifteen seconds.
+
+**Body** — `{"text": "approve"}`, at most 100 characters.
+
+**Response** — `200 OK`, `{"held": false, "answer_waiting": true}`
+
+### `POST /api/voice/hold`
+
+A held key. **Body** — `{"held": true}` when pressed, `{"held": false}` when
+released. While held, a take neither ends on a pause nor at its `duration`
+(it may run to sixty seconds), and the release ends it as speech: the person
+said they were speaking. The take reports `holding` when it sees the hold.
+
+**Response** — `200 OK`, `{"held": true, "answer_waiting": false}`
+
+### `GET /api/voice/control`
+
+`{"held", "answer_waiting"}`, once.
+
+### Cues
+
+Before a listen that answers a question -- the last conversation state is
+`speaking` -- joe plays two rising notes and only then opens the microphone,
+so the tone is never recorded. Once a take has ended and is being read, or an
+answer by key was taken, it plays one lower note. A listen that follows a
+silent one plays nothing. `JOE_CUES=0` turns both off; a cue that cannot play
+is skipped.
 
 ---
 
