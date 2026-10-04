@@ -84,7 +84,21 @@ A key or button counts as having said the word: the turn in progress ends at
 once. Two short tones carry what the panel shows: two rising notes just before
 the microphone opens for an answer, and one lower note once the turn has been
 heard. They play only after a question, never through a silent wait, and
-`JOE_CUES=0` turns them off.
+`JOE_CUES=0` turns them off. They play on the system's default output unless
+`JOE_OUTPUT_DEVICE` (or `VOX_OUTPUT_DEVICE`, the output qmcp's voice is heard
+on) names another by a fragment of its name.
+
+**The transcript as it is written:** a take is transcribed piece by piece
+while it is spoken, and the panel shows the words as they arrive. Clicking a
+word strikes it, or restores it; Backspace strikes the last word still
+standing; saying "scratch that" strikes what came just before. The take's text
+leaves struck words out, so what is read back is what the panel showed.
+
+**Every piece is kept for tuning:** each stretch of speech is written as its
+own WAV under `Data/Voice/segments/` and described in `Data/Voice/segments.jsonl`
+-- its timing and levels, the hint and prompt it was decoded with, whisper's
+own confidence, the text, the words struck, and what the dialog asking finally
+accepted. `JOE_DATAPOINTS=0` writes none; nothing deletes them.
 
 See [docs/api.md](docs/api.md) for the full API endpoint reference.
 
