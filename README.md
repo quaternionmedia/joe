@@ -1,11 +1,23 @@
 # Joe
 
-Joe (named after Joseph Fourier) is an audio workbench for turning audio files into chroma visualizations and MIDI outputs.
+Joe (named after Joseph Fourier) does two jobs on one workstation:
 
-The repo has two primary parts:
+- **An audio workbench.** It turns audio files into chroma visualizations and
+  MIDI, and shows them on a p5.js page beside a live microphone FFT and a
+  piano roll.
+- **The speech engine of a voice-driven development loop.** It owns the
+  microphone, transcribes what is said with whisper, and shows each turn of a
+  spoken conversation on its page. [qmcp](https://github.com/quaternionmedia/qmcp),
+  the local model backend, runs from its own checkout: it asks the questions,
+  records instructions, asks consent, and has the local model it stands up
+  read the project and answer, and joe hears the answers.
 
-- Python backend/analysis pipeline (`Modules/`, `main.py`, `api.py`)
-- p5.js + Vite frontend (`src/`)
+The repo has three parts:
+
+- the analysis pipeline (`Modules/`, `main.py`)
+- the FastAPI backend (`api.py`): the pipeline's routes and the speech
+  engine's `/api/voice/*` routes
+- the p5.js + Vite frontend (`src/`)
 
 ## Quickstart
 
@@ -13,9 +25,9 @@ The repo has two primary parts:
 
 - Python `3.11.x` (required by `pyproject.toml`)
 - Node.js + npm
-- [`uv`](https://docs.astral.sh/uv/) (recommended) **or** `pdm` / `venv+pip`
+- [`uv`](https://docs.astral.sh/uv/); `uv.lock` is the one lockfile
 
-### Recommended: uv
+### Install and run
 
 Install everything and launch both servers in one step:
 
@@ -47,6 +59,15 @@ Open `http://localhost:3000/joe`, click **Results → Fetch Latest**.
 | `uv run joe voice devices` | List audio input devices, with the host API that distinguishes same-named ones; `S` marks the saved microphone |
 | `uv run joe voice level [--device N] [--every]` | How loud an input is right now |
 
+### The voice loop
+
+Two servers, one per checkout: `uv run joe dev` here and `uv run qmcp serve`
+in qmcp's. Everything below then happens in joe's page, except acting on a
+recorded instruction, which is qmcp's command: it asks consent aloud through
+joe's microphone, has the local model read the project only on approve, and
+says the answer back. qmcp's `docs/integrations/voice.md` is the page for that
+half.
+
 **Voice, the first time:** run `uv run joe voice setup` and keep talking when
 it says so. Once a test sentence has recorded from the microphone that heard
 you, it saves that microphone to `Data/voice-device.json`, and every
@@ -62,7 +83,7 @@ the microphone's states itself; the program asking the question posts the
 rest (`docs/api.md`, `/api/voice/conversation`).
 
 **Answering by voice from the page:** with qmcp's server running as well
-(`uv run python -m qmcp serve` in its checkout), whatever is waiting on you in
+(`uv run qmcp serve` in its checkout), whatever is waiting on you in
 qmcp appears in the panel, oldest first, with **Answer by voice**. Pressing it
 has qmcp ask the question aloud while joe's microphone hears the answer, and
 the panel shows the turn as it happens. Nothing is spoken until the button is
@@ -102,7 +123,7 @@ npm run test:e2e
 Run Python tests:
 
 ```powershell
-python -m pytest -q
+uv run pytest -q
 ```
 
 Run frontend E2E tests:
@@ -114,7 +135,7 @@ npm run test:e2e
 Run backend pipeline:
 
 ```powershell
-python main.py
+uv run joe run
 ```
 
 Expected artifacts are created under `Data/Output/<timestamp>/`:
@@ -128,11 +149,11 @@ Input audio is read from `Data/Audio/`.
 ## Project Structure
 
 - `Data/`: input audio and generated outputs (git-ignored)
-- `Modules/`: core Python classes (`Audio`, `Chroma`, `MIDI`, `Note`, utilities) — see [docs/modules.md](docs/modules.md)
+- `Modules/`: core Python classes — the pipeline's (`Audio`, `Chroma`, `MIDI`, `Note`, utilities; see [docs/modules.md](docs/modules.md)) and the speech engine's (`Voice` for capture and transcription, `Conversation` for the turn the page shows)
 - `src/`: frontend source (`p5.js` + Vite) — components, config, sketch
 - `tests/`: Python unit tests; `tests/e2e/` for Playwright E2E tests
 - `docs/`: contributor guide, module reference, API reference
-- `api.py`: FastAPI server wrapping the pipeline — see [docs/api.md](docs/api.md)
+- `api.py`: FastAPI server — the pipeline's routes and the speech engine's `/api/voice/*` routes; see [docs/api.md](docs/api.md)
 - `cli.py`: Typer CLI (`joe frontend | backend | dev | run | voice setup | voice listen | voice transcribe | voice devices | voice level`)
 - `main.py`: backend pipeline entrypoint
 
