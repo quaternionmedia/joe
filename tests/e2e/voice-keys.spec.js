@@ -103,3 +103,10 @@ test('a window losing focus releases a held key, once, and sends nothing when no
   await page.waitForTimeout(300);
   expect(sent.holds).toEqual([true, false]);
 });
+
+test('a question said again on request says so', async ({ page }) => {
+  await script(page, [{ state: 'speaking', text: 'Say approve or hold.', options: ['approve', 'hold'], reason: 'repeat' }]);
+  await page.goto('/');
+
+  await expect(page.getByTestId('voice-hint')).toHaveText('Saying it again, as asked');
+});

@@ -32,6 +32,7 @@ export const STATES = {
 const REASKS = {
   noinput: 'Asking again: nothing was heard',
   nomatch: 'Asking again: that matched no option',
+  repeat:  'Saying it again, as asked',
 };
 
 // A finished exchange stays on screen this long before the panel steps aside.
