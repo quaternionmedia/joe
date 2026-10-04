@@ -9,6 +9,7 @@ import { Transport }    from './components/Transport.js';
 import { VoicePanel }   from './components/VoicePanel.js';
 import { VoiceQueue }   from './components/VoiceQueue.js';
 import { VoiceKeys }    from './components/VoiceKeys.js';
+import { VoiceTranscript } from './components/VoiceTranscript.js';
 import { setlist }      from './config/setlists.js';
 
 // Must match MainCanvas.js LABEL_W — used for p5 playhead pixel calculation.
@@ -47,6 +48,8 @@ const voiceQueue = new VoiceQueue(document.querySelector('#voice-panel .voice-qu
 voiceQueue.mount();
 const voiceKeys = new VoiceKeys(document.querySelector('#voice-panel .voice-controls'), voicePanel);
 voiceKeys.mount();
+const voiceTranscript = new VoiceTranscript(document.querySelector('#voice-panel .voice-transcript'), voicePanel);
+voiceTranscript.mount();
 
 // ─── First-run hint ───────────────────────────────────────────────────────────
 {
