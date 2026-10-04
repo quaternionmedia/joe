@@ -602,3 +602,16 @@ button:hover { border-color: rgba(255, 255, 255, 0.7); }
 .voice-queue-prompt { margin-top: 4px; line-height: 1.35; }
 .voice-queue-note { margin-top: 4px; font-size: 0.65rem; color: #ff6b6b; }
 .voice-queue-note:empty { display: none; }
+
+/* What "Instruct by voice" came to: the newest row in qmcp's inbox, or why not. */
+.voice-instruct { margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
+.voice-instruct[hidden] { display: none; }
+.voice-instruct-note { font-size: 0.65rem; color: #ff6b6b; }
+.voice-instruct-note:empty { display: none; }
+.voice-instruct-latest { display: flex; flex-direction: column; gap: 2px; line-height: 1.35; }
+.voice-instruct-latest[hidden] { display: none; }
+.voice-instruct-text { color: #e6e6e6; }
+.voice-instruct-meta { font-size: 0.65rem; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.7; }
+.voice-instruct-sep { margin: 0 4px; }
+#voice-instruct { border-color: #f5a623; color: #f5a623; }
+#voice-instruct:disabled { opacity: 0.4; cursor: default; }
