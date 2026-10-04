@@ -6,7 +6,7 @@ endpoint logic (path resolution, status codes), just not over HTTP.
 """
 
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
@@ -55,7 +55,7 @@ def test_voice_listen_endpoints_by_default():
         api.voice_listen(duration=6.0)
         fake_voice_cls.return_value.listen.assert_called_once_with(
             duration=6.0, device=None, until_silence=True, silence_after=0.8,
-            on_event=api._report, hint=None, control=api.control,
+            on_event=api._report, hint=None, control=api.control, live=ANY,
         )
 
     with patch("api.Voice") as fake_voice_cls:
