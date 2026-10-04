@@ -236,6 +236,7 @@ def _capture_until_silence(
     silence_after: float = 0.8,
     min_speech: float = 0.2,
     on_event=None,
+    control=None,
 ) -> tuple["np.ndarray", int | None, bool]:
     """Record until the speaker stops, or `max_duration`, whichever is first.
 
@@ -268,6 +269,12 @@ def _capture_until_silence(
     Every block from the stream's start is kept, so the onset is never
     clipped and no separate pre-roll buffer is needed.
 
+    **A person can end or hold the turn without speaking** (`control`, a
+    `Modules.Control.Control`). An answer given by key raises `Answered` at
+    the next block. While a key is held the take neither ends on a pause nor
+    at `max_duration` -- it runs to `HOLD_SECONDS` -- and releasing the key
+    ends it, as speech that was there: the person said they were speaking.
+
     **BLOCKS ARRIVE THROUGH A CALLBACK, NOT `stream.read()`.** PortAudio's
     WDM-KS host API does not implement blocking reads: `stream.read` fails
     there with "Blocking API not supported yet", while `sd.rec` -- itself
@@ -285,6 +292,10 @@ def _capture_until_silence(
     # round, not int: 0.3 / 0.1 is 2.999… in floats, and truncation quietly
     # shortened every wait by one block.
     max_blocks = max(1, round(max_duration / block_seconds))
+    from Modules.Control import HOLD_SECONDS, Answered
+
+    hold_blocks = max(max_blocks, round(HOLD_SECONDS / block_seconds))
+    hold_seen = False
     calibration_blocks = 2
     # Speech is judged against the room, not an absolute: devices and rooms
     # differ by orders of magnitude, and the absolute floor only guards a
@@ -322,7 +333,20 @@ def _capture_until_silence(
             callback=on_block,
         ):
             report("listening")
-            for _ in range(max_blocks):
+            blocks = 0
+            while blocks < (hold_blocks if hold_seen and control.held else max_blocks):
+                blocks += 1
+                if control is not None:
+                    answer = control.take_answer()
+                    if answer is not None:
+                        raise Answered(answer)
+                    if control.held and not hold_seen:
+                        hold_seen = True
+                        report("holding")
+                    elif hold_seen and not control.held:
+                        # Released: the person has finished.
+                        speech_started = True
+                        break
                 try:
                     block = arrived.get(timeout=STALL_SECONDS)
                 except queue.Empty:
@@ -356,13 +380,15 @@ def _capture_until_silence(
                     if quiet_blocks:
                         report("hearing")
                     quiet_blocks = 0
+                elif hold_seen and control.held:
+                    quiet_blocks = 0  # a held turn does not end on a pause
                 else:
                     quiet_blocks += 1
                     if quiet_blocks == 1:
                         report("pausing")
                     if quiet_blocks >= needed_quiet:
                         break
-    except NoMicrophoneError:
+    except (NoMicrophoneError, Answered):
         raise
     except Exception as exc:
         raise NoMicrophoneError(
@@ -603,6 +629,7 @@ class Voice:
         until_silence: bool,
         silence_after: float,
         on_event=None,
+        control=None,
     ) -> tuple[str, bool | None]:
         """Record, write the WAV, and say whether speech was detected.
 
@@ -627,6 +654,7 @@ class Voice:
                 target_rate=sample_rate,
                 silence_after=silence_after,
                 on_event=on_event,
+                control=control,
             )
         else:
             _tell(on_event, "listening")
@@ -650,6 +678,7 @@ class Voice:
         silence_after: float = 0.8,
         on_event=None,
         hint: str | None = None,
+        control=None,
     ) -> dict:
         """Record from an input device and transcribe the result in one step.
 
@@ -662,10 +691,24 @@ class Voice:
         `on_event` hears the turn as `_capture_until_silence` describes,
         then `no_speech`, or `transcribing` and `heard` with the text.
         `hint` is the words the answer is expected to be, for the transcriber.
+
+        With `control`, an answer given by key is returned as the transcript,
+        `source: "key"`, without recording when it was waiting before the take
+        and ending the take when it arrives during one.
         """
-        wav_path, speech_detected = self._take(
-            duration, sample_rate, device, until_silence, silence_after, on_event
-        )
+        from Modules.Control import Answered
+
+        answer = control.take_answer() if control is not None else None
+        try:
+            if answer is not None:
+                raise Answered(answer)
+            wav_path, speech_detected = self._take(
+                duration, sample_rate, device, until_silence, silence_after, on_event, control
+            )
+        except Answered as given:
+            _tell(on_event, "heard", text=given.text, source="key")
+            return {"text": given.text, "segments": [], "language": None, "audio_path": "",
+                    "speech_detected": True, "source": "key"}
         if speech_detected is False:
             _tell(on_event, "no_speech")
             result = {"text": "", "segments": [], "language": None}
