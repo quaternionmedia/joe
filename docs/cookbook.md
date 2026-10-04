@@ -163,6 +163,36 @@ with the piano roll aligned to the audio.
 
 ---
 
+## Recipe 10 — Be the ears of qmcp's voice dev loop
+
+**Goal:** Talk to [qmcp](https://github.com/quaternionmedia/qmcp), the local
+model backend, with nothing typed after two commands: joe listens and
+transcribes, qmcp records, asks consent and has its local model answer, and the
+voice panel shows every turn.
+
+1. Once: `uv run joe voice setup`, and keep talking when it says so. It saves
+   the microphone that recorded a test sentence, and every recording uses it.
+2. Start joe: `uv run joe dev`.
+3. In qmcp's checkout: `uv run qmcp serve --converse --runtime local`. Either
+   may start first; the conversation waits for the other.
+4. qmcp says *"Ready. What should be done?"* and the voice panel opens. Say an
+   instruction that names a project -- "Which file in qmcp says what qmcp is?"
+   -- then "record" when it is read back, and "approve" to the consent.
+5. The answer is said back, then *"Anything else?"*: "yes" for another, "no" to
+   leave it listening, "stop listening" to end it.
+
+The panel shows each turn as it happens: the question, the open microphone,
+the speech, the pause, the transcription. While the conversation runs the
+microphone opens take after take, and every take is kept in `Data/Voice/` as
+`capture_<time>.wav`; nothing deletes them. **Instruct by voice** and **Answer
+by voice** answer that a conversation is running rather than opening the
+microphone a second time; with qmcp started without `--converse`, each button
+takes one turn. qmcp's `docs/voice-loop-demo.md` is the loop's onboarding and
+cookbook, and `GET /api/voice/conversation` in `docs/api.md` is the stream the
+panel reads.
+
+---
+
 ## How the bottom bar controls relate
 
 ```text
