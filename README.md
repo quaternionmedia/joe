@@ -64,7 +64,8 @@ Open `http://localhost:3000/joe`, click **Results → Fetch Latest**.
 Two servers, one per checkout: `uv run joe dev` here and, in qmcp's,
 `uv run qmcp serve --converse --runtime local`. Nothing after those two is
 typed. qmcp says it is ready and asks what should be done; an instruction is
-read back and recorded on "record", consent is asked aloud and given with
+read back and recorded -- heard confidently, unless interrupted; otherwise on
+"agree" -- consent is asked aloud and given with
 "approve", the local model reads the project, the answer is said back, and it
 asks whether there is anything else. Questions agents have queued are asked in
 between, and "stop listening" ends it. This page shows every turn live. Started
