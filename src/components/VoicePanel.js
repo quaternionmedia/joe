@@ -18,6 +18,7 @@
 export const STATES = {
   speaking:     { label: 'Asking',           hint: 'Microphone closed while the question is spoken', step: 'speaking' },
   listening:    { label: 'Your turn',        hint: 'Microphone open. Speak when ready',              step: 'listening' },
+  holding:      { label: 'Holding',          hint: 'Key held: the turn stays open until it is released', step: 'hearing' },
   hearing:      { label: 'Hearing you',      hint: 'Not interrupting',                               step: 'hearing' },
   pausing:      { label: 'Pause',            hint: 'Holding the turn open in case there is more',    step: 'pausing' },
   transcribing: { label: 'Reading',          hint: 'Turn ended. Reading what was said',              step: 'transcribing' },
@@ -59,6 +60,8 @@ export class VoicePanel {
     // Set by whatever else lives in the panel: while it returns true, a
     // finished exchange does not take the panel away.
     this.keepOpen = () => false;
+    // Set by whatever else follows the exchange: called with every event.
+    this.onEvent = null;
   }
 
   /** Show the panel, whatever state it is in. */
@@ -101,6 +104,7 @@ export class VoicePanel {
     });
 
     this._append(event);
+    if (this.onEvent) this.onEvent(event);
 
     clearTimeout(this._linger);
     this._linger = null;
@@ -129,6 +133,7 @@ export class VoicePanel {
     } else if (event.state === 'heard') {
       line.className = 'voice-line voice-line-said';
       line.textContent = event.text ? `“${event.text}”` : '(nothing clear)';
+      if (event.source === 'key') line.textContent += ' (key)';
     } else if (event.state === 'no_speech') {
       line.className = 'voice-line voice-line-said is-muted';
       line.textContent = '(silence)';

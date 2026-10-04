@@ -413,6 +413,7 @@ through them:
 | --- | --- | --- |
 | `speaking` | the question is being asked; the microphone is closed | the dialog |
 | `listening` | the microphone is open; nobody has started talking | joe |
+| `holding` | a key is held: the turn stays open through pauses until it is released | joe |
 | `hearing` | speech is sustained; the listener does not interrupt | joe |
 | `pausing` | the speech stopped; the turn is held open a moment longer | joe |
 | `transcribing` | the turn has ended; the words are being read | joe |
@@ -441,17 +442,53 @@ The current state, the recent events and the level, once:
 
 A dialog's own state, posted by the program asking the question.
 
-**Body** — `{"state": "speaking", "text": "Voice check. Say approve or hold.", "reason": null}`
+**Body** — `{"state": "speaking", "text": "Voice check. Say approve or hold.", "reason": null, "options": ["approve", "hold"]}`
 
 Only `speaking`, `recorded`, `gave_up` and `idle` are accepted. The other
 states are the microphone's, and joe reports them itself while
-`/api/voice/listen` records.
+`/api/voice/listen` records. A `speaking` state may carry the question's
+`options`, at most nine, in the order it says them; the page offers each as a
+button and a number key.
 
 **Errors**
 
 | Status | Reason |
 | --- | --- |
-| `400` | A body that is not JSON, or a state the dialog may not post |
+| `400` | A body that is not JSON, a state the dialog may not post, or `options` on another state, over nine, or not all non-empty strings |
+
+### `POST /api/voice/answer`
+
+An answer given without speaking -- a button or a key on the page -- taken as
+if it had been said. The take in progress ends at once and `/api/voice/listen`
+returns the answer as its `text`, with `"source": "key"` and an empty
+`audio_path`; with no take in progress, the next one returns it without opening
+the microphone, if it starts within fifteen seconds.
+
+**Body** — `{"text": "approve"}`, at most 100 characters.
+
+**Response** — `200 OK`, `{"held": false, "answer_waiting": true}`
+
+### `POST /api/voice/hold`
+
+A held key. **Body** — `{"held": true}` when pressed, `{"held": false}` when
+released. While held, a take neither ends on a pause nor at its `duration`
+(it may run to sixty seconds), and the release ends it as speech: the person
+said they were speaking. The take reports `holding` when it sees the hold.
+
+**Response** — `200 OK`, `{"held": true, "answer_waiting": false}`
+
+### `GET /api/voice/control`
+
+`{"held", "answer_waiting"}`, once.
+
+### Cues
+
+Before a listen that answers a question -- the last conversation state is
+`speaking` -- joe plays two rising notes and only then opens the microphone,
+so the tone is never recorded. Once a take has ended and is being read, or an
+answer by key was taken, it plays one lower note. A listen that follows a
+silent one plays nothing. `JOE_CUES=0` turns both off; a cue that cannot play
+is skipped.
 
 ---
 

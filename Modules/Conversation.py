@@ -30,7 +30,7 @@ import time
 from collections import deque
 
 STATES = (
-    "speaking", "listening", "hearing", "pausing", "transcribing",
+    "speaking", "listening", "holding", "hearing", "pausing", "transcribing",
     "heard", "no_speech", "recorded", "gave_up", "idle",
 )
 
