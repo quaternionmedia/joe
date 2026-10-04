@@ -81,7 +81,11 @@ the same without looking:
 | `~`, held | keeps the turn open through pauses; releasing it ends the turn |
 
 A key or button counts as having said the word: the turn in progress ends at
-once. Two short tones carry what the panel shows: two rising notes just before
+once. **A question can be answered before it ends:** a key, the held `~`, or
+speech louder than the question's own echo stops the question mid-sentence,
+and a spoken answer is kept from its first word. Through speakers, speak up
+over the voice or use the keys; with headphones, any speech does it.
+`JOE_BARGE_IN=0` leaves only the keys. Two short tones carry what the panel shows: two rising notes just before
 the microphone opens for an answer, and one lower note once the turn has been
 heard. They play only after a question, never through a silent wait, and
 `JOE_CUES=0` turns them off. They play on the system's default output unless
