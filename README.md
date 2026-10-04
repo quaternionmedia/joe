@@ -70,7 +70,7 @@ pressed. If the conversation cannot start, the panel shows qmcp's own reason.
 The dev server reaches qmcp at `http://localhost:3141`; `QMCP_URL` moves it.
 
 **Instructing by voice from the page:** **Instruct by voice** in the bottom bar
-has qmcp ask "What should be done?" aloud and take the answer into its
+has qmcp ask aloud what should be done and take the answer into its
 instruction inbox; the panel shows the turn, and when it ends, the newest row
 in the inbox — the words, the project they resolved to or "no project", and
 whether the row is recorded or unresolved. A qmcp without the inbox answers

@@ -1,18 +1,21 @@
 const { test, expect } = require('@playwright/test');
 
 // qmcp's instruction inbox, scripted. The page reaches it through the dev
-// proxy's /v1, as it reaches the human queue, which is empty throughout.
+// proxy's /v1, as it reaches the human queue, which is empty unless a spec
+// puts something in it.
 const ROTATE = { id: 'r1', text: 'Rotate the vectors nightly', project: 'rad', status: 'recorded', source: 'voice' };
 const VAGUE  = { id: 'v1', text: 'Tidy the docs', project: null, status: 'unresolved', source: 'voice' };
+const LAUNCH = { id: 'demo', prompt: 'Launch the audit?', options: ['approve', 'hold'], status: 'pending' };
 
 const STARTED = { status: 202, body: { kind: 'instruction', request_id: null, running: true } };
 
-async function script(page, { post = STARTED, runs = [], latest = [ROTATE], unreachable = false }) {
+async function script(page, { post = STARTED, runs = [], latest = [ROTATE], pending = [], unreachable = false }) {
   const calls = { posts: [], runs: 0, lists: [], log: [] };
   await page.route('**/api/voice/conversation', route =>
     route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: '' }));
   await page.route(url => url.pathname === '/v1/human/requests', route =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ requests: [], count: 0 }) }));
+    route.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ requests: pending, count: pending.length }) }));
   await page.route(url => url.pathname === '/v1/instructions/voice', route => {
     if (route.request().method() === 'POST') {
       calls.posts.push(new URL(route.request().url()).pathname);
@@ -86,6 +89,71 @@ test('an instruction that named no project is shown as such, unresolved', async 
   await expect(page.getByTestId('voice-instruct-text')).toHaveText('“Tidy the docs”', { timeout: 10000 });
   await expect(page.getByTestId('voice-instruct-project')).toHaveText('no project');
   await expect(page.getByTestId('voice-instruct-status')).toHaveText('unresolved');
+});
+
+// Seen to fail: with the `if (!row)` branch removed, `row.text` threw and the
+// note read 'qmcp could not be reached: Cannot read properties of undefined'.
+test('a run that ends with the inbox empty says so', async ({ page }) => {
+  await script(page, {
+    runs: [{ running: false, kind: 'instruction', exit_code: 0, output: [] }],
+    latest: [],
+  });
+  await page.goto('/');
+  await page.getByTestId('voice-instruct').click();
+
+  await expect(page.getByTestId('voice-instruct-note'))
+    .toHaveText('The conversation ended, and the inbox is empty.', { timeout: 10000 });
+  await expect(page.getByTestId('voice-instruct-latest')).toBeHidden();
+  await expect(page.getByTestId('voice-instruct')).toBeEnabled();
+});
+
+// Seen to fail: with `this._latest.hidden = true` dropped from the start of
+// instruct(), the first conversation's row stayed on screen beside the second
+// one's failure, as if that run had recorded it.
+test('a second conversation that fails does not show the first one\'s row', async ({ page }) => {
+  const words = "No usable instruction after 3 attempts; last heard ''";
+  await script(page, {
+    runs: [
+      { running: false, kind: 'instruction', exit_code: 0, output: ['  r1  rad  recorded'] },
+      { running: false, kind: 'instruction', exit_code: 1, output: ['Checking...', words] },
+    ],
+  });
+  await page.goto('/');
+  await page.getByTestId('voice-instruct').click();
+  await expect(page.getByTestId('voice-instruct-text')).toHaveText('“Rotate the vectors nightly”', { timeout: 10000 });
+  await expect(page.getByTestId('voice-instruct')).toBeEnabled();
+
+  await page.getByTestId('voice-instruct').click();
+  await expect(page.getByTestId('voice-instruct-note')).toHaveText(words, { timeout: 10000 });
+  // Read without waiting: the outcome steps aside later and takes the row with
+  // it, so a waiting assertion could pass for that reason instead.
+  expect(await page.getByTestId('voice-instruct-latest').isHidden()).toBe(true);
+});
+
+// Seen to fail: with VoiceInstruct.mount replacing the panel's keepOpen rather
+// than chaining it (`() => this.running || this._holding`), the panel went
+// away with a request still waiting in the queue: panelHidden read true. The
+// two states are read in one evaluation at the instant the outcome leaves,
+// because a retrying assertion that the panel is visible also passes under
+// that mutation: the queue's next poll reveals the panel again within seconds,
+// after the user has watched it vanish.
+test('the outcome stepping aside leaves the panel to the queue', async ({ page }) => {
+  await script(page, {
+    pending: [LAUNCH],
+    runs: [{ running: false, kind: 'instruction', exit_code: 0, output: [] }],
+  });
+  await page.goto('/');
+  await expect(page.getByTestId('voice-answer')).toBeEnabled();
+  await page.getByTestId('voice-instruct').click();
+  await expect(page.getByTestId('voice-instruct-text')).toHaveText('“Rotate the vectors nightly”', { timeout: 10000 });
+
+  const left = await page.waitForFunction(() => {
+    const outcome = document.querySelector('[data-testid="voice-instruct-outcome"]');
+    if (!outcome.hidden) return null;
+    return { panelHidden: document.querySelector('[data-testid="voice-panel"]').hidden };
+  }, null, { timeout: 15000 });
+  expect(await left.jsonValue()).toEqual({ panelHidden: false });
+  await expect(page.getByTestId('voice-queue-prompt')).toHaveText('Launch the audit?  (approve / hold)');
 });
 
 // Seen to fail: with the `exit_code !== 0` branch removed, the newest row was

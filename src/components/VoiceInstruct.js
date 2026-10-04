@@ -2,7 +2,7 @@
  * VoiceInstruct — "Instruct by voice": one spoken instruction into qmcp's inbox.
  *
  * The button asks qmcp to take an instruction aloud on this machine. qmcp runs
- * the dialog ("What should be done?", read back, recorded on a yes) and joe's
+ * the dialog (the question, the read-back, recorded on a yes) and joe's
  * microphone hears it, so the voice panel shows the whole turn. When the
  * conversation ends, the newest row in the inbox is shown beside the queue:
  * the words, the project they resolved to or "no project", and whether the
@@ -105,7 +105,11 @@ export class VoiceInstruct {
     }
   }
 
-  /** The newest row in the inbox: the one the conversation that just ended recorded. */
+  /**
+   * The newest row in the inbox. The list is not filtered by source, so this is
+   * the row the conversation recorded unless something else was recorded in the
+   * second between the run's end and the read.
+   */
   async _showLatest() {
     const res = await fetch(`${this._base}/instructions?limit=1`, { cache: 'no-store' });
     if (!res.ok) throw new Error(`qmcp answered ${res.status}`);
