@@ -328,11 +328,11 @@ less.
 | `hint` | string | none | the words a short answer is expected to be, comma-separated (`approve, hold`), handed to the transcriber as its prompt. It biases and never constrains: what was heard is what comes back. At most 500 characters |
 
 A take is transcribed as English (`JOE_LANGUAGE` names another; `auto`
-detects), as one utterance, and, when it lasts three seconds or less, with a
-beam search. On synthesized short answers -- two voices, two speaking rates,
-clean, with noise at 15 dB and with the first syllable clipped -- scored the
-way the dialog asking reads them, whisper's defaults took 99 of 120 and these
-settings with the expected words as the prompt took 113.
+detects), as one utterance, and, when it is short, with a beam search: a
+one-word answer gives whisper's language detection nothing to go on and a
+greedy first guess nothing to recover from. The expected words matter most
+where the first syllable was clipped. A prompt that is echoed back on unclear
+audio names every option, which a dialog reads as no match and asks again.
 
 **Response** — `200 OK`
 
