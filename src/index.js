@@ -10,6 +10,7 @@ import { VoicePanel }   from './components/VoicePanel.js';
 import { VoiceQueue }   from './components/VoiceQueue.js';
 import { VoiceKeys }    from './components/VoiceKeys.js';
 import { VoiceTranscript } from './components/VoiceTranscript.js';
+import { TranscriptPane } from './components/TranscriptPane.js';
 import { setlist }      from './config/setlists.js';
 
 // Must match MainCanvas.js LABEL_W — used for p5 playhead pixel calculation.
@@ -50,6 +51,12 @@ const voiceKeys = new VoiceKeys(document.querySelector('#voice-panel .voice-cont
 voiceKeys.mount();
 const voiceTranscript = new VoiceTranscript(document.querySelector('#voice-panel .voice-transcript'), voicePanel);
 voiceTranscript.mount();
+// The whole exchange, readable in full beside the piano roll (T).
+const transcriptPane = new TranscriptPane(document.getElementById('transcript-pane'), voicePanel,
+                                          { canvas: mainCanvas });
+transcriptPane.mount();
+document.getElementById('transcript-toggle')
+  .addEventListener('click', () => transcriptPane.toggle());
 
 // ─── First-run hint ───────────────────────────────────────────────────────────
 {

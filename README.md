@@ -79,6 +79,7 @@ the same without looking:
 | `R` | asks for it to be said again |
 | `Shift`+`Esc` | stops listening |
 | `~`, held | keeps the turn open through pauses; releasing it ends the turn |
+| `T` | opens or closes the transcript pane |
 
 A key or button counts as having said the word: the turn in progress ends at
 once. **A question can be answered before it ends:** a key, the held `~`, or
@@ -91,6 +92,16 @@ heard. They play only after a question, never through a silent wait, and
 `JOE_CUES=0` turns them off. They play on the system's default output unless
 `JOE_OUTPUT_DEVICE` (or `VOX_OUTPUT_DEVICE`, the output qmcp's voice is heard
 on) names another by a fragment of its name.
+
+**The whole transcript, beside the piano roll:** `T`, or the transport's
+**Transcript** button, docks a pane at the right edge holding everything said
+in the exchange, oldest first -- each question as it was asked and each take
+as it was heard, with its struck words crossed out, how sure the transcriber
+was, whether it came by key or over the question, and how it was labelled.
+It is read from joe's datapoints, so a reload keeps it, and extended live; it
+follows the newest line unless scrolled back. **What can be said** lists the
+conversation's words and checks and joe's own. The piano roll keeps its notes
+out from under the pane.
 
 **The transcript as it is written:** a take is transcribed piece by piece
 while it is spoken, and the panel shows the words as they arrive. Clicking a

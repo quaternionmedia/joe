@@ -46,6 +46,9 @@ export class MainCanvas {
     this._totalDur = 0;
     this._playhead = 0;   // seconds
 
+    // Pixels at the right edge something docked covers; nothing is drawn under them.
+    this._inset = 0;
+
     // Live layer
     this._liveActive      = false;
     this._liveFrame       = 0;
@@ -132,6 +135,11 @@ export class MainCanvas {
 
   // ─── Rendering ──────────────────────────────────────────────────────────
 
+  /** Keep the notes out from under a pane docked at the right edge, `px` wide. */
+  setInset(px) {
+    this._inset = Math.max(0, Math.round(px) || 0);
+  }
+
   _resize() {
     this._canvas.width  = window.innerWidth;
     this._canvas.height = window.innerHeight - TRANSPORT_H;
@@ -151,7 +159,7 @@ export class MainCanvas {
     const { _canvas: canvas, _ctx: ctx } = this;
     const W     = canvas.width;
     const H     = canvas.height;
-    const drawW = W - LABEL_W;
+    const drawW = Math.max(1, W - LABEL_W - this._inset);
     const rowH  = H / PITCH_RNG;
 
     ctx.clearRect(0, 0, W, H);
