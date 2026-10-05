@@ -43,8 +43,11 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
-# A segment that says one of these strikes itself and the segment before.
-SCRATCH = ("scratch that", "strike that", "delete that")
+from Modules import Vocabulary
+
+# A segment that says one of these strikes itself and the segment before
+# (`vocabulary.toml`, `take.scratch`).
+SCRATCH = Vocabulary.phrases("take.scratch")
 # How much of the take's earlier text rides in the prompt for the next segment.
 PROMPT_CHARS = 200
 DATA = Path(__file__).resolve().parents[1] / "Data" / "Voice"
