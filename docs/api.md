@@ -544,6 +544,13 @@ closed before anyone spoke -- is no entry, and a line cut short is skipped.
 `limit` (default 200, at most 2000) keeps the last entries. `kept` is false
 under `JOE_DATAPOINTS=0`, when nothing is written to read back.
 
+### `GET /api/voice/takes/{take}/audio`
+
+One take's recording, `audio/wav`, by the take's hex id, for the visualiser to
+play with the take's words on its timeline. Only a recording under joe's own
+voice folder is served, whatever the take's record names. `400` for an id that
+is not hex, `404` for a take with no recording kept.
+
 ### `GET /api/voice/vocabulary`
 
 joe's own spoken words: `{"phrases": [{"key", "says", "phrases"}]}`.

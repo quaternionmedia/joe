@@ -11,6 +11,7 @@ import { VoiceQueue }   from './components/VoiceQueue.js';
 import { VoiceKeys }    from './components/VoiceKeys.js';
 import { VoiceTranscript } from './components/VoiceTranscript.js';
 import { TranscriptPane } from './components/TranscriptPane.js';
+import { takeWords }      from './components/takeWords.js';
 import { setlist }      from './config/setlists.js';
 
 // Must match MainCanvas.js LABEL_W — used for p5 playhead pixel calculation.
@@ -54,6 +55,15 @@ voiceTranscript.mount();
 // The whole exchange, readable in full beside the piano roll (T).
 const transcriptPane = new TranscriptPane(document.getElementById('transcript-pane'), voicePanel,
                                           { canvas: mainCanvas });
+// A take shown on the visualiser: its recording on the transport and the
+// spectrum, its words on the piano roll's timeline, played from the start.
+transcriptPane.onShow = entry => {
+  const words = takeWords(entry);
+  mainCanvas.clearNotes();
+  mainCanvas.setWords(words, words.length ? words[words.length - 1].end : 0);
+  _activateAudio(`take ${entry.take}`, `/api/voice/takes/${encodeURIComponent(entry.take)}/audio`);
+  transport.play();
+};
 transcriptPane.mount();
 document.getElementById('transcript-toggle')
   .addEventListener('click', () => transcriptPane.toggle());
@@ -64,9 +74,12 @@ document.getElementById('transcript-toggle')
   if (localStorage.getItem('joe-hint-dismissed')) {
     hintEl.classList.add('hidden');
   }
+  // The hint covers the bottom of the piano roll, where a take's words go.
+  mainCanvas.setBottomInset(hintEl.classList.contains('hidden') ? 0 : hintEl.offsetHeight);
   document.getElementById('hint-dismiss').addEventListener('click', () => {
     hintEl.classList.add('hidden');
     localStorage.setItem('joe-hint-dismissed', '1');
+    mainCanvas.setBottomInset(0);
   });
 }
 
@@ -265,6 +278,7 @@ document.addEventListener('joe:audioReady', (e) => {
 // Sets live-layer duration so frozen live notes align with the static results.
 document.addEventListener('joe:audioDurationKnown', (e) => {
   mainCanvas.setLiveDuration(e.detail.duration);
+  mainCanvas.setWordsDuration(e.detail.duration);
 });
 
 // joe:audioCleared — fired by Transport.clearFile() (eject button).
@@ -274,12 +288,14 @@ document.addEventListener('joe:audioCleared', () => {
   sketchInstance.disconnectAudioSource();
   capturePanel.setActiveFile(null);
   _stopPlayheadSync();
+  mainCanvas.clearWords();
 });
 
 // ─── Pipeline completion ──────────────────────────────────────────────────────
 // joe:resultsReady — fired by CapturePanel after pipeline run completes.
 // Load notes into the canvas, then activate the corresponding audio file.
 document.addEventListener('joe:resultsReady', async (e) => {
+  mainCanvas.clearWords();
   await resultsPanel.fetchLatest();
   const name = e.detail?.filename;
   if (name) _activateAudio(name, `/api/audio/${encodeURIComponent(name)}`);
