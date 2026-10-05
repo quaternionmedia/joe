@@ -74,9 +74,12 @@ document.getElementById('transcript-toggle')
   if (localStorage.getItem('joe-hint-dismissed')) {
     hintEl.classList.add('hidden');
   }
+  // The hint covers the bottom of the piano roll, where a take's words go.
+  mainCanvas.setBottomInset(hintEl.classList.contains('hidden') ? 0 : hintEl.offsetHeight);
   document.getElementById('hint-dismiss').addEventListener('click', () => {
     hintEl.classList.add('hidden');
     localStorage.setItem('joe-hint-dismissed', '1');
+    mainCanvas.setBottomInset(0);
   });
 }
 

@@ -58,6 +58,9 @@ export class MainCanvas {
     // Pixels at the right edge something docked covers; nothing is drawn under them.
     this._inset = 0;
 
+    // Pixels at the bottom a bar covers (the first-run hint); the words lane sits above them.
+    this._bottomInset = 0;
+
     // Words lane: a take's words on the timeline
     this._words    = [];
     this._wordsDur = 0;
@@ -113,6 +116,11 @@ export class MainCanvas {
     this._playhead = 0;
     this._canvas.setAttribute('aria-label',
       `Words on the timeline: ${this._words.filter(w => !w.struck).map(w => w.text).join(' ')}`);
+  }
+
+  /** Keep the words lane above a bar along the bottom, `px` tall. */
+  setBottomInset(px) {
+    this._bottomInset = Math.max(0, Math.round(px) || 0);
   }
 
   /** The recording's own length, once known, so the words sit where they were said. */
@@ -252,7 +260,7 @@ export class MainCanvas {
     // ── Words lane — a take's words along the bottom, the current one lit ──
     if (!this._liveActive && this._words.length) {
       const dur   = Math.max(this._totalDur, this._wordsDur) || 1;
-      const laneY = H - LANE_H - 6;
+      const laneY = H - LANE_H - 6 - this._bottomInset;
       ctx.save();
       ctx.font         = '12px sans-serif';
       ctx.textBaseline = 'middle';
