@@ -515,8 +515,45 @@ An endpointed take is cut into segments at the half-second pauses inside it,
 held or not, and each segment is transcribed as soon as it ends, with the
 take's hint and earlier words as the prompt; a `transcript` event carries each
 step. `/api/voice/listen` returns the take's text as the segments' words minus
-any struck, and a `take` naming it. A segment saying "scratch that", "strike
-that" or "delete that" strikes itself and the segment before.
+any struck, and a `take` naming it.
+
+**Some words are said to joe.** A segment saying one of joe's own phrases --
+declared in `Modules/vocabulary.toml`, served at `GET /api/voice/vocabulary` --
+is struck, since it was said to joe and not to the question, and acted on:
+
+| Say | joe |
+| --- | --- |
+| "scratch that", "strike that", "delete that", "undo that" | strikes it and the segment before |
+| "start over", "clear that", "from the top" | strikes the whole take so far |
+| "flag that", "that was wrong", "you misheard" | marks the take before this one `misheard` -- a `label` datapoint -- and says so in a `note` event |
+| "that was right", "mark that right" | marks it `heard right` |
+| "how loud am I", "check my level" | says in a `note` how far the voice peaked over the threshold it was judged by: clear at twice or more, faint above it, or under it |
+
+A `note` event is no turn of its own: `{"state": "note", "text", ...}`, logged on
+the page.
+
+### `GET /api/voice/history`
+
+The whole transcript, oldest first, read from the datapoints:
+`{"entries": [...], "kept": true}`. An entry is `{"kind": "said", "text",
+"reason", "at"}` for a sentence the program asking said, or `{"kind": "take",
+"take", "text", "source", "confidence", "audio", "over_question", "at",
+"segments": [{"index", "words", "struck", "start", "end"}], "label",
+"outcome"}` for a take joe heard. A take whose recording never ended -- a watch
+closed before anyone spoke -- is no entry, and a line cut short is skipped.
+`limit` (default 200, at most 2000) keeps the last entries. `kept` is false
+under `JOE_DATAPOINTS=0`, when nothing is written to read back.
+
+### `GET /api/voice/takes/{take}/audio`
+
+One take's recording, `audio/wav`, by the take's hex id, for the visualiser to
+play with the take's words on its timeline. Only a recording under joe's own
+voice folder is served, whatever the take's record names. `400` for an id that
+is not hex, `404` for a take with no recording kept.
+
+### `GET /api/voice/vocabulary`
+
+joe's own spoken words: `{"phrases": [{"key", "says", "phrases"}]}`.
 
 ### `POST /api/voice/strike`
 
@@ -541,6 +578,8 @@ line of `Data/Voice/segments.jsonl`, one JSON object per line with a `kind`:
 | `edit` | `take`, `index`, `word`, `text`, `action` (`strike` or `restore`) |
 | `take` | `take`, `audio`, `source` (`voice` or `key`), `hint`, `text`, `segments`, `struck`, `over_question` (said over the question, from a watch) |
 | `outcome` | `take`, `state` (`recorded` or `gave_up`), `text` -- what the dialog asking made of the last take, from its post to the conversation route |
+| `label` | `take` (the take marked), `label` (`misheard` or `heard right`), `by` (the take that said so) -- the ground truth a tuning pass needs most |
+| `said` | `text`, `reason`, `options` -- a sentence the program asking said, from its `speaking` post, so the transcript read back holds both sides |
 
 Each also carries `at`, seconds since the epoch. `JOE_DATAPOINTS=0` writes none,
 and nothing deletes them.

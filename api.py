@@ -23,6 +23,9 @@ Endpoints:
     GET  /api/voice/control         Whether a key is held, an answer is waiting, and the question is interrupted
     POST /api/voice/watch           Opens a take while a question is still being asked
     POST /api/voice/unwatch         Closes a watch that will not be listened to
+    GET  /api/voice/vocabulary      joe's own spoken words, and what each does
+    GET  /api/voice/history         The whole transcript: every take heard and every sentence said
+    GET  /api/voice/takes/{take}/audio  One take's recording, for the visualiser
     POST /api/voice/strike          Strike or restore a word of the take being transcribed
     GET  /api/voice/transcript      The take being transcribed, or the last one, once
 
@@ -442,6 +445,8 @@ def _listen_once(duration: float, device: str | None, until_silence: bool, silen
         hint=hint,
         publish=lambda **event: conversation.publish("transcript", **event),
         datapoints=datapoints,
+        previous=last_take,
+        notify=lambda state, **detail: conversation.publish(state, **detail),
     )
     if watch is None:
         transcript = live
@@ -614,6 +619,52 @@ def voice_control():
     return control.snapshot()
 
 
+@app.get("/api/voice/history")
+def voice_history(limit: int = 200):
+    """The whole transcript, oldest first: every take joe heard, with its
+    segments, what was struck and how it was labelled, and every sentence the
+    program asking said -- read from the datapoints, so the page keeps it
+    across a reload. `kept` is false when `JOE_DATAPOINTS=0` keeps none."""
+    if not 1 <= limit <= 2000:
+        raise HTTPException(status_code=400, detail="limit must be between 1 and 2000")
+    from Modules import History
+
+    return {"entries": History.read(datapoints.manifest, limit), "kept": datapoints.enabled}
+
+
+@app.get("/api/voice/takes/{take}/audio")
+def voice_take_audio(take: str):
+    """One take's recording, as joe wrote it, for the visualiser to play with
+    the take's words on its timeline. Only a recording under joe's own voice
+    folder is served, whatever the record names."""
+    import re
+
+    from Modules import History
+    from Modules.Voice import Voice
+
+    if not re.fullmatch(r"[0-9a-f]{6,32}", take):
+        raise HTTPException(status_code=400, detail="a take is named by its hex id")
+    entry = History.take(datapoints.manifest, take)
+    if entry is None or not entry.get("audio"):
+        raise HTTPException(status_code=404, detail=f"no recording kept for take {take}")
+    path = Path(entry["audio"])
+    path = path if path.is_absolute() else datapoints.root / path
+    path = path.resolve()
+    roots = {datapoints.root.resolve(), Path(Voice().capture_dir).resolve()}
+    if not any(path.is_relative_to(root) for root in roots) or not path.is_file():
+        raise HTTPException(status_code=404, detail=f"no recording kept for take {take}")
+    return FileResponse(str(path), media_type="audio/wav")
+
+
+@app.get("/api/voice/vocabulary")
+def voice_vocabulary():
+    """joe's own spoken words -- what a segment saying each does -- for the
+    page to show beside what the program asking listens for."""
+    from Modules import Vocabulary
+
+    return {"phrases": Vocabulary.entries()}
+
+
 @app.get("/api/voice/transcript")
 def voice_transcript():
     """The take being transcribed, or the last one: its segments, the words
@@ -691,6 +742,10 @@ async def voice_conversation_post(request: Request):
             )
         detail["options"] = [o.strip() for o in options]
     event = conversation.publish(state, text=str(body.get("text") or ""), **detail)
+    # What the program asking said, so the transcript read back holds both sides.
+    if state == "speaking" and event["text"]:
+        datapoints.write("said", text=event["text"], reason=detail.get("reason"),
+                         options=detail.get("options"))
     # What the dialog made of the last take: the label a later pass tunes against.
     if state in ("recorded", "gave_up") and last_take:
         datapoints.write("outcome", take=last_take, state=state, text=event["text"])
