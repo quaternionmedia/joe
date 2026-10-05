@@ -23,7 +23,16 @@ one JSON object per line with a `kind`:
 - `take` -- the take's recording, its segments, the text it came to and what
   was struck;
 - `outcome` -- what the dialog asking made of the take (`recorded` with the
-  answer it accepted, or `gave_up`), posted to the conversation route.
+  answer it accepted, or `gave_up`), posted to the conversation route;
+- `label` -- a take marked by voice as `misheard` or `heard right`, by the take
+  that said so: the ground truth a tuning pass needs most.
+
+**SOME WORDS ARE SAID TO JOE.** A segment saying one of joe's own phrases
+(`Modules/vocabulary.toml`) is struck and acted on here: "scratch that" strikes
+it and the segment before, "start over" strikes the whole take so far, "flag
+that" and "that was right" label the take before this one, and "how loud am
+I" shows the voice's peak against its threshold. A label or a level is told
+to the page as a `note`.
 
 So a later pass can tune the endpointer, the prompt or the model against what
 people actually said and what was accepted. `JOE_DATAPOINTS=0` writes none.
@@ -48,6 +57,14 @@ from Modules import Vocabulary
 # A segment that says one of these strikes itself and the segment before
 # (`vocabulary.toml`, `take.scratch`).
 SCRATCH = Vocabulary.phrases("take.scratch")
+# The rest of joe's own words: strike the whole take so far; mark the last take
+# for tuning; show how loud the voice was. Each segment saying one is struck.
+START_OVER = Vocabulary.phrases("take.start_over")
+MISHEARD = Vocabulary.phrases("label.misheard")
+HEARD_RIGHT = Vocabulary.phrases("label.heard_right")
+LEVEL = Vocabulary.phrases("diagnostic.level")
+# A voice peaking this many times over the threshold is heard clearly.
+CLEAR = 2.0
 # How much of the take's earlier text rides in the prompt for the next segment.
 PROMPT_CHARS = 200
 DATA = Path(__file__).resolve().parents[1] / "Data" / "Voice"
@@ -122,13 +139,17 @@ class LiveTranscript:
     """
 
     def __init__(self, transcribe, hint: str | None = None, publish=None,
-                 datapoints: Datapoints | None = None, take: str | None = None, rate: int = 16000):
+                 datapoints: Datapoints | None = None, take: str | None = None, rate: int = 16000,
+                 previous: str | None = None, notify=None):
         self.take = take or uuid.uuid4().hex[:12]
         self.hint = hint
         self.rate = rate
         self.segments: list[Segment] = []
         self._transcribe = transcribe
         self._publish = publish or (lambda **event: None)
+        # The take before this one, which a label marks, and where a note goes.
+        self.previous = previous
+        self._notify = notify or (lambda state, **detail: None)
         self._data = datapoints or Datapoints(enabled=False)
         self._lock = threading.RLock()
         self._queue: queue.Queue = queue.Queue()
@@ -166,11 +187,12 @@ class LiveTranscript:
                 segment.pending = False
                 logprob = (heard.get("info") or {}).get("avg_logprob")
                 segment.confidence = math.exp(logprob) if isinstance(logprob, (int, float)) else None
-                if plain(segment.text) in SCRATCH:
-                    segment.struck = set(range(len(segment.words)))
-                    if segment.index > 0:
-                        before = self.segments[segment.index - 1]
-                        before.struck = set(range(len(before.words)))
+                note = self._own_words(segment, stats)
+            if note:
+                try:
+                    self._notify("note", **note)
+                except Exception:  # noqa: BLE001 -- a page that cannot be told costs the take nothing
+                    pass
             audio = self._data.audio(self.take, segment.index, samples, self.rate)
             self._data.write("segment", take=self.take, index=segment.index, audio=audio,
                              start_s=round(segment.start, 2), end_s=round(segment.end, 2),
@@ -178,6 +200,40 @@ class LiveTranscript:
                              prompt=prompt, text=segment.text, transcribe_s=round(seconds, 3),
                              **stats, **(heard.get("info") or {}))
             self._announce()
+
+    def _own_words(self, segment: Segment, stats: dict) -> dict | None:
+        """Act on a segment said to joe rather than to the question; the note
+        to tell the page, if any. Called with the lock held."""
+        said = plain(segment.text)
+        everything = set(range(len(segment.words)))
+        if said in SCRATCH:
+            segment.struck = everything
+            if segment.index > 0:
+                before = self.segments[segment.index - 1]
+                before.struck = set(range(len(before.words)))
+            return None
+        if said in START_OVER:
+            for earlier in self.segments[:segment.index + 1]:
+                earlier.struck = set(range(len(earlier.words)))
+            return None
+        if said in MISHEARD or said in HEARD_RIGHT:
+            segment.struck = everything
+            label = "misheard" if said in MISHEARD else "heard right"
+            if not self.previous:
+                return {"text": "No take to mark yet.", "label": label}
+            self._data.write("label", take=self.previous, label=label, by=self.take)
+            return {"text": f"The last take is marked {label}.", "label": label, "of": self.previous}
+        if said in LEVEL:
+            segment.struck = everything
+            peak, threshold = stats.get("peak_rms"), stats.get("threshold")
+            if not peak or not threshold:
+                return {"text": "No level was measured for that.", "level": None}
+            ratio = peak / threshold
+            verdict = ("clear" if ratio >= CLEAR else "faint" if ratio >= 1 else
+                       "under the threshold")
+            return {"text": f"The voice peaked at {ratio:.1f} times the threshold: {verdict}.",
+                    "level": round(ratio, 2), "peak_rms": peak, "threshold": threshold}
+        return None
 
     def _prompt(self, index: int) -> str | None:
         """The hint, then the take's earlier words, so a segment is decoded in

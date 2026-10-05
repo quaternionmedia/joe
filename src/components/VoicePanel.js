@@ -94,6 +94,14 @@ export class VoicePanel {
       if (this.onEvent) this.onEvent(event);
       return;
     }
+    // Something joe says of a segment said to it -- a take marked for tuning,
+    // the voice's level: logged, and no turn of its own.
+    if (event.state === 'note') {
+      this._el.hidden = false;
+      this._append(event);
+      if (this.onEvent) this.onEvent(event);
+      return;
+    }
     const spec = STATES[event.state];
     if (!spec) return;
 
