@@ -532,6 +532,18 @@ is struck, since it was said to joe and not to the question, and acted on:
 A `note` event is no turn of its own: `{"state": "note", "text", ...}`, logged on
 the page.
 
+### `GET /api/voice/history`
+
+The whole transcript, oldest first, read from the datapoints:
+`{"entries": [...], "kept": true}`. An entry is `{"kind": "said", "text",
+"reason", "at"}` for a sentence the program asking said, or `{"kind": "take",
+"take", "text", "source", "confidence", "audio", "over_question", "at",
+"segments": [{"index", "words", "struck", "start", "end"}], "label",
+"outcome"}` for a take joe heard. A take whose recording never ended -- a watch
+closed before anyone spoke -- is no entry, and a line cut short is skipped.
+`limit` (default 200, at most 2000) keeps the last entries. `kept` is false
+under `JOE_DATAPOINTS=0`, when nothing is written to read back.
+
 ### `GET /api/voice/vocabulary`
 
 joe's own spoken words: `{"phrases": [{"key", "says", "phrases"}]}`.
@@ -560,6 +572,7 @@ line of `Data/Voice/segments.jsonl`, one JSON object per line with a `kind`:
 | `take` | `take`, `audio`, `source` (`voice` or `key`), `hint`, `text`, `segments`, `struck`, `over_question` (said over the question, from a watch) |
 | `outcome` | `take`, `state` (`recorded` or `gave_up`), `text` -- what the dialog asking made of the last take, from its post to the conversation route |
 | `label` | `take` (the take marked), `label` (`misheard` or `heard right`), `by` (the take that said so) -- the ground truth a tuning pass needs most |
+| `said` | `text`, `reason`, `options` -- a sentence the program asking said, from its `speaking` post, so the transcript read back holds both sides |
 
 Each also carries `at`, seconds since the epoch. `JOE_DATAPOINTS=0` writes none,
 and nothing deletes them.
