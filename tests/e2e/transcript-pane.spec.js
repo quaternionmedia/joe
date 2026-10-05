@@ -25,12 +25,15 @@ const ASKING = {
       command: 'uv run --frozen qm gates --check handbook/gates.md' }] } },
 };
 
-async function script(page, { events = [], history = HISTORY, asking = ASKING } = {}) {
+async function script(page, { events = [], history = HISTORY, asking = ASKING, historyDelay = 0 } = {}) {
   await page.route('**/api/voice/conversation', route =>
     route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: sse(events) }));
   await page.route(url => /^\/v1\/human\/requests/.test(url.pathname), route =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '{"requests": [], "count": 0}' }));
-  await page.route(url => url.pathname === '/api/voice/history', route => route.fulfill({ json: history }));
+  await page.route(url => url.pathname === '/api/voice/history', async route => {
+    if (historyDelay) await new Promise(done => setTimeout(done, historyDelay));
+    await route.fulfill({ json: history });
+  });
   await page.route(url => url.pathname === '/api/voice/vocabulary', route => route.fulfill({ json: {
     phrases: [{ key: 'take.scratch', says: 'Strike this segment and the one before it', phrases: ['scratch that'] }] } }));
   await page.route(url => url.pathname === '/v1/voice/vocabulary', route =>
@@ -90,6 +93,9 @@ test('what is asked and the take being written arrive live', async ({ page }) =>
   await expect(entries.nth(4)).toHaveClass(/is-live/);
   await expect(entries.nth(4).locator('.tp-word')).toHaveText(['run', 'the', 'tests', 'in', 'vox', '…']);
   await expect(entries.nth(5).locator('.tp-who')).toHaveText('joe');
+  // The stream ends and the panel reconnects, and is sent the same events again.
+  await page.waitForTimeout(2600);
+  await expect(entries).toHaveCount(6);
 });
 
 test('what can be said lists the conversation, its checks and joe', async ({ page }) => {
@@ -128,4 +134,21 @@ test('T typed into a field opens nothing', async ({ page }) => {
   await page.locator('#typing').press('t');
 
   await expect(page.getByTestId('transcript-pane')).toBeHidden();
+});
+
+test('a history that arrives after the stream keeps what streamed in', async ({ page }) => {
+  await script(page, { historyDelay: 800, events: [
+    { state: 'speaking', text: 'Anything else?' },
+    { state: 'transcript', take: 't2', text: 'run the tests in vox', segments: [
+      { index: 0, words: ['run', 'the', 'tests', 'in', 'vox'], struck: [], pending: false }] },
+  ] });
+  await page.goto('/');
+  await page.keyboard.press('t');
+
+  const entries = page.getByTestId('transcript-entries').locator('.tp-entry');
+  await expect(entries).toHaveCount(5);
+  await expect(entries.nth(3).locator('.tp-text')).toHaveText('Anything else?');
+  await expect(entries.nth(4).locator('.tp-word')).toHaveText(['run', 'the', 'tests', 'in', 'vox']);
+  await page.waitForTimeout(2600);  // past a reconnect, which sends the events again
+  await expect(entries).toHaveCount(5);
 });

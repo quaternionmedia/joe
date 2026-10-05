@@ -24,6 +24,24 @@ const OPEN_KEY = 'joe.transcript.open';
 // How close to the bottom counts as following the newest line, in pixels.
 const FOLLOW_PX = 48;
 
+// How far apart a sentence streamed and the same sentence kept may be stamped.
+const SAME_SECONDS = 30;
+
+/**
+ * The history read from joe, with whatever streamed in that it does not hold
+ * yet: a history that arrives after the stream has begun must not take the
+ * newest lines away. A take is the same take by its id; a sentence is the same
+ * sentence by its words, stamped within `SAME_SECONDS`.
+ */
+function merged(history, current) {
+  const takes = new Set(history.filter(e => e.kind === 'take').map(e => e.take));
+  const said = history.filter(e => e.kind === 'said');
+  const newer = current.filter(e => e.streamed && (e.kind === 'take'
+    ? !takes.has(e.take)
+    : !said.some(s => s.text === e.text && Math.abs((s.at || 0) - (e.at || 0)) < SAME_SECONDS)));
+  return [...history, ...newer];
+}
+
 function remembered(storage) {
   try { return storage?.getItem(OPEN_KEY) === '1'; } catch { return false; }
 }
@@ -93,7 +111,7 @@ export class TranscriptPane {
       const res = await fetch(`${this._base}/history?limit=500`);
       if (!res.ok) return;
       const body = await res.json();
-      this._entries = body.entries || [];
+      this._entries = merged(body.entries || [], this._entries);
       this._kept = body.kept !== false;
       this.render();
     } catch { /* no engine is a normal way to run the front end */ }
@@ -115,13 +133,18 @@ export class TranscriptPane {
   // ─── the exchange, live ───────────────────────────────────────────────────
 
   _event(event) {
+    // A stream that reconnects sends what it sent before; joe stamps every
+    // event, so one stamped no later than the last handled is a repeat. A
+    // restarted joe stamps later, and is heard.
+    if (event.at && this._lastAt && event.at <= this._lastAt) return;
+    if (event.at) this._lastAt = event.at;
     const at = event.at || Date.now() / 1000;
     if (event.state === 'speaking' && event.text) {
-      this._entries.push({ kind: 'said', text: event.text, reason: event.reason, at });
+      this._entries.push({ kind: 'said', text: event.text, reason: event.reason, at, streamed: true });
     } else if (event.state === 'transcript' && event.take) {
       let take = this._entries.find(e => e.kind === 'take' && e.take === event.take);
       if (!take) {
-        take = { kind: 'take', take: event.take, at, live: true, segments: [] };
+        take = { kind: 'take', take: event.take, at, live: true, streamed: true, segments: [] };
         this._entries.push(take);
       }
       take.segments = event.segments || [];
