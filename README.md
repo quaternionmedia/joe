@@ -95,7 +95,10 @@ on) names another by a fragment of its name.
 **The transcript as it is written:** a take is transcribed piece by piece
 while it is spoken, and the panel shows the words as they arrive. Clicking a
 word strikes it, or restores it; Backspace strikes the last word still
-standing; saying "scratch that" strikes what came just before. The take's text
+standing; saying "scratch that" strikes what came just before, and "start
+over" the whole take. "Flag that" marks the last take misheard and "that was
+right" marks it heard right, for tuning the recognition later; "how loud am I"
+shows how far the voice cleared the threshold. The take's text
 leaves struck words out, so what is read back is what the panel showed.
 
 **Every piece is kept for tuning:** each stretch of speech is written as its
