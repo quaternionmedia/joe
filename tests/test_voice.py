@@ -349,3 +349,60 @@ def test_listen_skips_transcription_when_nobody_spoke(tmp_path, monkeypatch):
     assert result["text"] == ""
     assert result["speech_detected"] is False
     assert result["audio_path"].startswith(str(tmp_path))
+
+
+# --- how a take is decoded ----------------------------------------------------
+#
+# Measured on synthesized short answers, scored the way the dialog asking the
+# question reads them: whisper's defaults guess the language per clip and run
+# greedy, and a one-word answer has nothing to recover from either.
+
+
+def _decoded_with(seconds, hint=None):
+    """The keyword arguments `transcribe` hands whisper for a take this long."""
+    fake_librosa = MagicMock()
+    fake_librosa.load.return_value = (np.zeros(int(16000 * seconds), dtype=np.float32), 16000)
+    fake_whisper = MagicMock()
+    fake_model = MagicMock()
+    fake_model.transcribe.return_value = {"text": "approve", "segments": [], "language": "en"}
+    fake_whisper.load_model.return_value = fake_model
+    Voice._model = None
+    Voice._model_size = None
+    with patch.dict(sys.modules, {"whisper": fake_whisper, "librosa": fake_librosa}), \
+            patch("os.path.exists", return_value=True):
+        Voice(model_size="tiny").transcribe("take.wav", hint=hint)
+    return fake_model.transcribe.call_args.kwargs
+
+
+def test_a_short_answer_is_decoded_as_english_one_utterance_toward_its_hint():
+    """Mutation: drop the prompt -- red; drop the beam -- red."""
+    options = _decoded_with(1.0, hint="approve, hold")
+
+    assert options["language"] == "en"
+    assert options["condition_on_previous_text"] is False
+    assert options["initial_prompt"] == "approve, hold."
+    assert options["beam_size"] == 5 and options["best_of"] == 5
+    assert options["fp16"] is False  # the stand-in model is on no GPU
+
+
+def test_a_long_take_is_decoded_greedily_and_with_no_prompt_when_none_was_given():
+    options = _decoded_with(12.0)
+
+    assert "initial_prompt" not in options and "beam_size" not in options
+    assert options["language"] == "en"
+
+
+def test_joe_language_auto_lets_whisper_detect(monkeypatch):
+    monkeypatch.setenv("JOE_LANGUAGE", "auto")
+
+    assert "language" not in _decoded_with(1.0)
+
+
+def test_a_hint_is_bounded_and_blank_entries_are_dropped():
+    from Modules.Voice import HINT_CHARS, HINT_WORDS, hint_prompt
+
+    assert hint_prompt(" record , , again ") == "record, again."
+    assert hint_prompt(", ,") is None and hint_prompt(None) is None
+    many = hint_prompt(",".join(f"w{i}" for i in range(HINT_WORDS + 5)))
+    assert many.count(",") == HINT_WORDS - 1
+    assert hint_prompt("x" * (HINT_CHARS + 10)) == "x" * HINT_CHARS + "."

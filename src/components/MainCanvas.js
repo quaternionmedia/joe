@@ -35,6 +35,15 @@ const LIVE_ACTIVE_COLOUR = 'rgba(255,255,255,0.85)';
 
 const LIVE_WINDOW = 300;   // sketch frames visible across the draw area
 
+// The words lane — a take's words on the timeline, along the bottom.
+const LANE_H            = 26;
+const LANE_BG           = 'rgba(0,0,0,0.55)';
+const WORD_BG           = 'rgba(123,216,143,0.18)';
+const WORD_CURRENT_BG   = 'rgba(123,216,143,0.85)';
+const WORD_TEXT         = 'rgba(230,230,230,0.92)';
+const WORD_CURRENT_TEXT = '#08080c';
+const WORD_STRUCK       = 'rgba(160,160,160,0.55)';
+
 export class MainCanvas {
   /** @param {HTMLCanvasElement} el */
   constructor(el) {
@@ -45,6 +54,16 @@ export class MainCanvas {
     this._notes    = [];
     this._totalDur = 0;
     this._playhead = 0;   // seconds
+
+    // Pixels at the right edge something docked covers; nothing is drawn under them.
+    this._inset = 0;
+
+    // Pixels at the bottom a bar covers (the first-run hint); the words lane sits above them.
+    this._bottomInset = 0;
+
+    // Words lane: a take's words on the timeline
+    this._words    = [];
+    this._wordsDur = 0;
 
     // Live layer
     this._liveActive      = false;
@@ -81,8 +100,41 @@ export class MainCanvas {
 
   /** Move the playhead to t seconds (clamped). Called by Transport each rAF. */
   setPlayhead(t) {
-    this._playhead = Math.max(0, Math.min(t, this._totalDur || 0));
+    this._playhead = Math.max(0, Math.min(t, Math.max(this._totalDur || 0, this._wordsDur || 0)));
   }
+
+  // ─── Words lane API ─────────────────────────────────────────────────────
+
+  /**
+   * A take's words on the timeline, `[{ text, start, end, struck }]` in seconds,
+   * over `duration`; the word under the playhead is lit. Named in the canvas's
+   * accessible label, since the drawing itself says nothing to a screen reader.
+   */
+  setWords(words, duration) {
+    this._words    = words || [];
+    this._wordsDur = duration || Math.max(0, ...this._words.map(w => w.end));
+    this._playhead = 0;
+    this._canvas.setAttribute('aria-label',
+      `Words on the timeline: ${this._words.filter(w => !w.struck).map(w => w.text).join(' ')}`);
+  }
+
+  /** Keep the words lane above a bar along the bottom, `px` tall. */
+  setBottomInset(px) {
+    this._bottomInset = Math.max(0, Math.round(px) || 0);
+  }
+
+  /** The recording's own length, once known, so the words sit where they were said. */
+  setWordsDuration(seconds) {
+    if (this._words.length && seconds > 0) this._wordsDur = seconds;
+  }
+
+  clearWords() {
+    this._words    = [];
+    this._wordsDur = 0;
+    this._canvas.removeAttribute('aria-label');
+  }
+
+  get words() { return this._words; }
 
   // ─── Live layer API ─────────────────────────────────────────────────────
 
@@ -132,6 +184,11 @@ export class MainCanvas {
 
   // ─── Rendering ──────────────────────────────────────────────────────────
 
+  /** Keep the notes out from under a pane docked at the right edge, `px` wide. */
+  setInset(px) {
+    this._inset = Math.max(0, Math.round(px) || 0);
+  }
+
   _resize() {
     this._canvas.width  = window.innerWidth;
     this._canvas.height = window.innerHeight - TRANSPORT_H;
@@ -151,7 +208,7 @@ export class MainCanvas {
     const { _canvas: canvas, _ctx: ctx } = this;
     const W     = canvas.width;
     const H     = canvas.height;
-    const drawW = W - LABEL_W;
+    const drawW = Math.max(1, W - LABEL_W - this._inset);
     const rowH  = H / PITCH_RNG;
 
     ctx.clearRect(0, 0, W, H);
@@ -198,6 +255,47 @@ export class MainCanvas {
         ctx.stroke();
         ctx.restore();
       }
+    }
+
+    // ── Words lane — a take's words along the bottom, the current one lit ──
+    if (!this._liveActive && this._words.length) {
+      const dur   = Math.max(this._totalDur, this._wordsDur) || 1;
+      const laneY = H - LANE_H - 6 - this._bottomInset;
+      ctx.save();
+      ctx.font         = '12px sans-serif';
+      ctx.textBaseline = 'middle';
+      ctx.textAlign    = 'left';
+      ctx.fillStyle    = LANE_BG;
+      ctx.fillRect(LABEL_W, laneY, drawW, LANE_H);
+      for (const word of this._words) {
+        const x       = LABEL_W + (word.start / dur) * drawW;
+        const bw      = Math.max(2, ((word.end - word.start) / dur) * drawW - 1);
+        const current = !word.struck && this._playhead >= word.start && this._playhead < word.end;
+        ctx.fillStyle = current ? WORD_CURRENT_BG : WORD_BG;
+        ctx.fillRect(x, laneY + 2, bw, LANE_H - 4);
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(x, laneY, bw, LANE_H);
+        ctx.clip();
+        ctx.fillStyle = word.struck ? WORD_STRUCK : current ? WORD_CURRENT_TEXT : WORD_TEXT;
+        ctx.fillText(word.text, x + 3, laneY + LANE_H / 2);
+        if (word.struck) {
+          ctx.fillRect(x + 2, laneY + LANE_H / 2, Math.min(bw - 4, ctx.measureText(word.text).width + 2), 1);
+        }
+        ctx.restore();
+      }
+      // With no notes, the lane carries the playhead itself.
+      if (!this._notes.length) {
+        const px = LABEL_W + (this._playhead / dur) * drawW;
+        ctx.strokeStyle = PLAYHEAD_COLOUR;
+        ctx.lineWidth   = 1.5;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(px, 0);
+        ctx.lineTo(px, H);
+        ctx.stroke();
+      }
+      ctx.restore();
     }
 
     // ── Live layer — active recording OR frozen scrub OR overlay ─────────

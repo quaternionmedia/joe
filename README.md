@@ -76,6 +76,62 @@ in the inbox — the words, the project they resolved to or "no project", and
 whether the row is recorded or unresolved. A qmcp without the inbox answers
 404, and the panel says so; the queue above keeps working.
 
+**Answering without speaking, and following by ear:** a question's answers
+appear in the panel as numbered buttons, and with the page focused the keys do
+the same without looking:
+
+| Key | Does |
+| --- | --- |
+| `1`–`9` | answers with the question's options, in the order it says them |
+| `R` | asks for it to be said again |
+| `Shift`+`Esc` | stops listening |
+| `~`, held | keeps the turn open through pauses; releasing it ends the turn |
+| `T` | opens or closes the transcript pane |
+
+A key or button counts as having said the word: the turn in progress ends at
+once. **A question can be answered before it ends:** a key, the held `~`, or
+speech louder than the question's own echo stops the question mid-sentence,
+and a spoken answer is kept from its first word. Through speakers, speak up
+over the voice or use the keys; with headphones, any speech does it.
+`JOE_BARGE_IN=0` leaves only the keys. Two short tones carry what the panel shows: two rising notes just before
+the microphone opens for an answer, and one lower note once the turn has been
+heard. They play only after a question, never through a silent wait, and
+`JOE_CUES=0` turns them off. They play on the system's default output unless
+`JOE_OUTPUT_DEVICE` (or `VOX_OUTPUT_DEVICE`, the output qmcp's voice is heard
+on) names another by a fragment of its name.
+
+**The whole transcript, beside the piano roll:** `T`, or the transport's
+**Transcript** button, docks a pane at the right edge holding everything said
+in the exchange, oldest first -- each question as it was asked and each take
+as it was heard, with its struck words crossed out, how sure the transcriber
+was, whether it came by key or over the question, and how it was labelled.
+It is read from joe's datapoints, so a reload keeps it, and extended live; it
+follows the newest line unless scrolled back. **What can be said** lists the
+conversation's words and checks and joe's own. The piano roll keeps its notes
+out from under the pane.
+
+**A take on the visualiser:** a take's **Show** plays its recording through the
+transport and the spectrum, and lays its words along the bottom of the piano
+roll at the times they were said, the word under the playhead lit and struck
+words crossed out. joe knows when each segment of a take began and ended, so a
+segment's words share its span evenly. Ejecting the recording, or loading a
+pipeline result, takes the words away.
+
+**The transcript as it is written:** a take is transcribed piece by piece
+while it is spoken, and the panel shows the words as they arrive. Clicking a
+word strikes it, or restores it; Backspace strikes the last word still
+standing; saying "scratch that" strikes what came just before, and "start
+over" the whole take. "Flag that" marks the last take misheard and "that was
+right" marks it heard right, for tuning the recognition later; "how loud am I"
+shows how far the voice cleared the threshold. The take's text
+leaves struck words out, so what is read back is what the panel showed.
+
+**Every piece is kept for tuning:** each stretch of speech is written as its
+own WAV under `Data/Voice/segments/` and described in `Data/Voice/segments.jsonl`
+-- its timing and levels, the hint and prompt it was decoded with, whisper's
+own confidence, the text, the words struck, and what the dialog asking finally
+accepted. `JOE_DATAPOINTS=0` writes none; nothing deletes them.
+
 See [docs/api.md](docs/api.md) for the full API endpoint reference.
 
 ### Python setup
