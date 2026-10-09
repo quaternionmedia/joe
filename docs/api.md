@@ -325,12 +325,26 @@ less.
 | `until_silence` | bool | `true` | stop when the speaker stops: sustained speech starts the take and `silence_ms` of quiet after it ends it. `false` records the whole `duration` |
 | `silence_ms` | int | `800` | trailing quiet that ends an endpointed take, `100..5000` |
 | `device` | string | *see below* | an input index, or a fragment of a device name. A fragment matching several devices is a `503` rather than a guess. Omitted: `JOE_INPUT_DEVICE` if set, else the microphone `joe voice setup` saved, else the backend default. |
+| `hint` | string | none | the words a short answer is expected to be, comma-separated (`approve, hold`), handed to the transcriber as its prompt. It biases and never constrains: what was heard is what comes back. At most 500 characters |
+
+A take is transcribed as English (`JOE_LANGUAGE` names another; `auto`
+detects), as one utterance, and, when it is short, with a beam search: a
+one-word answer gives whisper's language detection nothing to go on and a
+greedy first guess nothing to recover from. The expected words matter most
+where the first syllable was clipped. A prompt that is echoed back on unclear
+audio names every option, which a dialog reads as no match and asks again.
 
 **Response** — `200 OK`
 
 ```json
 { "text": "...", "segments": [...], "language": "en", "audio_path": "Data/Voice/capture_...wav", "speech_detected": true }
 ```
+
+`confidence` says how sure the transcriber was, from 0 to 1: the lowest of its
+segments' mean token probabilities (whisper's `exp(avg_logprob)`), struck
+segments left out, `1.0` for an answer given by key, and `null` when nothing
+was weighed. A dialog can skip asking for confirmation above a threshold of its
+own.
 
 `speech_detected` is `true` or `false` for an endpointed take and `null` for a
 fixed one. When the endpointer heard no speech, the transcriber is not run and
@@ -341,7 +355,7 @@ fixed one. When the endpointer heard no speech, the transcriber is not run and
 
 | Status | Reason |
 | --- | --- |
-| `400` | `duration` outside `0 < duration <= 60` |
+| `400` | `duration` outside `0 < duration <= 60`, or a `hint` over 500 characters |
 | `503` | No microphone available, no device matching `device`, several devices matching it, or a device that opened and returned samples outside `[-1, 1]` |
 
 **curl**
@@ -405,6 +419,8 @@ through them:
 | --- | --- | --- |
 | `speaking` | the question is being asked; the microphone is closed | the dialog |
 | `listening` | the microphone is open; nobody has started talking | joe |
+| `holding` | a key is held: the turn stays open through pauses until it is released | joe |
+| `transcript` | the take as it is written: `take`, `segments` (`index`, `start`, `end`, `words`, `struck`, `pending`) and `text`; not a turn of its own | joe |
 | `hearing` | speech is sustained; the listener does not interrupt | joe |
 | `pausing` | the speech stopped; the turn is held open a moment longer | joe |
 | `transcribing` | the turn has ended; the words are being read | joe |
@@ -433,17 +449,153 @@ The current state, the recent events and the level, once:
 
 A dialog's own state, posted by the program asking the question.
 
-**Body** — `{"state": "speaking", "text": "Voice check. Say approve or hold.", "reason": null}`
+**Body** — `{"state": "speaking", "text": "Voice check. Say approve or hold.", "reason": null, "options": ["approve", "hold"]}`
 
 Only `speaking`, `recorded`, `gave_up` and `idle` are accepted. The other
 states are the microphone's, and joe reports them itself while
-`/api/voice/listen` records.
+`/api/voice/listen` records. A `speaking` state may carry the question's
+`options`, at most nine, in the order it says them; the page offers each as a
+button and a number key.
 
 **Errors**
 
 | Status | Reason |
 | --- | --- |
-| `400` | A body that is not JSON, or a state the dialog may not post |
+| `400` | A body that is not JSON, a state the dialog may not post, or `options` on another state, over nine, or not all non-empty strings |
+
+### `POST /api/voice/answer`
+
+An answer given without speaking -- a button or a key on the page -- taken as
+if it had been said. The take in progress ends at once and `/api/voice/listen`
+returns the answer as its `text`, with `"source": "key"` and an empty
+`audio_path`; with no take in progress, the next one returns it without opening
+the microphone, if it starts within fifteen seconds.
+
+**Body** — `{"text": "approve"}`, at most 100 characters.
+
+**Response** — `200 OK`, `{"held": false, "answer_waiting": true}`
+
+### `POST /api/voice/hold`
+
+A held key. **Body** — `{"held": true}` when pressed, `{"held": false}` when
+released. While held, a take neither ends on a pause nor at its `duration`
+(it may run to sixty seconds), and the release ends it as speech: the person
+said they were speaking. The take reports `holding` when it sees the hold.
+
+**Response** — `200 OK`, `{"held": true, "answer_waiting": false}`
+
+### `GET /api/voice/control`
+
+`{"held", "answer_waiting", "interrupted"}`, once. `interrupted` is true while
+an answer is waiting, a key is held, or a watch has heard someone speak over
+the question: what a question being said asks, to stop.
+
+### `POST /api/voice/watch`
+
+Opens a take while a question is still being asked, so a person who answers
+over it is heard from their first word. Takes `/api/voice/listen`'s parameters
+and returns at once, `{"watching": true, "voice": true}`. Until someone begins,
+nothing is published and nothing counts toward the cap; speech begins it only
+when it is twice as loud as the question's own echo -- its loudest block over
+the first second and a half, held -- and a held talk key begins it whatever
+the level. The next `/api/voice/listen` returns a begun take when it ends, keeping
+its onset and nothing said before it, and closes one nobody began to record
+afresh; its datapoint carries `over_question: true`. A new watch closes the
+last. `JOE_BARGE_IN=0` leaves only the keys to interrupt, and the response says
+`"voice": false`; `JOE_BARGE_FACTOR` sets the margin. **Errors** as for
+`/api/voice/listen`'s bounds.
+
+### `POST /api/voice/unwatch`
+
+Closes a watch that will not be listened to, begun or not. `{"watching": false}`.
+
+### The live transcript
+
+An endpointed take is cut into segments at the half-second pauses inside it,
+held or not, and each segment is transcribed as soon as it ends, with the
+take's hint and earlier words as the prompt; a `transcript` event carries each
+step. `/api/voice/listen` returns the take's text as the segments' words minus
+any struck, and a `take` naming it.
+
+**Some words are said to joe.** A segment saying one of joe's own phrases --
+declared in `Modules/vocabulary.toml`, served at `GET /api/voice/vocabulary` --
+is struck, since it was said to joe and not to the question, and acted on:
+
+| Say | joe |
+| --- | --- |
+| "scratch that", "strike that", "delete that", "undo that" | strikes it and the segment before |
+| "start over", "clear that", "from the top" | strikes the whole take so far |
+| "flag that", "that was wrong", "you misheard" | marks the take before this one `misheard` -- a `label` datapoint -- and says so in a `note` event |
+| "that was right", "mark that right" | marks it `heard right` |
+| "how loud am I", "check my level" | says in a `note` how far the voice peaked over the threshold it was judged by: clear at twice or more, faint above it, or under it |
+
+A `note` event is no turn of its own: `{"state": "note", "text", ...}`, logged on
+the page.
+
+### `GET /api/voice/history`
+
+The whole transcript, oldest first, read from the datapoints:
+`{"entries": [...], "kept": true}`. An entry is `{"kind": "said", "text",
+"reason", "at"}` for a sentence the program asking said, or `{"kind": "take",
+"take", "text", "source", "confidence", "audio", "over_question", "at",
+"segments": [{"index", "words", "struck", "start", "end"}], "label",
+"outcome"}` for a take joe heard. A take whose recording never ended -- a watch
+closed before anyone spoke -- is no entry, and a line cut short is skipped.
+`limit` (default 200, at most 2000) keeps the last entries. `kept` is false
+under `JOE_DATAPOINTS=0`, when nothing is written to read back.
+
+### `GET /api/voice/takes/{take}/audio`
+
+One take's recording, `audio/wav`, by the take's hex id, for the visualiser to
+play with the take's words on its timeline. Only a recording under joe's own
+voice folder is served, whatever the take's record names. `400` for an id that
+is not hex, `404` for a take with no recording kept.
+
+### `GET /api/voice/vocabulary`
+
+joe's own spoken words: `{"phrases": [{"key", "says", "phrases"}]}`.
+
+### `POST /api/voice/strike`
+
+Strike a word of the take being transcribed, or restore a struck one.
+**Body** -- `{"take": "...", "segment": 0, "word": 2}`, or `{"take": "...",
+"last": true}` for the last word still standing. **Response** -- the take's
+transcript. `400` for a malformed body, `404` for no such word, `409` for a take
+that is no longer the current one.
+
+### `GET /api/voice/transcript`
+
+The take being transcribed, or the last one: `{"take", "segments", "text"}`.
+
+### Datapoints
+
+Every segment is written as `Data/Voice/segments/<take>/<index>.wav` and as a
+line of `Data/Voice/segments.jsonl`, one JSON object per line with a `kind`:
+
+| `kind` | Carries |
+| --- | --- |
+| `segment` | `take`, `index`, `audio`, `start_s`, `end_s`, `duration_s`, `peak_rms`, `mean_rms`, `threshold`, `noise_floor`, `hint`, `prompt`, `model`, `language`, `beam_size`, `avg_logprob`, `no_speech_prob`, `compression_ratio`, `text`, `transcribe_s` |
+| `edit` | `take`, `index`, `word`, `text`, `action` (`strike` or `restore`) |
+| `take` | `take`, `audio`, `source` (`voice` or `key`), `hint`, `text`, `segments`, `struck`, `over_question` (said over the question, from a watch) |
+| `outcome` | `take`, `state` (`recorded` or `gave_up`), `text` -- what the dialog asking made of the last take, from its post to the conversation route |
+| `label` | `take` (the take marked), `label` (`misheard` or `heard right`), `by` (the take that said so) -- the ground truth a tuning pass needs most |
+| `said` | `text`, `reason`, `options` -- a sentence the program asking said, from its `speaking` post, so the transcript read back holds both sides |
+
+Each also carries `at`, seconds since the epoch. `JOE_DATAPOINTS=0` writes none,
+and nothing deletes them.
+
+### Cues
+
+Before a listen that answers a question -- the last conversation state is
+`speaking` -- joe plays two rising notes and only then opens the microphone,
+so the tone is never recorded; not when the answer is already waiting by key,
+nor for a take begun over the question. Once a take has ended and is being read, or an
+answer by key was taken, it plays one lower note. A listen that follows a
+silent one plays nothing. `JOE_CUES=0` turns both off; a cue that cannot play
+is skipped. They play on the default output unless `JOE_OUTPUT_DEVICE`, or
+`VOX_OUTPUT_DEVICE`, names another by a fragment of its name; of an output
+listed under several host APIs, MME's is played to, and a fragment naming two
+different outputs is refused.
 
 ---
 
