@@ -2,24 +2,10 @@
 
 ## Local Setup
 
-### Recommended: uv
-
-[`uv`](https://docs.astral.sh/uv/) manages the Python environment and exposes the `joe` CLI:
-
-```powershell
-uv sync          # install Python deps (including fastapi, uvicorn, typer)
-npm install      # install Node deps
-```
-
-`uv.lock` is the one source of truth for Python dependencies; there is no
-pip or pdm fallback. Use Python `3.11.x` for compatibility with
-`pyproject.toml`.
-
-### Playwright (one-time)
-
-```powershell
-npx playwright install --with-deps chromium
-```
+[`walkthrough/01-onboarding.md`](../walkthrough/01-onboarding.md) is the
+setup, and it runs: what to install, in what order, and the failure modes,
+each checked on the machine that reads it. This guide does not repeat it, so
+the two cannot disagree.
 
 ## Dev Server Workflow
 
@@ -108,21 +94,18 @@ Examples:
 Run before opening a PR:
 
 ```powershell
-python -m pytest -q
+uv run pytest tests walkthrough --doctest-glob=*.md
 npm run build
-```
-
-If your change affects frontend behaviour, also run E2E tests:
-
-```powershell
 npm run test:e2e
 ```
 
-If your change affects runtime behaviour, also run the backend pipeline:
+The first runs the Python suite and every walkthrough page, the browser page
+among them, and redraws the pictures in `walkthrough/media/`. They are
+recorded, never compared: if one changed, look at it, and commit the redrawn
+pictures with the change that redrew them.
 
-```powershell
-python main.py
-```
+What no automated check reaches -- a real microphone, a real voice, the tones
+-- is in [`docs/manual-test-plan.md`](manual-test-plan.md).
 
 ## Frontend Testing
 
@@ -162,13 +145,10 @@ If you change commands, paths, setup flow, or contributor workflows, update:
 - `docs/modules.md` (if module behaviour/path details changed)
 - `docs/contributing.md` (if process/checks changed)
 
-## Expected CI Checks
+## CI Checks
 
-A GitHub Actions workflow on PRs would run:
-
-| Check | Command | When |
+| Workflow | Job | Runs |
 | --- | --- | --- |
-| Python tests | `python -m pytest -q` | Always |
-| Frontend build | `npm run build` | Always |
-| E2E tests | `npm run test:e2e` | PRs touching `src/` |
-| Backend pipeline | `python main.py` | PRs touching `Modules/` or `main.py` |
+| `tests.yml` | `pytest`, on Windows and Linux | The Python suite and the hermetic walkthrough pages |
+| `e2e.yml` | `playwright`, on Windows | The Playwright specs, then the browser walkthrough page, keeping its pictures as a build artifact |
+| `deploy.yml` | `build-and-deploy` | `npm run build`, and the Pages deploy |

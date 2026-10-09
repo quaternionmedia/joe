@@ -46,3 +46,21 @@ include = ["Modules*"]
 
 [tool.pdm]
 distribution = true
+
+[dependency-groups]
+dev = [
+    "playwright>=1.62.0",
+]
+
+[tool.pytest.ini_options]
+# Deliberately no `testpaths`: it is ignored the moment pytest is handed a path,
+# so a walkthrough wired that way is collected by nobody. The command names
+# both directories instead, and the walkthrough's own tests check it does:
+#
+#     uv run pytest tests walkthrough --doctest-glob=*.md
+#
+# `pythonpath` lets a page say `from walkthrough.support import ...` however
+# it was collected. NORMALIZE_WHITESPACE keeps pages readable; ELLIPSIS lets a
+# page show the shape of a value that carries a timestamp.
+pythonpath = ["."]
+doctest_optionflags = ["NORMALIZE_WHITESPACE", "ELLIPSIS"]

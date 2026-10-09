@@ -7,6 +7,21 @@ The repo has two primary parts:
 - Python backend/analysis pipeline (`Modules/`, `main.py`, `api.py`)
 - p5.js + Vite frontend (`src/`)
 
+![The piano roll after a recording has been through the pipeline](walkthrough/media/03-in-the-browser-results.png)
+
+## Start here
+
+[`walkthrough/`](walkthrough/) is the path in, and every example in it runs:
+[01-onboarding.md](walkthrough/01-onboarding.md) is the first build,
+[02-cookbook.md](walkthrough/02-cookbook.md) the command table, and
+[03-in-the-browser.md](walkthrough/03-in-the-browser.md) a recording taken
+through the pipeline onto the piano roll in real Chromium, which is where the
+picture above comes from. One command runs the suite and all of them:
+
+```powershell
+uv run pytest tests walkthrough --doctest-glob=*.md
+```
+
 ## Quickstart
 
 ### Prerequisites
@@ -155,10 +170,12 @@ npm run test:e2e
 
 ## Verify Setup
 
-Run Python tests:
+Run the Python tests and the walkthrough
+([01-onboarding.md](walkthrough/01-onboarding.md) says what the browser page
+needs):
 
 ```powershell
-python -m pytest -q
+uv run pytest tests walkthrough --doctest-glob=*.md
 ```
 
 Run frontend E2E tests:
@@ -225,6 +242,7 @@ See [docs/cookbook.md](docs/cookbook.md) for step-by-step recipes.
 | [docs/contributing.md](docs/contributing.md) | Local setup, UI control groups, troubleshooting, branch naming, pre-PR checks |
 | [docs/cookbook.md](docs/cookbook.md) | Step-by-step recipes for common workflows |
 | [docs/api.md](docs/api.md) | FastAPI endpoint reference with `curl` examples |
+| [docs/manual-test-plan.md](docs/manual-test-plan.md) | What only a person with a microphone can check, step by step |
 | [docs/modules.md](docs/modules.md) | Python module architecture and data flow |
 
 ## Contributing
