@@ -18,6 +18,16 @@ Endpoints:
     GET  /api/voice/conversation    The conversation's states as they happen (server-sent events)
     GET  /api/voice/conversation/state  The current state and recent events, once
     POST /api/voice/conversation    A dialog's own state: speaking, recorded, gave_up, idle
+    POST /api/voice/answer          An answer given by key or button, as if said
+    POST /api/voice/hold            A held key: the turn stays open until it is released
+    GET  /api/voice/control         Whether a key is held, an answer is waiting, and the question is interrupted
+    POST /api/voice/watch           Opens a take while a question is still being asked
+    POST /api/voice/unwatch         Closes a watch that will not be listened to
+    GET  /api/voice/vocabulary      joe's own spoken words, and what each does
+    GET  /api/voice/history         The whole transcript: every take heard and every sentence said
+    GET  /api/voice/takes/{take}/audio  One take's recording, for the visualiser
+    POST /api/voice/strike          Strike or restore a word of the take being transcribed
+    GET  /api/voice/transcript      The take being transcribed, or the last one, once
 
 Run directly:
     python -m uvicorn api:app --reload --port 8000
@@ -30,6 +40,7 @@ import asyncio
 import json
 import os
 import sys
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -39,8 +50,12 @@ from fastapi.responses import FileResponse, StreamingResponse
 
 from capture import AudioCapture
 
+from Modules import Cue
+from Modules.Control import Control
+from Modules.Transcript import Datapoints, LiveTranscript
 from Modules.Conversation import POSTED, Conversation
-from Modules.Voice import NoMicrophoneError, Voice, input_level, list_input_devices
+from Modules.Voice import STALL_SECONDS, NoMicrophoneError, Voice, input_level, list_input_devices
+from Modules.Watch import Unwatched, Watch
 
 app = FastAPI(title="Joe API", version="0.1.0")
 
@@ -73,6 +88,18 @@ _capture = AudioCapture()
 
 # The one conversation this process has: its microphone is the only one.
 conversation = Conversation()
+control = Control()
+datapoints = Datapoints()
+# The take being transcribed, or the last one; and the last take that had
+# speech, which a dialog's outcome is recorded against.
+transcript: LiveTranscript | None = None
+last_take: str | None = None
+# The take opened over the question being asked, if any: one at a time.
+watching: Watch | None = None
+_watch_lock = threading.Lock()
+# The most answers a question can offer as controls: one per number key.
+MAX_OPTIONS = 9
+ANSWER_CHARS = 100
 
 
 # ─── Existing endpoints ───────────────────────────────────────────────────────
@@ -366,6 +393,7 @@ def voice_listen(
     device: str | None = None,
     until_silence: bool = True,
     silence_ms: int = 800,
+    hint: str | None = None,
 ):
     """Records from an input device and transcribes it.
 
@@ -377,31 +405,306 @@ def voice_listen(
 
     `device` is an index or a name fragment; omitted, the server's default
     input is used, or `JOE_INPUT_DEVICE` if that is set.
+
+    `hint` is the words a short answer is expected to be, comma-separated --
+    "approve, hold" -- handed to the transcriber as its prompt. It biases and
+    never constrains: what was heard is what comes back.
+
+    A take `/api/voice/watch` opened, that someone began by speaking over the
+    question or holding the talk key, is this take: it is returned when it
+    ends, from its first word. One nobody began is closed, and this take is
+    recorded afresh.
     """
+    _bounds(duration, silence_ms, hint)
+    adopted = _adopt_watch()
+    if adopted is not None:
+        adopted.finished.wait()
+        control.quiet()
+        if adopted.error is not None:
+            raise adopted.error
+        return adopted.result
+    return _listen_once(duration, device, until_silence, silence_ms, hint)
+
+
+def _bounds(duration: float, silence_ms: int, hint: str | None) -> None:
     if not 0 < duration <= 60:
         raise HTTPException(status_code=400, detail="duration must be between 0 and 60 seconds")
     if not 100 <= silence_ms <= 5000:
         raise HTTPException(status_code=400, detail="silence_ms must be between 100 and 5000")
+    if hint is not None and len(hint) > 500:
+        raise HTTPException(status_code=400, detail="hint must be at most 500 characters")
+
+
+def _listen_once(duration: float, device: str | None, until_silence: bool, silence_ms: int,
+                 hint: str | None, watch: Watch | None = None) -> dict:
+    """One take, recorded and transcribed: the listen route's, or a watch's."""
+    global transcript, last_take
     voice = Voice()
+    live = LiveTranscript(
+        transcribe=lambda samples, prompt: voice.transcribe_samples(samples, hint=hint, prompt=prompt),
+        hint=hint,
+        publish=lambda **event: conversation.publish("transcript", **event),
+        datapoints=datapoints,
+        previous=last_take,
+        notify=lambda state, **detail: conversation.publish(state, **detail),
+    )
+    if watch is None:
+        transcript = live
+        on_event = _report
+        # A question was just asked: the cue to speak, finished before the
+        # microphone opens so it is never recorded -- unless the answer was
+        # already given by key, and the turn is over before it began.
+        if conversation.snapshot()["state"] == "speaking" and not control.snapshot()["answer_waiting"]:
+            Cue.play("turn", settle=True)
+    else:
+        def shown() -> None:
+            global transcript
+            transcript = live
+
+        watch.on_begin = shown
+
+        def on_event(state: str, **detail) -> None:
+            # Over the question, nothing is published until someone begins.
+            if state == "level" or watch.begun.is_set():
+                _report(state, **detail)
     try:
-        return voice.listen(
+        result = voice.listen(
             duration=duration,
             device=device,
             until_silence=until_silence,
             silence_after=silence_ms / 1000,
-            on_event=_report,
+            on_event=on_event,
+            hint=hint,
+            control=control,
+            live=live,
+            watch=watch,
         )
+        if result.get("source") == "key":
+            Cue.play("heard")
+        if result.get("take") or result.get("source") == "key":
+            last_take = result.get("take") or live.take
+            datapoints.write("take", take=last_take, audio=result.get("audio_path") or None,
+                             source=result.get("source", "voice"), hint=hint,
+                             text=result.get("text", ""), confidence=result.get("confidence"),
+                             segments=len(live.segments),
+                             struck={s.index: sorted(s.struck) for s in live.segments if s.struck},
+                             over_question=watch is not None)
+        return result
     except NoMicrophoneError as exc:
-        conversation.publish("idle", text=f"The microphone could not record: {exc}")
+        if watch is None:
+            conversation.publish("idle", text=f"The microphone could not record: {exc}")
         raise HTTPException(status_code=503, detail=str(exc))
 
 
+@app.post("/api/voice/watch")
+def voice_watch(
+    duration: float = 5.0,
+    device: str | None = None,
+    until_silence: bool = True,
+    silence_ms: int = 800,
+    hint: str | None = None,
+):
+    """Opens a take while a question is still being asked, so a person who
+    answers over it is heard from their first word.
+
+    Takes `/api/voice/listen`'s parameters and returns at once. Until someone
+    begins -- speech louder than the question's own echo, or the talk key
+    held -- nothing is published and nothing counts toward the cap; once they
+    have, `/api/voice/control` reports `interrupted`, so the question can
+    stop, and the next listen returns the take. A new watch closes the last.
+    `JOE_BARGE_IN=0` leaves only the keys to interrupt (`Modules.Watch`).
+    """
+    global watching
+    _bounds(duration, silence_ms, hint)
+    _close_watch()
+    control.quiet()
+    watch = Watch(control=control)
+
+    def record() -> None:
+        try:
+            watch.result = _listen_once(duration, device, until_silence, silence_ms, hint, watch=watch)
+        except Unwatched:
+            pass
+        except Exception as exc:  # noqa: BLE001 -- the listen that comes for it raises it
+            watch.error = exc
+        finally:
+            watch.finished.set()
+
+    with _watch_lock:
+        watching = watch
+    threading.Thread(target=record, name="joe-watch", daemon=True).start()
+    return {"watching": True, "voice": watch.voice}
+
+
+@app.post("/api/voice/unwatch")
+def voice_unwatch():
+    """Closes a watch that will not be listened to, begun or not."""
+    _close_watch()
+    control.quiet()
+    return {"watching": False}
+
+
+def _take_watch() -> Watch | None:
+    global watching
+    with _watch_lock:
+        watch, watching = watching, None
+    return watch
+
+
+def _close_watch() -> None:
+    watch = _take_watch()
+    if watch is not None:
+        watch.close()
+        watch.finished.wait(timeout=STALL_SECONDS + 1)
+
+
+def _adopt_watch() -> Watch | None:
+    """The open watch when someone began it; otherwise None, with any watch
+    closed and its microphone released for the take that replaces it."""
+    watch = _take_watch()
+    if watch is None:
+        return None
+    if watch.adopt():
+        return watch
+    watch.finished.wait(timeout=STALL_SECONDS + 1)
+    return None
+
+
 def _report(state: str, **detail) -> None:
-    """The listen route's watcher: levels to the level, states to the log."""
+    """The listen route's watcher: levels to the level, states to the log, and
+    the heard cue once a take with speech has closed."""
     if state == "level":
         conversation.level(detail.get("rms", 0.0), detail.get("threshold"))
     else:
         conversation.publish(state, **detail)
+        if state == "transcribing":
+            Cue.play("heard")
+
+
+@app.post("/api/voice/answer")
+async def voice_answer(request: Request):
+    """An answer given without speaking -- a key or a button -- taken as if said.
+
+    Body: `{"text": "approve"}`. The take in progress ends at once and returns
+    it; with none in progress, the next take returns it without opening the
+    microphone, if it starts within `Modules.Control.ANSWER_SECONDS`.
+    """
+    body = await _json_body(request)
+    text = body.get("text") if isinstance(body, dict) else None
+    if not isinstance(text, str) or not text.strip() or len(text) > ANSWER_CHARS:
+        raise HTTPException(status_code=400,
+                            detail=f"text must be a word or phrase of at most {ANSWER_CHARS} characters")
+    control.answer(text.strip())
+    return control.snapshot()
+
+
+@app.post("/api/voice/hold")
+async def voice_hold(request: Request):
+    """A held key. Body: `{"held": true}` when pressed, `{"held": false}` when
+    released. While held, a take does not end on a pause or at its cap; the
+    release ends it."""
+    body = await _json_body(request)
+    held = body.get("held") if isinstance(body, dict) else None
+    if not isinstance(held, bool):
+        raise HTTPException(status_code=400, detail="held must be true or false")
+    control.hold(held)
+    return control.snapshot()
+
+
+@app.get("/api/voice/control")
+def voice_control():
+    """Whether a key is held, whether an answer is waiting for a take, and
+    whether the question being said is interrupted -- by either of those, or
+    by speech over it that a watch heard."""
+    return control.snapshot()
+
+
+@app.get("/api/voice/history")
+def voice_history(limit: int = 200):
+    """The whole transcript, oldest first: every take joe heard, with its
+    segments, what was struck and how it was labelled, and every sentence the
+    program asking said -- read from the datapoints, so the page keeps it
+    across a reload. `kept` is false when `JOE_DATAPOINTS=0` keeps none."""
+    if not 1 <= limit <= 2000:
+        raise HTTPException(status_code=400, detail="limit must be between 1 and 2000")
+    from Modules import History
+
+    return {"entries": History.read(datapoints.manifest, limit), "kept": datapoints.enabled}
+
+
+@app.get("/api/voice/takes/{take}/audio")
+def voice_take_audio(take: str):
+    """One take's recording, as joe wrote it, for the visualiser to play with
+    the take's words on its timeline. Only a recording under joe's own voice
+    folder is served, whatever the record names."""
+    import re
+
+    from Modules import History
+    from Modules.Voice import Voice
+
+    if not re.fullmatch(r"[0-9a-f]{6,32}", take):
+        raise HTTPException(status_code=400, detail="a take is named by its hex id")
+    entry = History.take(datapoints.manifest, take)
+    if entry is None or not entry.get("audio"):
+        raise HTTPException(status_code=404, detail=f"no recording kept for take {take}")
+    path = Path(entry["audio"])
+    path = path if path.is_absolute() else datapoints.root / path
+    path = path.resolve()
+    roots = {datapoints.root.resolve(), Path(Voice().capture_dir).resolve()}
+    if not any(path.is_relative_to(root) for root in roots) or not path.is_file():
+        raise HTTPException(status_code=404, detail=f"no recording kept for take {take}")
+    return FileResponse(str(path), media_type="audio/wav")
+
+
+@app.get("/api/voice/vocabulary")
+def voice_vocabulary():
+    """joe's own spoken words -- what a segment saying each does -- for the
+    page to show beside what the program asking listens for."""
+    from Modules import Vocabulary
+
+    return {"phrases": Vocabulary.entries()}
+
+
+@app.get("/api/voice/transcript")
+def voice_transcript():
+    """The take being transcribed, or the last one: its segments, the words
+    struck, and the text so far."""
+    if transcript is None:
+        return {"take": None, "segments": [], "text": ""}
+    return transcript.snapshot()
+
+
+@app.post("/api/voice/strike")
+async def voice_strike(request: Request):
+    """Strike a word of the take being transcribed, or restore a struck one.
+
+    Body: `{"take": "...", "segment": 0, "word": 2}`, or `{"take": "...",
+    "last": true}` for the last word still standing. The take's text leaves
+    struck words out. `409` for a take that is not the current one.
+    """
+    body = await _json_body(request)
+    if not isinstance(body, dict) or not isinstance(body.get("take"), str):
+        raise HTTPException(status_code=400, detail="take must name the take")
+    if transcript is None or body["take"] != transcript.take:
+        raise HTTPException(status_code=409, detail="that take is no longer being transcribed")
+    if body.get("last") is True:
+        transcript.strike_last()
+    else:
+        segment, word = body.get("segment"), body.get("word")
+        if not isinstance(segment, int) or not isinstance(word, int):
+            raise HTTPException(status_code=400, detail="segment and word must be numbers, or last true")
+        try:
+            transcript.strike(segment, word)
+        except IndexError:
+            raise HTTPException(status_code=404, detail="no such word in that take")
+    return transcript.snapshot()
+
+
+async def _json_body(request: Request):
+    try:
+        return await request.json()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="body must be JSON")
 
 
 @app.get("/api/voice/conversation/state")
@@ -429,7 +732,24 @@ async def voice_conversation_post(request: Request):
             detail=f"state must be one of {', '.join(POSTED)}; the others are the microphone's",
         )
     detail = {k: str(v) for k, v in body.items() if k in ("reason",) and v is not None}
-    return conversation.publish(state, text=str(body.get("text") or ""), **detail)
+    options = body.get("options")
+    if options is not None:
+        if (state != "speaking" or not isinstance(options, list) or len(options) > MAX_OPTIONS
+                or not all(isinstance(o, str) and o.strip() for o in options)):
+            raise HTTPException(
+                status_code=400,
+                detail=f"options go on a speaking state, as at most {MAX_OPTIONS} non-empty strings",
+            )
+        detail["options"] = [o.strip() for o in options]
+    event = conversation.publish(state, text=str(body.get("text") or ""), **detail)
+    # What the program asking said, so the transcript read back holds both sides.
+    if state == "speaking" and event["text"]:
+        datapoints.write("said", text=event["text"], reason=detail.get("reason"),
+                         options=detail.get("options"))
+    # What the dialog made of the last take: the label a later pass tunes against.
+    if state in ("recorded", "gave_up") and last_take:
+        datapoints.write("outcome", take=last_take, state=state, text=event["text"])
+    return event
 
 
 async def _conversation_events(request: Request, poll: float = 0.05):

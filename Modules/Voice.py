@@ -227,6 +227,10 @@ def _tell(on_event, state: str, **detail) -> None:
 # is abandoned. Some devices open cleanly and never call back; without a bound
 # the dialog above would wait on them forever.
 STALL_SECONDS = 2.0
+# Quiet inside a take that closes one segment of it, for the live transcript.
+# Shorter than the pause that ends a take, so a sentence with a breath in it
+# arrives in pieces while the person is still talking.
+SEGMENT_PAUSE = 0.5
 
 
 def _capture_until_silence(
@@ -236,6 +240,10 @@ def _capture_until_silence(
     silence_after: float = 0.8,
     min_speech: float = 0.2,
     on_event=None,
+    control=None,
+    on_segment=None,
+    segment_pause: float = SEGMENT_PAUSE,
+    watch=None,
 ) -> tuple["np.ndarray", int | None, bool]:
     """Record until the speaker stops, or `max_duration`, whichever is first.
 
@@ -268,6 +276,30 @@ def _capture_until_silence(
     Every block from the stream's start is kept, so the onset is never
     clipped and no separate pre-roll buffer is needed.
 
+    **A person can end or hold the turn without speaking** (`control`, a
+    `Modules.Control.Control`). An answer given by key raises `Answered` at
+    the next block. While a key is held the take neither ends on a pause nor
+    at `max_duration` -- it runs to `HOLD_SECONDS` -- and releasing the key
+    ends it, as speech that was there: the person said they were speaking.
+
+    **Each stretch of speech is handed on as it ends** (`on_segment(samples,
+    start, end, stats)`): `segment_pause` of quiet closes one, held or not,
+    and the take's end closes the last. `stats` are its levels against the
+    threshold it was judged by. A watcher that raises costs the take nothing.
+
+    **A take can be opened while a question is still being said** (`watch`,
+    a `Modules.Watch.Watch`). Until someone begins it, it counts toward no
+    cap, takes no answer by key -- that belongs to the take replacing it --
+    and judges speech against the question's echo and the quiet room before
+    it, not the moving floor: the loudest block of the question's opening
+    `watch.learn_seconds`, held, times `watch.factor`, with nothing beginning
+    while it is learned. Nothing after is learned, so a voice rising into its
+    first word is not taken for more of the question. Speech
+    sustained above that, or a held key, begins it: the blocks before the
+    onset are dropped, `watch.began()` lets the question stop, and the take
+    runs from there as any other. A watch closed at any point raises
+    `Unwatched` at the next block.
+
     **BLOCKS ARRIVE THROUGH A CALLBACK, NOT `stream.read()`.** PortAudio's
     WDM-KS host API does not implement blocking reads: `stream.read` fails
     there with "Blocking API not supported yet", while `sd.rec` -- itself
@@ -285,6 +317,16 @@ def _capture_until_silence(
     # round, not int: 0.3 / 0.1 is 2.999… in floats, and truncation quietly
     # shortened every wait by one block.
     max_blocks = max(1, round(max_duration / block_seconds))
+    from Modules.Control import HOLD_SECONDS, Answered
+
+    hold_blocks = max(max_blocks, round(HOLD_SECONDS / block_seconds))
+    hold_seen = False
+    from Modules.Watch import Unwatched
+
+    watching = watch is not None
+    watch_blocks = 0
+    echo = room = 0.0
+    learn_blocks = round(watch.learn_seconds / block_seconds) if watching else 0
     calibration_blocks = 2
     # Speech is judged against the room, not an absolute: devices and rooms
     # differ by orders of magnitude, and the absolute floor only guards a
@@ -295,6 +337,7 @@ def _capture_until_silence(
     damping = 0.15 ** block_seconds
 
     taken: list = []
+    levels: list[float] = []
     calibration: list[float] = []
     noise: float | None = None
     speech_started = False
@@ -302,9 +345,40 @@ def _capture_until_silence(
     quiet_blocks = 0
     needed_onset = max(1, round(min_speech / block_seconds))
     needed_quiet = max(1, round(silence_after / block_seconds))
+    needed_segment_quiet = max(1, round(segment_pause / block_seconds))
+    segment_from: int | None = None
+    segment_quiet = 0
+    threshold_now: float | None = None
+
+    def close_segment(until: int) -> None:
+        nonlocal segment_from
+        start, segment_from = segment_from, None
+        if on_segment is None or start is None or until <= start:
+            return
+        try:
+            span = levels[start:until]
+            samples = _to_mono_16k(np.concatenate(taken[start:until]), rate, target_rate)
+            on_segment(samples, start * block_seconds, until * block_seconds,
+                       {"peak_rms": round(max(span), 5), "mean_rms": round(sum(span) / len(span), 5),
+                        "threshold": None if threshold_now is None else round(threshold_now, 5),
+                        "noise_floor": None if noise is None else round(noise, 5)})
+        except Exception:
+            pass
 
     def report(state: str, **detail) -> None:
         _tell(on_event, state, **detail)
+
+    def begin(keep: int) -> None:
+        """Someone spoke over the question: the take is theirs from here,
+        keeping only the last `keep` blocks before it."""
+        nonlocal watching, blocks
+        if not watch.began():
+            raise Unwatched()
+        cut = max(0, len(taken) - keep)
+        del taken[:cut]
+        del levels[:cut]
+        watching = False
+        blocks = 0
 
     arrived: queue.Queue = queue.Queue()
 
@@ -322,7 +396,29 @@ def _capture_until_silence(
             callback=on_block,
         ):
             report("listening")
-            for _ in range(max_blocks):
+            blocks = 0
+            while blocks < (hold_blocks if hold_seen and control.held else max_blocks):
+                if watch is not None and watch.closed():
+                    raise Unwatched()
+                if watching:
+                    watch_blocks += 1
+                    if watch_blocks > hold_blocks:
+                        raise Unwatched()  # nobody began within the longest a take may run
+                else:
+                    blocks += 1
+                if control is not None:
+                    answer = None if watching else control.take_answer()
+                    if answer is not None:
+                        raise Answered(answer)
+                    if control.held and not hold_seen:
+                        hold_seen = True
+                        if watching:
+                            begin(keep=2)
+                        report("holding")
+                    elif hold_seen and not control.held:
+                        # Released: the person has finished.
+                        speech_started = True
+                        break
                 try:
                     block = arrived.get(timeout=STALL_SECONDS)
                 except queue.Empty:
@@ -335,20 +431,41 @@ def _capture_until_silence(
                 _reject_unusable(block, index)
                 taken.append(block)
                 rms = float(np.sqrt((block.astype("float64") ** 2).mean())) if block.size else 0.0
+                levels.append(rms)
                 if len(calibration) < calibration_blocks:
                     calibration.append(rms)
-                    noise = min(calibration)
+                    noise = room = min(calibration)
                     report("level", rms=rms, threshold=None)
                     continue
                 threshold = max(noise * speech_factor, absolute_floor)
+                if watching:
+                    learning = watch_blocks <= learn_blocks
+                    threshold = max(room * speech_factor, absolute_floor, echo * watch.factor)
+                threshold_now = threshold
                 report("level", rms=rms, threshold=threshold)
                 loud = rms >= threshold
+                if watching:
+                    if learning:
+                        echo = max(echo, rms)
+                    if learning or not watch.voice:
+                        loud = False
+                # Segments for the live transcript, counted apart from the
+                # take's own end so a held take still arrives in pieces.
+                if loud:
+                    segment_quiet = 0
+                elif segment_from is not None:
+                    segment_quiet += 1
+                    if segment_quiet == needed_segment_quiet:
+                        close_segment(len(taken) - segment_quiet + 1)
                 if not speech_started:
                     if loud:
                         onset_blocks += 1
                         if onset_blocks >= needed_onset:
+                            if watching:
+                                begin(keep=needed_onset + 1)
                             speech_started = True
                             report("hearing")
+                            segment_from = max(0, len(taken) - needed_onset - 1)
                     else:
                         onset_blocks = 0
                         noise = noise * damping + rms * (1 - damping)
@@ -356,13 +473,17 @@ def _capture_until_silence(
                     if quiet_blocks:
                         report("hearing")
                     quiet_blocks = 0
+                    if segment_from is None:
+                        segment_from = max(0, len(taken) - 2)
+                elif hold_seen and control.held:
+                    quiet_blocks = 0  # a held turn does not end on a pause
                 else:
                     quiet_blocks += 1
                     if quiet_blocks == 1:
                         report("pausing")
                     if quiet_blocks >= needed_quiet:
                         break
-    except NoMicrophoneError:
+    except (NoMicrophoneError, Answered, Unwatched):
         raise
     except Exception as exc:
         raise NoMicrophoneError(
@@ -370,6 +491,8 @@ def _capture_until_silence(
             f"at {rate} Hz / {channels}ch: {exc}"
         ) from exc
 
+    if speech_started and segment_from is not None:
+        close_segment(len(taken))
     frames = np.concatenate(taken) if taken else np.zeros((0, 1), dtype="float32")
     return _to_mono_16k(frames, rate, target_rate), index, speech_started
 
@@ -467,6 +590,66 @@ def microphone_available() -> bool:
     return default_input_device() is not None
 
 
+# A take this short or shorter is decoded with a beam: the extra search costs
+# little on a word or two, and a one-word answer has no context to recover a
+# greedy first guess from.
+SHORT_SECONDS = 3.0
+HINT_WORDS = 12
+HINT_CHARS = 40
+
+
+def hint_prompt(hint: str | None) -> str | None:
+    """The words an answer is expected to be, as whisper's initial prompt.
+
+    `hint` is comma-separated -- "approve, hold" -- and arrives from whoever
+    asked the question. A prompt biases the decoder toward its vocabulary and
+    never constrains it: what was heard is still what comes back. Blank
+    entries are dropped and the list is bounded, so a caller cannot hand the
+    decoder a paragraph."""
+    if not hint:
+        return None
+    words = [w.strip() for w in hint.split(",") if w.strip()][:HINT_WORDS]
+    words = [w[:HINT_CHARS] for w in words]
+    return ", ".join(words) + "." if words else None
+
+
+def take_confidence(segments) -> float | None:
+    """How sure whisper was of a transcript: the lowest of its segments' mean
+    token probabilities (`exp(avg_logprob)`), so one doubtful stretch decides.
+    None when no segment carries one."""
+    import math
+
+    probs = [math.exp(s["avg_logprob"]) for s in segments or []
+             if isinstance(s, dict) and isinstance(s.get("avg_logprob"), (int, float))]
+    return round(min(probs), 3) if probs else None
+
+
+def decode_options(hint: str | None, seconds: float, cuda: bool = False) -> dict:
+    """How one take is decoded.
+
+    - **English, unless `JOE_LANGUAGE` says otherwise** ("auto" detects). On a
+      one-word clip whisper's language detection has almost nothing to go on,
+      and a wrong guess transcribes "yes" in another language.
+    - **One utterance, not a stream.** `condition_on_previous_text` carries a
+      window's text into the next, which a take shorter than a window never
+      needs and a hallucinated first window poisons.
+    - **fp32 off the GPU**, which whisper otherwise falls back to with a
+      warning on every call.
+    - **The expected words as the prompt**, when the question said them.
+    - **A beam on a short take.**
+    """
+    options: dict = {"condition_on_previous_text": False, "fp16": cuda}
+    language = os.environ.get("JOE_LANGUAGE", "en")
+    if language != "auto":
+        options["language"] = language
+    prompt = hint_prompt(hint)
+    if prompt:
+        options["initial_prompt"] = prompt
+    if seconds <= SHORT_SECONDS:
+        options.update(beam_size=5, best_of=5)
+    return options
+
+
 class Voice:
     """Speech-to-text and microphone capture, backed by whisper + sounddevice."""
 
@@ -489,12 +672,43 @@ class Voice:
             cls._model_size = model_size
         return cls._model
 
-    def transcribe(self, file_path: str) -> dict:
+    def transcribe_samples(self, audio, hint: str | None = None, prompt: str | None = None) -> dict:
+        """Transcribe 16 kHz mono samples. `prompt`, when given, is the decoder's
+        initial prompt in place of the hint's (the live transcript passes the
+        hint and the take's earlier words). Returns `{"text", "segments",
+        "language", "info"}`, `info` carrying the decoding settings and
+        whisper's own confidence: the mean `avg_logprob` and the largest
+        `no_speech_prob` and `compression_ratio` over its segments."""
+        model = self._load_model(self.model_size)
+        cuda = getattr(getattr(model, "device", None), "type", None) == "cuda"
+        options = decode_options(hint, len(audio) / 16000, cuda)
+        if prompt:
+            options["initial_prompt"] = prompt
+        result = model.transcribe(audio, **options)
+        parts = result.get("segments") or []
+
+        def values(key):
+            return [p[key] for p in parts if isinstance(p, dict) and isinstance(p.get(key), (int, float))]
+
+        logprobs = values("avg_logprob")
+        info = {
+            "model": self.model_size,
+            "language": options.get("language"),
+            "beam_size": options.get("beam_size"),
+            "avg_logprob": round(sum(logprobs) / len(logprobs), 4) if logprobs else None,
+            "no_speech_prob": round(max(values("no_speech_prob")), 4) if values("no_speech_prob") else None,
+            "compression_ratio": round(max(values("compression_ratio")), 4) if values("compression_ratio") else None,
+        }
+        return {"text": result.get("text", "").strip(), "segments": parts,
+                "language": result.get("language"), "info": info}
+
+    def transcribe(self, file_path: str, hint: str | None = None) -> dict:
         """Transcribe an existing audio file to text.
 
         Loads the audio with librosa (soundfile-backed) rather than handing
         whisper a path, so this does not depend on an `ffmpeg` binary being
         on PATH — whisper only shells out to ffmpeg when given a path.
+        `hint` is the words the audio is expected to be (`decode_options`).
 
         Returns: {"text": str, "segments": list, "language": str}
         """
@@ -504,7 +718,10 @@ class Voice:
 
         audio, _ = librosa.load(file_path, sr=16000, mono=True)
         model = self._load_model(self.model_size)
-        result = model.transcribe(audio)
+        # The model's own device decides fp16, rather than importing torch to
+        # ask whether a GPU exists that the model may not be on.
+        cuda = getattr(getattr(model, "device", None), "type", None) == "cuda"
+        result = model.transcribe(audio, **decode_options(hint, len(audio) / 16000, cuda))
         return {
             "text": result.get("text", "").strip(),
             "segments": result.get("segments", []),
@@ -550,6 +767,9 @@ class Voice:
         until_silence: bool,
         silence_after: float,
         on_event=None,
+        control=None,
+        on_segment=None,
+        watch=None,
     ) -> tuple[str, bool | None]:
         """Record, write the WAV, and say whether speech was detected.
 
@@ -574,6 +794,9 @@ class Voice:
                 target_rate=sample_rate,
                 silence_after=silence_after,
                 on_event=on_event,
+                control=control,
+                on_segment=on_segment,
+                watch=watch,
             )
         else:
             _tell(on_event, "listening")
@@ -596,6 +819,10 @@ class Voice:
         until_silence: bool = False,
         silence_after: float = 0.8,
         on_event=None,
+        hint: str | None = None,
+        control=None,
+        live=None,
+        watch=None,
     ) -> dict:
         """Record from an input device and transcribe the result in one step.
 
@@ -607,16 +834,51 @@ class Voice:
 
         `on_event` hears the turn as `_capture_until_silence` describes,
         then `no_speech`, or `transcribing` and `heard` with the text.
+        `hint` is the words the answer is expected to be, for the transcriber.
+
+        With `control`, an answer given by key is returned as the transcript,
+        `source: "key"`, without recording when it was waiting before the take
+        and ending the take when it arrives during one.
+
+        With `live` (a `Modules.Transcript.LiveTranscript`), an endpointed
+        take is transcribed segment by segment while it is recorded, and its
+        text is the live transcript's: the segments' words minus what was
+        struck. A take with speech and no segment falls back to transcribing
+        the whole recording.
+
+        With `watch`, the take is opened while a question is still being
+        said, as `_capture_until_silence` describes; an answer waiting by key
+        is left for the take that replaces it.
         """
-        wav_path, speech_detected = self._take(
-            duration, sample_rate, device, until_silence, silence_after, on_event
-        )
+        from Modules.Control import Answered
+
+        answer = control.take_answer() if control is not None and watch is None else None
+        try:
+            if answer is not None:
+                raise Answered(answer)
+            wav_path, speech_detected = self._take(
+                duration, sample_rate, device, until_silence, silence_after, on_event, control,
+                on_segment=live.add if live is not None else None, watch=watch,
+            )
+        except Answered as given:
+            _tell(on_event, "heard", text=given.text, source="key")
+            return {"text": given.text, "segments": [], "language": None, "audio_path": "",
+                    "speech_detected": True, "source": "key", "confidence": 1.0}
         if speech_detected is False:
+            if live is not None:
+                live.finish()
             _tell(on_event, "no_speech")
             result = {"text": "", "segments": [], "language": None}
+        elif live is not None and live.segments:
+            _tell(on_event, "transcribing")
+            text = live.finish()
+            result = {"text": text, "segments": live.snapshot()["segments"], "language": None,
+                      "take": live.take, "confidence": live.confidence()}
+            _tell(on_event, "heard", text=text)
         else:
             _tell(on_event, "transcribing")
-            result = self.transcribe(wav_path)
+            result = self.transcribe(wav_path, hint=hint)
+            result["confidence"] = take_confidence(result.get("segments"))
             _tell(on_event, "heard", text=result.get("text", ""))
         result["audio_path"] = wav_path
         result["speech_detected"] = speech_detected

@@ -18,6 +18,7 @@
 export const STATES = {
   speaking:     { label: 'Asking',           hint: 'Microphone closed while the question is spoken', step: 'speaking' },
   listening:    { label: 'Your turn',        hint: 'Microphone open. Speak when ready',              step: 'listening' },
+  holding:      { label: 'Holding',          hint: 'Key held: the turn stays open until it is released', step: 'hearing' },
   hearing:      { label: 'Hearing you',      hint: 'Not interrupting',                               step: 'hearing' },
   pausing:      { label: 'Pause',            hint: 'Holding the turn open in case there is more',    step: 'pausing' },
   transcribing: { label: 'Reading',          hint: 'Turn ended. Reading what was said',              step: 'transcribing' },
@@ -31,6 +32,7 @@ export const STATES = {
 const REASKS = {
   noinput: 'Asking again: nothing was heard',
   nomatch: 'Asking again: that matched no option',
+  repeat:  'Saying it again, as asked',
 };
 
 // A finished exchange stays on screen this long before the panel steps aside.
@@ -59,6 +61,8 @@ export class VoicePanel {
     // Set by whatever else lives in the panel: while it returns true, a
     // finished exchange does not take the panel away.
     this.keepOpen = () => false;
+    // Set by whatever else follows the exchange: called with every event.
+    this.onEvent = null;
   }
 
   /** Show the panel, whatever state it is in. */
@@ -83,6 +87,21 @@ export class VoicePanel {
 
   /** Apply one conversation event: `{ seq, state, text, reason? }`. */
   show(event) {
+    // The take as it is written: not a turn of its own, so the state, the
+    // label and the log are left as they are, for whatever follows the words.
+    if (event.state === 'transcript') {
+      this._el.hidden = false;
+      if (this.onEvent) this.onEvent(event);
+      return;
+    }
+    // Something joe says of a segment said to it -- a take marked for tuning,
+    // the voice's level: logged, and no turn of its own.
+    if (event.state === 'note') {
+      this._el.hidden = false;
+      this._append(event);
+      if (this.onEvent) this.onEvent(event);
+      return;
+    }
     const spec = STATES[event.state];
     if (!spec) return;
 
@@ -101,6 +120,7 @@ export class VoicePanel {
     });
 
     this._append(event);
+    if (this.onEvent) this.onEvent(event);
 
     clearTimeout(this._linger);
     this._linger = null;
@@ -129,6 +149,7 @@ export class VoicePanel {
     } else if (event.state === 'heard') {
       line.className = 'voice-line voice-line-said';
       line.textContent = event.text ? `“${event.text}”` : '(nothing clear)';
+      if (event.source === 'key') line.textContent += ' (key)';
     } else if (event.state === 'no_speech') {
       line.className = 'voice-line voice-line-said is-muted';
       line.textContent = '(silence)';

@@ -1,0 +1,24 @@
+# What joe does itself with a segment of a take that says one of these, before the
+# take's text reaches whoever asked. Read by `Modules.Vocabulary`. A phrase is
+# compared lower-case with punctuation gone, against the whole segment, and the
+# segment that says it is struck: it was said to joe, not to the question.
+
+[take.scratch]
+says = "Strike this segment and the one before it"
+phrases = ["scratch that", "strike that", "delete that", "undo that"]
+
+[take.start_over]
+says = "Strike everything said so far in this take"
+phrases = ["start over", "clear that", "clear it all", "wipe that", "from the top"]
+
+[label.misheard]
+says = "Mark the last take misheard, for tuning the recognition"
+phrases = ["flag that", "that was wrong", "you misheard", "mark that wrong", "misheard"]
+
+[label.heard_right]
+says = "Mark the last take heard right, for tuning the recognition"
+phrases = ["that was right", "mark that right", "heard right", "good transcript"]
+
+[diagnostic.level]
+says = "Show how loud the voice was against the threshold it was judged by"
+phrases = ["how loud am i", "check my level", "am i loud enough", "level check"]

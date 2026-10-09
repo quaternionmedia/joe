@@ -222,7 +222,7 @@ def test_listen_reports_reading_then_what_was_heard(tmp_path, monkeypatch):
     monkeypatch.setattr(voice_module, "_capture_until_silence",
                         lambda **kw: (np.zeros(1600, dtype="float32"), None, True))
     monkeypatch.setattr(voice_module, "resolve_input_device", lambda d: 0)
-    monkeypatch.setattr(voice_module.Voice, "transcribe", lambda self, p: {"text": "approve"})
+    monkeypatch.setattr(voice_module.Voice, "transcribe", lambda self, p, hint=None: {"text": "approve"})
 
     seen = []
     voice_module.Voice(capture_dir=str(tmp_path)).listen(
