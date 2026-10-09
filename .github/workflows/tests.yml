@@ -40,8 +40,16 @@ jobs:
       - name: Install through the lock
         run: uv sync --frozen
 
-      - name: Run the suite
-        run: uv run --frozen pytest tests/ -q
+      # The hermetic walkthrough pages run beside the suite, each named:
+      # pytest ignores `testpaths` once it is handed a path, so a page left
+      # to it would be collected by nobody. The browser page needs Node,
+      # Chromium and the network, and runs in e2e.yml, which provisions them.
+      - name: Run the suite and the hermetic walkthrough pages
+        run: >-
+          uv run --frozen pytest tests
+          walkthrough/01-onboarding.md
+          walkthrough/02-cookbook.md
+          --doctest-glob=*.md -q
 
   # The Playwright specs under tests/e2e/ run in e2e.yml on the same
   # triggers as this suite; playwright.config.js starts the dev server

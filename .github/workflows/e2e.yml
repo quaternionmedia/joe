@@ -24,3 +24,34 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: Run the specs
         run: npm run test:e2e
+
+      # The walkthrough's browser page: the real API and dev server, a
+      # recording through the pipeline, and the piano roll in Chromium. It
+      # drives the browser from Python, whose Playwright pins a Chromium of its
+      # own, so that one is installed too, and launched before the page runs:
+      # an absent browser fails here, by name, rather than inside the page.
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Install the Python environment through the lock
+        run: uv sync --frozen
+      - name: Provision the page's Chromium
+        run: uv run --frozen playwright install chromium
+      - name: Assert the browser launches
+        run: >-
+          uv run --frozen python -c "from playwright.sync_api import sync_playwright;
+          p = sync_playwright().start(); b = p.chromium.launch();
+          print('chromium', b.version); b.close(); p.stop()"
+      - name: Run the browser walkthrough page
+        run: uv run --frozen pytest walkthrough/03-in-the-browser.md --doctest-glob=*.md -q
+
+      # Recorded, never compared: Windows and Linux draw the same page to
+      # different bytes, so a diff here would fail on a font. The pictures are
+      # kept, and the assertions in the page are the regression protection.
+      - name: Keep what it drew
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: walkthrough-media
+          path: walkthrough/media/
+          if-no-files-found: error
