@@ -18,11 +18,16 @@ stay separate on purpose: one page trying to be both serves neither.
 | `uv run joe frontend` | Vite alone |
 | `uv run joe backend` | The API alone |
 | `uv run joe run` | The pipeline once, on the first file in `Data/Audio/` |
+| `uv run joe serve --host H --port P --api-port A --state DIR` | `joe dev` on the addresses given: the API on `A`, then Vite on `P` with `--strictPort`. Data stays in this checkout's `Data/` |
+| `uv run joe check --url U --shots DIR` | `03-in-the-browser` against the joe already serving `U`, with its pictures written to `DIR` |
 | `uv run joe voice setup` | Find the microphone while you talk, save it, and prove it with a transcribed sentence |
 | `uv run joe voice listen` | Record until you stop talking, then transcribe |
 | `uv run joe voice transcribe <path>` | Transcribe an audio file |
 | `uv run joe voice devices` | The audio inputs, with the host API that tells same-named ones apart |
 | `uv run joe voice level` | How loud an input is right now |
+
+`serve` and `check` are the performing family's demo contract, which the qm
+corpus declares once for every member.
 
 That table and the CLI are checked against each other, so a command the CLI
 grows and this page does not name is a failing build:
@@ -33,7 +38,7 @@ grows and this page does not name is a failing build:
 >>> import cli
 >>> group = get_command(cli.app)
 >>> sorted(group.commands)
-['backend', 'dev', 'frontend', 'run', 'voice']
+['backend', 'check', 'dev', 'frontend', 'run', 'serve', 'voice']
 >>> sorted(group.commands['voice'].commands)
 ['devices', 'level', 'listen', 'setup', 'transcribe']
 >>> page = Path('walkthrough/02-cookbook.md').read_text(encoding='utf-8')
@@ -79,6 +84,8 @@ A substring search would not do: `/api/health` is inside `/api/healthz`.
 | `JOE_BARGE_IN` | `Modules/Watch.py` | `0` leaves only the keys to interrupt a question |
 | `JOE_BARGE_FACTOR` | `Modules/Watch.py` | How much louder than the question's echo speech must be to interrupt it |
 | `JOE_WALKTHROUGH_PORTS` | `walkthrough/support.py` | A `lo-hi` range the browser page takes its ports from; the system picks unless set |
+| `JOE_WALKTHROUGH_URL` | `walkthrough/support.py` | A joe already up for the browser page to attach to instead of starting one; `joe check` sets it |
+| `JOE_WALKTHROUGH_SHOTS` | `walkthrough/support.py` | Where the browser page writes its pictures instead of `walkthrough/media/`; `joe check` sets it |
 
 Every variable the code reads is in that table, and every one in the table is
 read somewhere:

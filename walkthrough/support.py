@@ -26,7 +26,9 @@ import urllib.request
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-MEDIA = Path(__file__).resolve().parent / "media"
+# `joe check` points the shutter elsewhere, so a check of a joe somebody else
+# started writes no picture into the checkout.
+MEDIA = Path(os.environ.get("JOE_WALKTHROUGH_SHOTS") or Path(__file__).resolve().parent / "media")
 
 # How long a server gets to answer before it is called unreachable. Generous:
 # a cold start on Windows imports whisper and torch before uvicorn listens.
@@ -152,18 +154,35 @@ class LiveApp:
     The dev server is pointed at this API with `JOE_API_URL`, and at a qmcp
     nobody runs with `QMCP_URL`, so a developer's qmcp cannot put its queue
     into the picture.
+
+    With `JOE_WALKTHROUGH_URL` set -- `joe check --url` sets it -- the page is
+    pointed at a joe on purpose: it attaches to the dev server answering there
+    and reaches the API through that server's proxy, starts nothing, and
+    leaves that joe's Data/ to whoever started it.
     """
 
     def __init__(self) -> None:
+        self.uploaded: list[str] = []
+        attached = os.environ.get("JOE_WALKTHROUGH_URL")
+        self.attached = bool(attached)
+        if attached:
+            parts = urllib.parse.urlsplit(attached)
+            self.web = self.api = f"{parts.scheme}://{parts.netloc}"
+            self.logs = None
+            return
         self.api_port = _port()
         self.web_port = _port(taken=(self.api_port,))
         self.api = f"http://127.0.0.1:{self.api_port}"
         self.web = f"http://127.0.0.1:{self.web_port}"
         self.logs = Path(tempfile.mkdtemp(prefix="joe-walkthrough-"))
         _LEAVING.append(lambda: shutil.rmtree(self.logs, ignore_errors=True))
-        self.uploaded: list[str] = []
 
     def start(self) -> "LiveApp":
+        if self.attached:
+            for url in (f"{self.web}/joe/", f"{self.api}/api/health"):
+                if not _answers(url):
+                    raise Unreachable(f"{url} does not answer")
+            return self
         node = shutil.which("node")
         if node is None:
             raise Unreachable("node is not on PATH; the page is served by Vite")
@@ -213,6 +232,8 @@ class LiveApp:
         raise Unreachable(f"{url} never answered:\n{self.log(name)}")
 
     def log(self, name: str) -> str:
+        if self.logs is None:
+            return ""
         path = self.logs / f"{name}.log"
         return path.read_text(encoding="utf-8", errors="replace")[-2000:] if path.exists() else ""
 

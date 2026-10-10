@@ -28,6 +28,11 @@ this API through `JOE_API_URL`, the same way it finds qmcp through `QMCP_URL`;
 here `QMCP_URL` names a port nobody listens on, so a qmcp running on the
 machine cannot put its queue into the picture.
 
+`uv run joe check --url <page> --shots <directory>` runs this page against a
+joe that is already up instead: `LiveApp` attaches to the dev server at that
+address, reaches the API through its proxy, and starts and removes nothing,
+and the pictures go to that directory rather than beside this page.
+
 Both servers and the browser register their own shutdown as they start.
 doctest stops at a page's first failing example, so teardown written at the
 bottom of a page would be skipped by the run that most needs it.
