@@ -170,9 +170,10 @@ def test_the_margin_over_the_echo_is_the_watch_s(factor, begins):
 
 
 def test_a_voice_rising_into_its_first_word_still_begins_it():
-    """Seen on a virtual cable: an answer about twice the question's loudness
-    rose over three blocks, each raising a tracked echo level ahead of it, and
-    never began. Mutation: keep learning the echo after its window -- red."""
+    """An answer about twice the question's loudness, rising over three
+    blocks, begins the take: the echo's level is learned in its window and
+    then held, not tracked. Mutation: keep learning the echo after its
+    window -- red."""
     watch = _Watch()
     blocks = ([_blk(ROOM)] * 2 + _echo(20) + [_blk(level) for level in (0.04, 0.07, 0.12, 0.12, 0.12)]
               + [_blk(ROOM)] * 6)

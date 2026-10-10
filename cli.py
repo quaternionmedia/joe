@@ -123,8 +123,8 @@ def voice_devices():
         raise typer.Exit(1)
 
     # Host API in the line because the name is not unique: the same
-    # microphone appears once per API, and a list you cannot choose from is
-    # not a list.
+    # microphone appears once per API, and a listing by name alone cannot be
+    # chosen from.
     from Modules.Voice import saved_input_device
 
     saved = saved_input_device()

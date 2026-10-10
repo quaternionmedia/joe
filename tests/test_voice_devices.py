@@ -1,9 +1,8 @@
 """Choosing an input device, and refusing one that cannot be recorded from.
 
-A machine here lists twenty inputs across four host APIs, with the same
-microphone appearing under a byte-identical name three times. None of these
-tests touch hardware: `sounddevice` is replaced, because the point is the
-choosing and the refusing, both of which are ours.
+The same microphone can appear under a byte-identical name on several host
+APIs. None of these tests touch hardware: `sounddevice` is replaced, because
+the choosing and the refusing are joe's own.
 """
 
 from __future__ import annotations
@@ -134,11 +133,11 @@ def test_a_fragment_matching_nothing_says_so(monkeypatch):
 # ─── recording on the device's own terms ──────────────────────────────────────
 
 def test_capture_opens_at_the_device_s_native_rate(monkeypatch):
-    """Forcing 16 kHz failed on every device on one machine here.
+    """Many devices refuse 16 kHz (WASAPI answers "Invalid sample rate").
 
-    WASAPI said "Invalid sample rate" outright; the others said less. The
-    device is opened on its terms and converted afterwards, because 16 kHz
-    mono is what whisper wants from the *file*, not from the microphone.
+    The device is opened on its terms and converted afterwards, because
+    16 kHz mono is what whisper wants from the *file*, not from the
+    microphone.
     """
     calls = _fake_sd(monkeypatch)
 
@@ -170,11 +169,10 @@ def test_a_backend_error_names_the_device_and_the_format(monkeypatch):
 # ─── refusing a device that opens and delivers nothing usable ─────────────────
 
 def test_a_device_returning_out_of_range_samples_is_refused(monkeypatch):
-    """One WDM-KS input here opens cleanly and returns about -2e38.
+    """An input can open cleanly and return about -2e38.
 
-    The level meter read that as the loudest device on the machine and
-    reported it as the one to use — a confident wrong answer, which is
-    worse than the silence the meter was written to find.
+    Refused, so the level meter cannot report it as the loudest device on
+    the machine.
     """
     junk = np.full((48000, 2), -2e38, dtype="float32")
     _fake_sd(monkeypatch, frames=junk)
@@ -184,10 +182,10 @@ def test_a_device_returning_out_of_range_samples_is_refused(monkeypatch):
 
 
 def test_a_device_returning_nan_is_refused(monkeypatch):
-    """The guard used `peak > 1.5` first, and every comparison with NaN is False.
+    """Every comparison with NaN is False, so the guard is `not (peak <= 1.5)`.
 
-    The same devices return NaN as readily as 1e38, so that version let a
-    run through and printed `peak nan` as a result.
+    The same devices return NaN as readily as 1e38, and `peak > 1.5` would
+    let such a run through and report `peak nan` as a level.
     """
     junk = np.full((48000, 2), np.nan, dtype="float32")
     _fake_sd(monkeypatch, frames=junk)
