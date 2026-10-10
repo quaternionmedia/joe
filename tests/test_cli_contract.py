@@ -58,3 +58,20 @@ def test_check_with_nothing_answering_cannot_say_rather_than_fail(tmp_path):
     assert result.exit_code == cli.CANNOT_SAY == 3
     assert "nothing answers at http://127.0.0.1:9/joe/" in result.output
     assert not (tmp_path / "shots").exists()
+
+
+def test_check_with_a_broken_pytest_cannot_say_rather_than_fail(tmp_path, monkeypatch):
+    """`python -m` exits 1 for a missing module, which is a failed assertion's status."""
+    monkeypatch.setattr(cli, "_answers", lambda url, timeout=2.0: True)
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "index.html").write_text("<html></html>", encoding="utf-8")
+    monkeypatch.setattr(cli, "ROOT", tmp_path)  # a page loading nothing from the network
+    broken = cli.subprocess.CompletedProcess(
+        [], 1, "", "No module named pytest.__main__; 'pytest' is a package")
+    monkeypatch.setattr(cli.subprocess, "run", lambda *args, **kwargs: broken)
+
+    result = runner.invoke(cli.app, [
+        "check", "--url", "http://127.0.0.1:18430/joe/", "--shots", str(tmp_path / "shots")])
+
+    assert result.exit_code == cli.CANNOT_SAY
+    assert "pytest does not run here" in result.output

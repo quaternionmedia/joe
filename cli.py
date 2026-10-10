@@ -212,6 +212,12 @@ def check(
     for script in re.findall(r'<script src="(https://[^"]+)"', page):
         if not _answers(script, timeout=10):
             cannot_say(f"the page loads {script} from the network, and it did not answer")
+    # Python exits 1 when it cannot find a module, which is also the status of
+    # a failed assertion: a broken pytest would read as joe failing.
+    runner = subprocess.run([sys.executable, "-m", "pytest", "--version"],
+                            capture_output=True, text=True, check=False)
+    if runner.returncode != 0:
+        cannot_say(f"pytest does not run here: {(runner.stderr or runner.stdout).strip()[-200:]}")
     try:
         from playwright.sync_api import sync_playwright
 
