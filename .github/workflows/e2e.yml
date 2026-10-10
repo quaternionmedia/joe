@@ -1,10 +1,8 @@
 name: e2e
 
-# The Playwright specs. The first dispatch (2026-09-28) was expected red on
-# the belief that the specs needed a server nothing starts — it came back
-# green, 25 passed, because playwright.config.js starts the dev server
-# itself through its webServer block. So the specs run wherever Playwright
-# runs, and the trigger is as wide as the Python suite's.
+# The Playwright specs. playwright.config.js starts the dev server itself
+# through its webServer block, so the specs need no server step and run
+# wherever Playwright runs, on the same triggers as the Python suite.
 
 on:
   push:
