@@ -33,10 +33,9 @@ def list_input_devices() -> list[dict]:
     is unreachable (e.g. no PortAudio host API on this machine) — that is a
     "no microphone" fact, not a crash.
 
-    **`hostapi` is in the entry because the name is not unique.** One machine
-    here lists twenty inputs and the same microphone appears three times,
-    once per host API, under a byte-identical name. A list keyed on the name
-    alone cannot be chosen from.
+    `hostapi` is in the entry because the name is not unique: one microphone
+    can appear once per host API under a byte-identical name, and a list
+    keyed on the name alone cannot be chosen from.
     """
     try:
         import sounddevice as sd
@@ -118,15 +117,10 @@ def resolve_input_device(wanted: int | str | None) -> int | None:
 def _native_format(index: int | None) -> tuple[int, int]:
     """The rate and channel count a device will actually open at.
 
-    **RECORDING FORCED 16 kHz MONO AND MOST DEVICES REFUSE IT.** On one
-    machine here every input is natively 44100 or 48000 Hz, and asking for
-    16000 failed on all four host APIs with four different errors -- WASAPI
-    said "Invalid sample rate", the others said less. Nothing could record,
-    including the backend's own default.
-
-    So the device is opened on its terms and the audio is converted
-    afterwards, which is the only order that works: whisper wants 16 kHz
-    mono, and that is a property of the file, not of the microphone.
+    Many devices refuse to open at 16 kHz mono (WASAPI answers "Invalid
+    sample rate"), so the device is opened on its terms and the audio is
+    converted afterwards: whisper wants 16 kHz mono, and that is a property
+    of the file, not of the microphone.
     """
     import sounddevice as sd
 
@@ -138,7 +132,7 @@ def _native_format(index: int | None) -> tuple[int, int]:
     except (KeyError, TypeError):
         # A device dict without the fields PortAudio always supplies. Fall
         # back rather than refuse: 44100 mono opens on more devices than
-        # 16000 does, which is the whole reason this function exists.
+        # 16000 does.
         return 44100, 1
     except Exception:
         return 44100, 1
@@ -192,18 +186,14 @@ def _capture(duration: float, device: int | str | None, target_rate: int = 16000
 def _reject_unusable(frames, index: int | None) -> None:
     """Refuse samples no microphone produced.
 
-    **A DEVICE CAN OPEN AND STILL HAND BACK NOTHING USABLE.** float32
-    capture is in [-1, 1]. One WDM-KS input here opens without error and
-    returns values around -2e38 -- uninitialised memory, not sound. The
-    level meter read that as the loudest device on the machine and
-    reported it as the one to use, which is worse than the silence it was
-    written to find: a confident wrong answer instead of no answer.
+    A device can open and still hand back nothing usable: float32 capture is
+    in [-1, 1], and some inputs open without error and return values around
+    -2e38, or NaN -- uninitialised memory, not sound. Refused here, such a
+    device cannot read as the loudest on the machine to the level meter.
     """
     peak = float(np.abs(frames).max()) if frames.size else 0.0
     # `not (peak <= 1.5)` rather than `peak > 1.5`, because the same devices
-    # also return NaN, and every comparison with NaN is False. The first
-    # version of this guard used `>` and a NaN run walked straight through
-    # it and reported `peak nan` as the loudest device on the machine.
+    # also return NaN, and every comparison with NaN is False.
     if not (peak <= 1.5):
         raise NoMicrophoneError(
             f"Device {index if index is not None else 'default'} returned samples "
@@ -300,12 +290,12 @@ def _capture_until_silence(
     runs from there as any other. A watch closed at any point raises
     `Unwatched` at the next block.
 
-    **BLOCKS ARRIVE THROUGH A CALLBACK, NOT `stream.read()`.** PortAudio's
+    **Blocks arrive through a callback**, not `stream.read()`. PortAudio's
     WDM-KS host API does not implement blocking reads: `stream.read` fails
     there with "Blocking API not supported yet", while `sd.rec` -- itself
-    callback-driven -- records from the same device. The level sweep used
-    one path and this used the other, so `joe voice setup` chose a device by
-    its sweep and then could not record from it.
+    callback-driven, and what the level sweep records with -- records from
+    the same device. Reading the same way, this records from any device the
+    sweep heard.
     """
     index = resolve_input_device(device)
     rate, channels = _native_format(index)
@@ -314,8 +304,8 @@ def _capture_until_silence(
 
     block_seconds = 0.1
     block_frames = max(1, int(rate * block_seconds))
-    # round, not int: 0.3 / 0.1 is 2.999… in floats, and truncation quietly
-    # shortened every wait by one block.
+    # round, not int: 0.3 / 0.1 is 2.999… in floats, and truncation would
+    # shorten every wait by one block.
     max_blocks = max(1, round(max_duration / block_seconds))
     from Modules.Control import HOLD_SECONDS, Answered
 
@@ -498,8 +488,8 @@ def _capture_until_silence(
 
 
 # Host APIs in the order a recording should prefer them, for one microphone
-# listed under several. WDM-KS is last: it is where devices here open and
-# return uninitialised memory, and where blocking reads are not implemented.
+# listed under several. WDM-KS is last: inputs on it can open and return
+# uninitialised memory, and it does not implement blocking reads.
 # A host API not named here (ALSA, Core Audio, ...) is usually the only one
 # its microphone appears under, so its place matters little.
 HOSTAPI_PREFERENCE = ("Windows WASAPI", "MME", "Windows DirectSound")
@@ -511,14 +501,14 @@ def rank_candidates(heard: list[tuple[float, dict]]) -> list[dict]:
 
     `heard` is `(rms, device)` for every input that was not silent.
 
-    **LOUDNESS CHOOSES THE MICROPHONE; THE HOST API CHOOSES THE ENTRY.** One
+    Loudness chooses the microphone; the host API chooses the entry. One
     microphone appears once per host API under a byte-identical name, and the
     entries differ in level only by gain staging -- WDM-KS bypasses the
-    system mixer and reads loudest. Taking the loudest entry outright chose
-    the least reliable way to reach the right microphone. So microphones are
-    ranked by the loudest of their entries, and each one's entries by
-    `HOSTAPI_PREFERENCE`; every heard entry stays in the list, so a caller
-    that cannot record from one falls through to the next.
+    system mixer and reads loudest, and is the least reliable way to reach
+    the microphone. So microphones are ranked by the loudest of their
+    entries, and each one's entries by `HOSTAPI_PREFERENCE`; every heard
+    entry stays in the list, so a caller that cannot record from one falls
+    through to the next.
     """
     loudest: dict[str, float] = {}
     for rms, d in heard:
@@ -743,14 +733,11 @@ class Voice:
         after the speaker stops — the polite listener, off by default here
         so library callers keep exact-length semantics.
 
-        `device` is an index or a name fragment; `None` takes the backend's
-        default, which is what this did unconditionally before. The default
-        is frequently not a microphone — on one machine here it is a capture
-        card — and a loop recording silence from it looks exactly like a
-        loop that mis-heard.
-
-        Falls back to `JOE_INPUT_DEVICE` when nothing is passed, so the
-        choice is made once rather than on every call.
+        `device` is an index or a name fragment. With none, a recording
+        takes `JOE_INPUT_DEVICE` if set, else the microphone `joe voice
+        setup` saved, else the backend's default. The default is not always
+        a microphone -- it can be a capture card -- and a loop recording
+        silence from it looks exactly like a loop that mis-heard.
 
         Raises NoMicrophoneError, rather than a raw PortAudio/OSError, when
         there is no usable input device — checked before recording so the
@@ -889,11 +876,10 @@ def input_level(duration: float = 1.0, device: int | str | None = None,
                 sample_rate: int = 16000) -> dict:
     """Record briefly and report how loud it was. Nothing is kept.
 
-    **THE POINT OF THIS IS CHOOSING.** A machine here lists twenty inputs,
-    several with identical names, and no listing says which one a voice
-    actually arrives on. Recording a second from a candidate and reading the
-    level answers that in a way reading names cannot: speak, and the one
-    that moves is yours.
+    For choosing an input: several can share a name, and no listing says
+    which one a voice arrives on. Recording a second from a candidate and
+    reading the level answers that in a way reading names cannot: speak, and
+    the one that moves is the one to use.
 
     Returns `{"device", "name", "peak", "rms", "silent"}`, with levels in
     the 0..1 range `sd.rec` produces. `silent` is the useful field — a

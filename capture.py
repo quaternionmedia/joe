@@ -1,9 +1,9 @@
 """
 AudioCapture — backend audio recording via sounddevice + soundfile.
 
-Pattern from notebooks/meetbot.ipynb: sounddevice InputStream callback pushes
-frames into a queue; a background thread drains the queue and writes to disk.
-This decouples the real-time audio callback from I/O, preventing dropouts.
+A sounddevice InputStream callback pushes frames into a queue, and a
+background thread drains the queue to disk, as notebooks/meetbot.ipynb does:
+the real-time audio callback never waits on I/O, which prevents dropouts.
 
 Usage (via api.py):
     capture = AudioCapture()

@@ -157,10 +157,8 @@ def test_run_on_file_missing_file_is_404(client, no_subprocess):
 
 # ─── _resolve_audio_path (the voice routes) ───────────────────────────────────
 #
-# POST /api/voice/transcribe takes a filename too, and used its own resolver
-# which applied none of the rules above: `good.wav.` was 404 on /api/audio and
-# 200 here, and a NUL byte raised out of the handler as a 500. Both resolvers
-# now share `_is_bare_filename`, and these hold them to the same list.
+# POST /api/voice/transcribe takes a filename too. Its resolver and the audio
+# routes' share `_is_bare_filename`, and these hold them to the same list.
 #
 # It resolves against a relative `Data/Audio` and `Data/Voice` rather than
 # AUDIO_DIR, so the fixture below moves the working directory instead of
@@ -193,11 +191,11 @@ def test_resolve_audio_path_finds_a_file_under_data_voice(voice_dirs):
 
 @pytest.mark.parametrize("name", BAD_HANDLER_NAMES)
 def test_resolve_audio_path_rejects_non_bare_names(voice_dirs, name):
-    """The same list the audio route is held to — including the aliases.
+    """The same list the audio route is held to, including the aliases.
 
-    `good.wav.` and `"good.wav "` are the ones that matter: the file they
-    alias exists, so a resolver that only checked containment returned it
-    and the endpoint transcribed a file under a name no listing shows.
+    `good.wav.` and `"good.wav "` alias a file that exists, so a resolver
+    checking only containment would return it, and the endpoint would
+    transcribe a file under a name no listing shows.
     """
     with pytest.raises(HTTPException) as excinfo:
         api._resolve_audio_path(name)
@@ -212,7 +210,7 @@ def test_resolve_audio_path_rejects_missing_file(voice_dirs):
 
 @pytest.mark.parametrize("name", BAD_HANDLER_NAMES)
 def test_both_resolvers_agree_on_every_bad_name(audio_dir, voice_dirs, name):
-    """The defect was disagreement, so the property is agreement."""
+    """Both resolvers give every bad name the same answer."""
     for resolver in (api._audio_file, api._resolve_audio_path):
         with pytest.raises(HTTPException) as excinfo:
             resolver(name)

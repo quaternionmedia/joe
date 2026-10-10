@@ -27,8 +27,7 @@ def test_voice_devices_shows_the_host_api():
     """The name alone does not identify a device.
 
     The same microphone appears once per host API under a byte-identical
-    name — four times, on one machine here — so a listing without the API
-    cannot be chosen from.
+    name, so a listing without the API cannot be chosen from.
     """
     devices = [
         {"index": 1, "name": "USB Mic", "channels": 2, "default": True,
@@ -54,10 +53,9 @@ def test_voice_devices_exits_nonzero_when_none_found():
 
 def test_a_diagnostic_survives_a_console_that_cannot_take_it(monkeypatch):
     """Under a MinTTY terminal, click's Windows console writer can raise
-    OSError (Windows error 6) on the wrapped stderr — and the one message
-    that mattered ("nothing above silence") died inside its own printing.
-    The message outranks its styling: it falls back to the interpreter's
-    original stream, and the command still exits 1 rather than crashing."""
+    OSError (Windows error 6) on the wrapped stderr. The message outranks its
+    styling: it falls back to the interpreter's original stream, and the
+    command still exits 1 rather than crashing."""
     import io
     import sys as real_sys
 
