@@ -882,9 +882,9 @@ def input_level(duration: float = 1.0, device: int | str | None = None,
     the one that moves is the one to use.
 
     Returns `{"device", "name", "peak", "rms", "silent"}`, with levels in
-    the 0..1 range `sd.rec` produces. `silent` is the useful field — a
-    device returning digital silence is either the wrong one or muted, and
-    both look the same in a device list.
+    the 0..1 range `sd.rec` produces. `silent` says whether anything
+    arrived: a device returning digital silence is either the wrong one or
+    muted, and both look the same in a device list.
     """
     frames, index = _capture(duration, device, target_rate=sample_rate)
 

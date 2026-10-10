@@ -388,8 +388,8 @@ and read the peaks.
 { "device": 12, "name": "USB Microphone", "peak": 0.0812, "rms": 0.0091, "silent": false }
 ```
 
-`silent` is the useful field: a device returning digital silence is either
-the wrong one or muted, and a device list cannot tell those apart.
+`silent` says whether anything arrived: a device returning digital silence
+is either the wrong one or muted, and a device list cannot tell those apart.
 
 **Errors**
 
