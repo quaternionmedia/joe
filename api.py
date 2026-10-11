@@ -28,6 +28,8 @@ Endpoints:
     GET  /api/voice/takes/{take}/audio  One take's recording, for the visualiser
     POST /api/voice/strike          Strike or restore a word of the take being transcribed
     GET  /api/voice/transcript      The take being transcribed, or the last one, once
+    POST /family/cue                A hub's cue: a take, synthesized and run through the pipeline
+    GET  /family/state              The last cue taken, the latest take's result, and whether one is running
 
 Run directly:
     python -m uvicorn api:app --reload --port 8000
@@ -39,6 +41,7 @@ Or via the CLI:
 import asyncio
 import json
 import os
+import subprocess
 import sys
 import threading
 from datetime import datetime
@@ -46,11 +49,11 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from capture import AudioCapture
 
-from Modules import Cue
+from Modules import Cue, Family
 from Modules.Control import Control
 from Modules.Transcript import Datapoints, LiveTranscript
 from Modules.Conversation import POSTED, Conversation
@@ -795,3 +798,64 @@ def voice_level(duration: float = 1.0, device: str | None = None):
         return input_level(duration=duration, device=device)
     except NoMicrophoneError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
+
+
+# ─── The performing family ────────────────────────────────────────────────────
+#
+# The hub (ShowRunner) fires a cue and POSTs joe its part of the cue's family
+# block. Both routes live on this API's port, beside /api, so the hub reaches
+# joe at the address `joe serve --api-port` binds. Modules/Family.py holds the
+# take; these routes only answer for it.
+
+def _run_pipeline(path: Path) -> int:
+    """`POST /api/run/{filename}`'s pipeline, from a worker thread: main.py on one file."""
+    done = subprocess.run(
+        [sys.executable, str(_MAIN_PY)],
+        env={**os.environ, "JOE_AUDIO_FILE": str(path)},
+        cwd=str(_PROJECT_ROOT),
+        capture_output=True,
+        timeout=120,
+        check=False,
+    )
+    return done.returncode
+
+
+# The take is saved where the page's recordings go, and its result read where
+# the pipeline writes: main.py resolves Data/ against the checkout, whatever
+# this process's working directory.
+family = Family.Member(audio_dir=AUDIO_DIR, output_dir=_PROJECT_ROOT / "Data" / "Output",
+                       run=_run_pipeline)
+
+
+def _not_understood(error: str) -> JSONResponse:
+    return JSONResponse(status_code=422, content={"ok": False, "error": error})
+
+
+@app.post("/family/cue")
+async def family_cue(request: Request):
+    """A hub's cue. Body: `{"cue": {"number", "name", "fired_at"}, "action": {"take":
+    {"notes": [...], "seconds_per_note": 0.5}}}`.
+
+    `202` with the state, busy, once the take is accepted: it is synthesized
+    and run through the pipeline after the answer. `422` for anything else --
+    a body that is not JSON, a cue that is not an object, or an action joe
+    does not understand -- and nothing changes.
+    """
+    try:
+        body = await request.json()
+    except ValueError:
+        return _not_understood("the body must be JSON: {\"cue\": {...}, \"action\": {...}}")
+    if not isinstance(body, dict):
+        return _not_understood("the body must be an object: {\"cue\": {...}, \"action\": {...}}")
+    try:
+        state = family.receive(body.get("cue"), body.get("action"))
+    except Family.NotUnderstood as error:
+        return _not_understood(str(error))
+    return JSONResponse(status_code=202, content={"ok": True, "state": state})
+
+
+@app.get("/family/state")
+def family_state():
+    """The last cue joe took, the latest take's file and note events, and whether
+    a take is still running. `error` is the last take's failure, if it failed."""
+    return {"member": "joe", "cue": family.cue, "state": family.state()}

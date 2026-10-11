@@ -58,15 +58,35 @@ headings and the routes the app serves are the same set, by method and path:
 ```python
 >>> import api, re
 >>> served = {(method, route.path) for route in api.app.routes
-...           if route.path.startswith('/api/') for method in route.methods}
+...           if route.path.startswith(('/api/', '/family/')) for method in route.methods}
 >>> reference = Path('docs/api.md').read_text(encoding='utf-8')
->>> headed = set(re.findall(r'^#{2,4} `([A-Z]+) (/api/[^`]+)`', reference, flags=re.M))
+>>> headed = set(re.findall(r'^#{2,4} `([A-Z]+) (/(?:api|family)/[^`]+)`', reference, flags=re.M))
 >>> sorted(served - headed), sorted(headed - served)
 ([], [])
 
 ```
 
 A substring search would not do: `/api/health` is inside `/api/healthz`.
+
+### The performing family
+
+A hub firing a show's cues reaches joe on two routes of the API's own port --
+`--api-port` under `joe serve` -- outside `/api`, so the dev server does not
+proxy them:
+
+```python
+>>> sorted((method, path) for method, path in served if path.startswith('/family/'))
+[('GET', '/family/state'), ('POST', '/family/cue')]
+
+```
+
+| Route | Does |
+| --- | --- |
+| `POST /family/cue` | `{"cue": {...}, "action": {"take": {"notes": ["C4", "E4"], "seconds_per_note": 0.5}}}`: synthesizes the notes into `Data/Audio/` and runs the pipeline on them. `202` with the state at once; `422 {"ok": false, "error": ...}` for anything else, changing nothing |
+| `GET /family/state` | `{"member": "joe", "cue": <the last cue accepted>, "state": {"latest": {"file", "events"} or null, "busy", "error"}}` |
+
+`tests/test_family.py` holds both to those answers, and runs one take through
+the real API and the real pipeline. `docs/api.md` has the details.
 
 ## Environment
 
@@ -83,7 +103,7 @@ A substring search would not do: `/api/health` is inside `/api/healthz`.
 | `JOE_DATAPOINTS` | `Modules/Transcript.py` | `0` writes no segment datapoints |
 | `JOE_BARGE_IN` | `Modules/Watch.py` | `0` leaves only the keys to interrupt a question |
 | `JOE_BARGE_FACTOR` | `Modules/Watch.py` | How much louder than the question's echo speech must be to interrupt it |
-| `JOE_WALKTHROUGH_PORTS` | `walkthrough/support.py` | A `lo-hi` range the browser page takes its ports from; the system picks unless set |
+| `JOE_WALKTHROUGH_PORTS` | `walkthrough/support.py` | A `lo-hi` range the browser page, and the family's end-to-end test, take their ports from; the system picks unless set |
 | `JOE_WALKTHROUGH_URL` | `walkthrough/support.py` | A joe already up for the browser page to attach to instead of starting one; `joe check` sets it |
 | `JOE_WALKTHROUGH_SHOTS` | `walkthrough/support.py` | Where the browser page writes its pictures instead of `walkthrough/media/`; `joe check` sets it |
 

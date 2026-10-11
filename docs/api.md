@@ -599,6 +599,76 @@ different outputs is refused.
 
 ---
 
+## The performing family
+
+A hub -- ShowRunner, firing a show's cues -- delivers joe its part of a cue's
+`family` block on these two routes. They are on this API's own port, beside
+`/api`, so under `joe serve` the hub reaches them at `--api-port`. The Vite dev
+server does not proxy them.
+
+### `POST /family/cue`
+
+A cue, and the take it asks for: joe synthesizes the notes as a recording in
+`Data/Audio/`, named `cue-<number>_<timestamp>.wav`, and runs the pipeline on
+it as `POST /api/run/{filename}` would. That takes seconds, so the answer comes
+at once and the take finishes after it. Takes run one at a time, in the order
+their cues came.
+
+**Body**
+
+```json
+{"cue": {"number": "3", "name": "Second tune", "fired_at": "2026-10-10T20:00:00+00:00"},
+ "action": {"take": {"notes": ["C4", "E4", "G4", "C5"], "seconds_per_note": 0.5}}}
+```
+
+`notes` is 1 to 16 note names (`C4`, `F#3`, `Bb2`; C4 is MIDI 60).
+`seconds_per_note` is 0.1 to 4, and 0.5 when left out.
+
+**Response** — `202 Accepted`, with the state as it stands, busy:
+
+```json
+{"ok": true, "state": {"latest": null, "busy": true, "error": null}}
+```
+
+| Status | Reason |
+| --- | --- |
+| `422` | `{"ok": false, "error": "..."}`: a body that is not a JSON object, a `cue` that is not an object, or an action that is not exactly a `take` joe can play. Nothing changes, not even the last cue |
+
+**curl**
+
+```bash
+curl -X POST http://localhost:8000/family/cue -H "Content-Type: application/json" \
+  -d '{"cue": {"number": "3", "name": "Second tune", "fired_at": "2026-10-10T20:00:00Z"}, "action": {"take": {"notes": ["C4", "E4", "G4", "C5"], "seconds_per_note": 0.5}}}'
+```
+
+### `GET /family/state`
+
+The last cue joe accepted, and how its takes stand.
+
+**Response** — `200 OK`
+
+```json
+{"member": "joe",
+ "cue": {"number": "3", "name": "Second tune", "fired_at": "2026-10-10T20:00:00+00:00"},
+ "state": {"latest": {"file": "cue-3_20261010_200000_123456.wav", "events": 12},
+           "busy": false, "error": null}}
+```
+
+`cue` is `null` until a cue is accepted. `latest` is the newest take the
+pipeline finished, by its file in `Data/Audio/` and the note events found in it
+across Raw, Harmonic and Percussive -- the count the page's results panel
+shows -- and `null` until one has. `busy` is true while a take is waiting or
+running. `error` is the last take's failure, if it failed, and `latest` then
+keeps the take before it.
+
+**curl**
+
+```bash
+curl http://localhost:8000/family/state
+```
+
+---
+
 ## Interactive docs
 
 FastAPI auto-generates an interactive API explorer at:
