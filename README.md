@@ -69,6 +69,13 @@ the panel shows the turn as it happens. Nothing is spoken until the button is
 pressed. If the conversation cannot start, the panel shows qmcp's own reason.
 The dev server reaches qmcp at `http://localhost:3141`; `QMCP_URL` moves it.
 
+**Instructing by voice from the page:** **Instruct by voice** in the bottom bar
+has qmcp ask aloud what should be done and take the answer into its
+instruction inbox; the panel shows the turn, and when it ends, the newest row
+in the inbox — the words, the project they resolved to or "no project", and
+whether the row is recorded or unresolved. A qmcp without the inbox answers
+404, and the panel says so; the queue above keeps working.
+
 See [docs/api.md](docs/api.md) for the full API endpoint reference.
 
 ### Python setup
@@ -140,7 +147,7 @@ The Vite frontend (`src/`) has three layers:
 ### Bottom bar control groups
 
 ```text
-[Joe, go!] | [Browser|Backend] [Live] [dot] | [LIVE|RESULTS] [Play] [Stop] [scrub] | [Library] [Results]
+[Joe, go!] | [Browser|Backend] [Live] [dot] | [LIVE|RESULTS] [Play] [Stop] [scrub] | [Library] [Results] | [Instruct by voice]
 ```
 
 | Group | Controls | Notes |
@@ -149,6 +156,7 @@ The Vite frontend (`src/`) has three layers:
 | Live capture | mode select + `Live` + indicator | Browser = MediaRecorder mic; Backend = sounddevice WAV |
 | Transport | mode badge + `Play/Stop` + scrub + `×` eject | Disabled while recording; badge shows `LIVE` or `RESULTS`; `×` clears active source |
 | Panels | `Library` + `Results` | Slide-in panels for file management and analysis output |
+| Voice | `Instruct by voice` | One spoken instruction into qmcp's inbox; the outcome shows in the voice panel |
 
 See [docs/cookbook.md](docs/cookbook.md) for step-by-step recipes.
 

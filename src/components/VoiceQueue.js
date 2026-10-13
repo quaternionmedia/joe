@@ -36,7 +36,9 @@ export class VoiceQueue {
   }
 
   mount() {
-    this._panel.keepOpen = () => this.pending.length > 0 || this.running;
+    // Chained, not replaced: whatever else lives in the panel holds it open too.
+    const prior = this._panel.keepOpen;
+    this._panel.keepOpen = () => prior() || this.pending.length > 0 || this.running;
     this._button.addEventListener('click', () => this.answer());
     this._poll();
   }
