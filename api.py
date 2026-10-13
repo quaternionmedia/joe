@@ -366,6 +366,7 @@ def voice_listen(
     device: str | None = None,
     until_silence: bool = True,
     silence_ms: int = 800,
+    hint: str | None = None,
 ):
     """Records from an input device and transcribes it.
 
@@ -377,11 +378,17 @@ def voice_listen(
 
     `device` is an index or a name fragment; omitted, the server's default
     input is used, or `JOE_INPUT_DEVICE` if that is set.
+
+    `hint` is the words a short answer is expected to be, comma-separated --
+    "approve, hold" -- handed to the transcriber as its prompt. It biases and
+    never constrains: what was heard is what comes back.
     """
     if not 0 < duration <= 60:
         raise HTTPException(status_code=400, detail="duration must be between 0 and 60 seconds")
     if not 100 <= silence_ms <= 5000:
         raise HTTPException(status_code=400, detail="silence_ms must be between 100 and 5000")
+    if hint is not None and len(hint) > 500:
+        raise HTTPException(status_code=400, detail="hint must be at most 500 characters")
     voice = Voice()
     try:
         return voice.listen(
@@ -390,6 +397,7 @@ def voice_listen(
             until_silence=until_silence,
             silence_after=silence_ms / 1000,
             on_event=_report,
+            hint=hint,
         )
     except NoMicrophoneError as exc:
         conversation.publish("idle", text=f"The microphone could not record: {exc}")

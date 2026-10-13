@@ -467,6 +467,55 @@ def microphone_available() -> bool:
     return default_input_device() is not None
 
 
+# A take this short or shorter is decoded with a beam: the extra search costs
+# little on a word or two, and a one-word answer has no context to recover a
+# greedy first guess from.
+SHORT_SECONDS = 3.0
+HINT_WORDS = 12
+HINT_CHARS = 40
+
+
+def hint_prompt(hint: str | None) -> str | None:
+    """The words an answer is expected to be, as whisper's initial prompt.
+
+    `hint` is comma-separated -- "approve, hold" -- and arrives from whoever
+    asked the question. A prompt biases the decoder toward its vocabulary and
+    never constrains it: what was heard is still what comes back. Blank
+    entries are dropped and the list is bounded, so a caller cannot hand the
+    decoder a paragraph."""
+    if not hint:
+        return None
+    words = [w.strip() for w in hint.split(",") if w.strip()][:HINT_WORDS]
+    words = [w[:HINT_CHARS] for w in words]
+    return ", ".join(words) + "." if words else None
+
+
+def decode_options(hint: str | None, seconds: float, cuda: bool = False) -> dict:
+    """How one take is decoded.
+
+    - **English, unless `JOE_LANGUAGE` says otherwise** ("auto" detects). On a
+      one-word clip whisper's language detection has almost nothing to go on,
+      and a wrong guess transcribes "yes" in another language.
+    - **One utterance, not a stream.** `condition_on_previous_text` carries a
+      window's text into the next, which a take shorter than a window never
+      needs and a hallucinated first window poisons.
+    - **fp32 off the GPU**, which whisper otherwise falls back to with a
+      warning on every call.
+    - **The expected words as the prompt**, when the question said them.
+    - **A beam on a short take.**
+    """
+    options: dict = {"condition_on_previous_text": False, "fp16": cuda}
+    language = os.environ.get("JOE_LANGUAGE", "en")
+    if language != "auto":
+        options["language"] = language
+    prompt = hint_prompt(hint)
+    if prompt:
+        options["initial_prompt"] = prompt
+    if seconds <= SHORT_SECONDS:
+        options.update(beam_size=5, best_of=5)
+    return options
+
+
 class Voice:
     """Speech-to-text and microphone capture, backed by whisper + sounddevice."""
 
@@ -489,12 +538,13 @@ class Voice:
             cls._model_size = model_size
         return cls._model
 
-    def transcribe(self, file_path: str) -> dict:
+    def transcribe(self, file_path: str, hint: str | None = None) -> dict:
         """Transcribe an existing audio file to text.
 
         Loads the audio with librosa (soundfile-backed) rather than handing
         whisper a path, so this does not depend on an `ffmpeg` binary being
         on PATH — whisper only shells out to ffmpeg when given a path.
+        `hint` is the words the audio is expected to be (`decode_options`).
 
         Returns: {"text": str, "segments": list, "language": str}
         """
@@ -504,7 +554,10 @@ class Voice:
 
         audio, _ = librosa.load(file_path, sr=16000, mono=True)
         model = self._load_model(self.model_size)
-        result = model.transcribe(audio)
+        # The model's own device decides fp16, rather than importing torch to
+        # ask whether a GPU exists that the model may not be on.
+        cuda = getattr(getattr(model, "device", None), "type", None) == "cuda"
+        result = model.transcribe(audio, **decode_options(hint, len(audio) / 16000, cuda))
         return {
             "text": result.get("text", "").strip(),
             "segments": result.get("segments", []),
@@ -596,6 +649,7 @@ class Voice:
         until_silence: bool = False,
         silence_after: float = 0.8,
         on_event=None,
+        hint: str | None = None,
     ) -> dict:
         """Record from an input device and transcribe the result in one step.
 
@@ -607,6 +661,7 @@ class Voice:
 
         `on_event` hears the turn as `_capture_until_silence` describes,
         then `no_speech`, or `transcribing` and `heard` with the text.
+        `hint` is the words the answer is expected to be, for the transcriber.
         """
         wav_path, speech_detected = self._take(
             duration, sample_rate, device, until_silence, silence_after, on_event
@@ -616,7 +671,7 @@ class Voice:
             result = {"text": "", "segments": [], "language": None}
         else:
             _tell(on_event, "transcribing")
-            result = self.transcribe(wav_path)
+            result = self.transcribe(wav_path, hint=hint)
             _tell(on_event, "heard", text=result.get("text", ""))
         result["audio_path"] = wav_path
         result["speech_detected"] = speech_detected

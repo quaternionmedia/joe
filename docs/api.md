@@ -325,6 +325,14 @@ less.
 | `until_silence` | bool | `true` | stop when the speaker stops: sustained speech starts the take and `silence_ms` of quiet after it ends it. `false` records the whole `duration` |
 | `silence_ms` | int | `800` | trailing quiet that ends an endpointed take, `100..5000` |
 | `device` | string | *see below* | an input index, or a fragment of a device name. A fragment matching several devices is a `503` rather than a guess. Omitted: `JOE_INPUT_DEVICE` if set, else the microphone `joe voice setup` saved, else the backend default. |
+| `hint` | string | none | the words a short answer is expected to be, comma-separated (`approve, hold`), handed to the transcriber as its prompt. It biases and never constrains: what was heard is what comes back. At most 500 characters |
+
+A take is transcribed as English (`JOE_LANGUAGE` names another; `auto`
+detects), as one utterance, and, when it is short, with a beam search: a
+one-word answer gives whisper's language detection nothing to go on and a
+greedy first guess nothing to recover from. The expected words matter most
+where the first syllable was clipped. A prompt that is echoed back on unclear
+audio names every option, which a dialog reads as no match and asks again.
 
 **Response** — `200 OK`
 
@@ -341,7 +349,7 @@ fixed one. When the endpointer heard no speech, the transcriber is not run and
 
 | Status | Reason |
 | --- | --- |
-| `400` | `duration` outside `0 < duration <= 60` |
+| `400` | `duration` outside `0 < duration <= 60`, or a `hint` over 500 characters |
 | `503` | No microphone available, no device matching `device`, several devices matching it, or a device that opened and returned samples outside `[-1, 1]` |
 
 **curl**
