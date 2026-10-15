@@ -593,6 +593,13 @@ button:hover { border-color: rgba(255, 255, 255, 0.7); }
 }
 
 /* What is waiting on a person in qmcp, and the button that asks it aloud. */
+.voice-transcript { margin-top: 6px; line-height: 1.6; }
+.voice-transcript[hidden] { display: none; }
+.voice-segment { margin-right: 6px; }
+.voice-segment.is-pending { opacity: 0.5; }
+.voice-word { background: none; border: none; padding: 0 2px; color: #e6e6e6; font: inherit; cursor: pointer; }
+.voice-word:hover { color: var(--voice); }
+.voice-word.is-struck { text-decoration: line-through; opacity: 0.4; }
 .voice-controls { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
 .voice-options { display: flex; flex-wrap: wrap; gap: 6px; }
 .voice-options[hidden] { display: none; }

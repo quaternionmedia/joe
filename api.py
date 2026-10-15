@@ -21,6 +21,8 @@ Endpoints:
     POST /api/voice/answer          An answer given by key or button, as if said
     POST /api/voice/hold            A held key: the turn stays open until it is released
     GET  /api/voice/control         Whether a key is held and an answer is waiting
+    POST /api/voice/strike          Strike or restore a word of the take being transcribed
+    GET  /api/voice/transcript      The take being transcribed, or the last one, once
 
 Run directly:
     python -m uvicorn api:app --reload --port 8000
@@ -44,6 +46,7 @@ from capture import AudioCapture
 
 from Modules import Cue
 from Modules.Control import Control
+from Modules.Transcript import Datapoints, LiveTranscript
 from Modules.Conversation import POSTED, Conversation
 from Modules.Voice import NoMicrophoneError, Voice, input_level, list_input_devices
 
@@ -79,6 +82,11 @@ _capture = AudioCapture()
 # The one conversation this process has: its microphone is the only one.
 conversation = Conversation()
 control = Control()
+datapoints = Datapoints()
+# The take being transcribed, or the last one; and the last take that had
+# speech, which a dialog's outcome is recorded against.
+transcript: LiveTranscript | None = None
+last_take: str | None = None
 # The most answers a question can offer as controls: one per number key.
 MAX_OPTIONS = 9
 ANSWER_CHARS = 100
@@ -398,7 +406,15 @@ def voice_listen(
         raise HTTPException(status_code=400, detail="silence_ms must be between 100 and 5000")
     if hint is not None and len(hint) > 500:
         raise HTTPException(status_code=400, detail="hint must be at most 500 characters")
+    global transcript, last_take
     voice = Voice()
+    live = LiveTranscript(
+        transcribe=lambda samples, prompt: voice.transcribe_samples(samples, hint=hint, prompt=prompt),
+        hint=hint,
+        publish=lambda **event: conversation.publish("transcript", **event),
+        datapoints=datapoints,
+    )
+    transcript = live
     # A question was just asked: the cue to speak, finished before the
     # microphone opens so it is never recorded.
     if conversation.snapshot()["state"] == "speaking":
@@ -412,9 +428,16 @@ def voice_listen(
             on_event=_report,
             hint=hint,
             control=control,
+            live=live,
         )
         if result.get("source") == "key":
             Cue.play("heard")
+        if result.get("take") or result.get("source") == "key":
+            last_take = result.get("take") or live.take
+            datapoints.write("take", take=last_take, audio=result.get("audio_path") or None,
+                             source=result.get("source", "voice"), hint=hint,
+                             text=result.get("text", ""), segments=len(live.segments),
+                             struck={s.index: sorted(s.struck) for s in live.segments if s.struck})
         return result
     except NoMicrophoneError as exc:
         conversation.publish("idle", text=f"The microphone could not record: {exc}")
@@ -468,6 +491,41 @@ def voice_control():
     return control.snapshot()
 
 
+@app.get("/api/voice/transcript")
+def voice_transcript():
+    """The take being transcribed, or the last one: its segments, the words
+    struck, and the text so far."""
+    if transcript is None:
+        return {"take": None, "segments": [], "text": ""}
+    return transcript.snapshot()
+
+
+@app.post("/api/voice/strike")
+async def voice_strike(request: Request):
+    """Strike a word of the take being transcribed, or restore a struck one.
+
+    Body: `{"take": "...", "segment": 0, "word": 2}`, or `{"take": "...",
+    "last": true}` for the last word still standing. The take's text leaves
+    struck words out. `409` for a take that is not the current one.
+    """
+    body = await _json_body(request)
+    if not isinstance(body, dict) or not isinstance(body.get("take"), str):
+        raise HTTPException(status_code=400, detail="take must name the take")
+    if transcript is None or body["take"] != transcript.take:
+        raise HTTPException(status_code=409, detail="that take is no longer being transcribed")
+    if body.get("last") is True:
+        transcript.strike_last()
+    else:
+        segment, word = body.get("segment"), body.get("word")
+        if not isinstance(segment, int) or not isinstance(word, int):
+            raise HTTPException(status_code=400, detail="segment and word must be numbers, or last true")
+        try:
+            transcript.strike(segment, word)
+        except IndexError:
+            raise HTTPException(status_code=404, detail="no such word in that take")
+    return transcript.snapshot()
+
+
 async def _json_body(request: Request):
     try:
         return await request.json()
@@ -509,7 +567,11 @@ async def voice_conversation_post(request: Request):
                 detail=f"options go on a speaking state, as at most {MAX_OPTIONS} non-empty strings",
             )
         detail["options"] = [o.strip() for o in options]
-    return conversation.publish(state, text=str(body.get("text") or ""), **detail)
+    event = conversation.publish(state, text=str(body.get("text") or ""), **detail)
+    # What the dialog made of the last take: the label a later pass tunes against.
+    if state in ("recorded", "gave_up") and last_take:
+        datapoints.write("outcome", take=last_take, state=state, text=event["text"])
+    return event
 
 
 async def _conversation_events(request: Request, poll: float = 0.05):

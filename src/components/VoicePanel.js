@@ -87,6 +87,13 @@ export class VoicePanel {
 
   /** Apply one conversation event: `{ seq, state, text, reason? }`. */
   show(event) {
+    // The take as it is written: not a turn of its own, so the state, the
+    // label and the log are left as they are, for whatever follows the words.
+    if (event.state === 'transcript') {
+      this._el.hidden = false;
+      if (this.onEvent) this.onEvent(event);
+      return;
+    }
     const spec = STATES[event.state];
     if (!spec) return;
 

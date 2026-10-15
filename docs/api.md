@@ -414,6 +414,7 @@ through them:
 | `speaking` | the question is being asked; the microphone is closed | the dialog |
 | `listening` | the microphone is open; nobody has started talking | joe |
 | `holding` | a key is held: the turn stays open through pauses until it is released | joe |
+| `transcript` | the take as it is written: `take`, `segments` (`index`, `start`, `end`, `words`, `struck`, `pending`) and `text`; not a turn of its own | joe |
 | `hearing` | speech is sustained; the listener does not interrupt | joe |
 | `pausing` | the speech stopped; the turn is held open a moment longer | joe |
 | `transcribing` | the turn has ended; the words are being read | joe |
@@ -481,6 +482,42 @@ said they were speaking. The take reports `holding` when it sees the hold.
 
 `{"held", "answer_waiting"}`, once.
 
+### The live transcript
+
+An endpointed take is cut into segments at the half-second pauses inside it,
+held or not, and each segment is transcribed as soon as it ends, with the
+take's hint and earlier words as the prompt; a `transcript` event carries each
+step. `/api/voice/listen` returns the take's text as the segments' words minus
+any struck, and a `take` naming it. A segment saying "scratch that", "strike
+that" or "delete that" strikes itself and the segment before.
+
+### `POST /api/voice/strike`
+
+Strike a word of the take being transcribed, or restore a struck one.
+**Body** -- `{"take": "...", "segment": 0, "word": 2}`, or `{"take": "...",
+"last": true}` for the last word still standing. **Response** -- the take's
+transcript. `400` for a malformed body, `404` for no such word, `409` for a take
+that is no longer the current one.
+
+### `GET /api/voice/transcript`
+
+The take being transcribed, or the last one: `{"take", "segments", "text"}`.
+
+### Datapoints
+
+Every segment is written as `Data/Voice/segments/<take>/<index>.wav` and as a
+line of `Data/Voice/segments.jsonl`, one JSON object per line with a `kind`:
+
+| `kind` | Carries |
+| --- | --- |
+| `segment` | `take`, `index`, `audio`, `start_s`, `end_s`, `duration_s`, `peak_rms`, `mean_rms`, `threshold`, `noise_floor`, `hint`, `prompt`, `model`, `language`, `beam_size`, `avg_logprob`, `no_speech_prob`, `compression_ratio`, `text`, `transcribe_s` |
+| `edit` | `take`, `index`, `word`, `text`, `action` (`strike` or `restore`) |
+| `take` | `take`, `audio`, `source` (`voice` or `key`), `hint`, `text`, `segments`, `struck` |
+| `outcome` | `take`, `state` (`recorded` or `gave_up`), `text` -- what the dialog asking made of the last take, from its post to the conversation route |
+
+Each also carries `at`, seconds since the epoch. `JOE_DATAPOINTS=0` writes none,
+and nothing deletes them.
+
 ### Cues
 
 Before a listen that answers a question -- the last conversation state is
@@ -488,7 +525,10 @@ Before a listen that answers a question -- the last conversation state is
 so the tone is never recorded. Once a take has ended and is being read, or an
 answer by key was taken, it plays one lower note. A listen that follows a
 silent one plays nothing. `JOE_CUES=0` turns both off; a cue that cannot play
-is skipped.
+is skipped. They play on the default output unless `JOE_OUTPUT_DEVICE`, or
+`VOX_OUTPUT_DEVICE`, names another by a fragment of its name; of an output
+listed under several host APIs, MME's is played to, and a fragment naming two
+different outputs is refused.
 
 ---
 
