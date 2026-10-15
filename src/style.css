@@ -593,6 +593,17 @@ button:hover { border-color: rgba(255, 255, 255, 0.7); }
 }
 
 /* What is waiting on a person in qmcp, and the button that asks it aloud. */
+.voice-controls { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.voice-options { display: flex; flex-wrap: wrap; gap: 6px; }
+.voice-options[hidden] { display: none; }
+.voice-options button { font-size: 0.75rem; padding: 3px 10px; border-color: var(--voice); color: var(--voice); }
+.voice-keys { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 0.62rem; }
+.voice-keys button { font-size: 0.62rem; padding: 2px 7px; }
+.voice-hold { opacity: 0.6; }
+.voice-hold.is-held { opacity: 1; color: var(--voice); }
+.voice-controls kbd { font-family: inherit; font-size: 0.9em; padding: 0 4px; border: 1px solid rgba(255, 255, 255, 0.35); border-radius: 3px; }
+#voice-panel[data-state="holding"] .voice-orb { animation: voice-beat 0.45s ease-in-out infinite alternate; }
+#voice-panel[data-state="holding"] .voice-level { visibility: visible; }
 .voice-queue { margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
 .voice-queue[hidden] { display: none; }
 .voice-queue-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }

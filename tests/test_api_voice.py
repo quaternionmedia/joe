@@ -55,7 +55,7 @@ def test_voice_listen_endpoints_by_default():
         api.voice_listen(duration=6.0)
         fake_voice_cls.return_value.listen.assert_called_once_with(
             duration=6.0, device=None, until_silence=True, silence_after=0.8,
-            on_event=api._report, hint=None,
+            on_event=api._report, hint=None, control=api.control,
         )
 
     with patch("api.Voice") as fake_voice_cls:
