@@ -12,6 +12,10 @@ word the transcriber keeps missing, a person who would rather press a key:
   its cap, up to `HOLD_SECONDS`; releasing it ends the take. It is the turn
   that pauses mid-thought, said rather than guessed.
 
+Either one, given while a question is still being said, interrupts it, and so
+does speech over the question that a watch hears (`Modules.Watch`):
+`snapshot()["interrupted"]` is what a question being said asks, to stop.
+
 One instance lives for the life of the engine (`api.control`), because the
 person at the page and the take in progress meet only here.
 """
@@ -40,6 +44,7 @@ class Control:
         self._answer_seconds = answer_seconds
         self._answer: tuple[str, float] | None = None
         self._held = False
+        self._spoken_over = False
 
     def answer(self, text: str) -> None:
         """Give the current or next take this answer. A newer one replaces it."""
@@ -64,7 +69,18 @@ class Control:
         with self._lock:
             return self._held
 
+    def speech_began(self) -> None:
+        """Someone began speaking over the question being said."""
+        with self._lock:
+            self._spoken_over = True
+
+    def quiet(self) -> None:
+        """A new question, or the take that interrupted the last one is over."""
+        with self._lock:
+            self._spoken_over = False
+
     def snapshot(self) -> dict:
         with self._lock:
             waiting = self._answer is not None and self._clock() - self._answer[1] <= self._answer_seconds
-            return {"held": self._held, "answer_waiting": waiting}
+            return {"held": self._held, "answer_waiting": waiting,
+                    "interrupted": waiting or self._held or self._spoken_over}

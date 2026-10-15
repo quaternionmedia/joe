@@ -486,7 +486,28 @@ said they were speaking. The take reports `holding` when it sees the hold.
 
 ### `GET /api/voice/control`
 
-`{"held", "answer_waiting"}`, once.
+`{"held", "answer_waiting", "interrupted"}`, once. `interrupted` is true while
+an answer is waiting, a key is held, or a watch has heard someone speak over
+the question: what a question being said asks, to stop.
+
+### `POST /api/voice/watch`
+
+Opens a take while a question is still being asked, so a person who answers
+over it is heard from their first word. Takes `/api/voice/listen`'s parameters
+and returns at once, `{"watching": true, "voice": true}`. Until someone begins,
+nothing is published and nothing counts toward the cap; speech begins it only
+when it is twice as loud as the question's own echo -- its loudest block over
+the first second and a half, held -- and a held talk key begins it whatever
+the level. The next `/api/voice/listen` returns a begun take when it ends, keeping
+its onset and nothing said before it, and closes one nobody began to record
+afresh; its datapoint carries `over_question: true`. A new watch closes the
+last. `JOE_BARGE_IN=0` leaves only the keys to interrupt, and the response says
+`"voice": false`; `JOE_BARGE_FACTOR` sets the margin. **Errors** as for
+`/api/voice/listen`'s bounds.
+
+### `POST /api/voice/unwatch`
+
+Closes a watch that will not be listened to, begun or not. `{"watching": false}`.
 
 ### The live transcript
 
@@ -518,7 +539,7 @@ line of `Data/Voice/segments.jsonl`, one JSON object per line with a `kind`:
 | --- | --- |
 | `segment` | `take`, `index`, `audio`, `start_s`, `end_s`, `duration_s`, `peak_rms`, `mean_rms`, `threshold`, `noise_floor`, `hint`, `prompt`, `model`, `language`, `beam_size`, `avg_logprob`, `no_speech_prob`, `compression_ratio`, `text`, `transcribe_s` |
 | `edit` | `take`, `index`, `word`, `text`, `action` (`strike` or `restore`) |
-| `take` | `take`, `audio`, `source` (`voice` or `key`), `hint`, `text`, `segments`, `struck` |
+| `take` | `take`, `audio`, `source` (`voice` or `key`), `hint`, `text`, `segments`, `struck`, `over_question` (said over the question, from a watch) |
 | `outcome` | `take`, `state` (`recorded` or `gave_up`), `text` -- what the dialog asking made of the last take, from its post to the conversation route |
 
 Each also carries `at`, seconds since the epoch. `JOE_DATAPOINTS=0` writes none,
@@ -528,7 +549,8 @@ and nothing deletes them.
 
 Before a listen that answers a question -- the last conversation state is
 `speaking` -- joe plays two rising notes and only then opens the microphone,
-so the tone is never recorded. Once a take has ended and is being read, or an
+so the tone is never recorded; not when the answer is already waiting by key,
+nor for a take begun over the question. Once a take has ended and is being read, or an
 answer by key was taken, it plays one lower note. A listen that follows a
 silent one plays nothing. `JOE_CUES=0` turns both off; a cue that cannot play
 is skipped. They play on the default output unless `JOE_OUTPUT_DEVICE`, or

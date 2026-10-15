@@ -20,7 +20,9 @@ Endpoints:
     POST /api/voice/conversation    A dialog's own state: speaking, recorded, gave_up, idle
     POST /api/voice/answer          An answer given by key or button, as if said
     POST /api/voice/hold            A held key: the turn stays open until it is released
-    GET  /api/voice/control         Whether a key is held and an answer is waiting
+    GET  /api/voice/control         Whether a key is held, an answer is waiting, and the question is interrupted
+    POST /api/voice/watch           Opens a take while a question is still being asked
+    POST /api/voice/unwatch         Closes a watch that will not be listened to
     POST /api/voice/strike          Strike or restore a word of the take being transcribed
     GET  /api/voice/transcript      The take being transcribed, or the last one, once
 
@@ -35,6 +37,7 @@ import asyncio
 import json
 import os
 import sys
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -48,7 +51,8 @@ from Modules import Cue
 from Modules.Control import Control
 from Modules.Transcript import Datapoints, LiveTranscript
 from Modules.Conversation import POSTED, Conversation
-from Modules.Voice import NoMicrophoneError, Voice, input_level, list_input_devices
+from Modules.Voice import STALL_SECONDS, NoMicrophoneError, Voice, input_level, list_input_devices
+from Modules.Watch import Unwatched, Watch
 
 app = FastAPI(title="Joe API", version="0.1.0")
 
@@ -87,6 +91,9 @@ datapoints = Datapoints()
 # speech, which a dialog's outcome is recorded against.
 transcript: LiveTranscript | None = None
 last_take: str | None = None
+# The take opened over the question being asked, if any: one at a time.
+watching: Watch | None = None
+_watch_lock = threading.Lock()
 # The most answers a question can offer as controls: one per number key.
 MAX_OPTIONS = 9
 ANSWER_CHARS = 100
@@ -399,13 +406,35 @@ def voice_listen(
     `hint` is the words a short answer is expected to be, comma-separated --
     "approve, hold" -- handed to the transcriber as its prompt. It biases and
     never constrains: what was heard is what comes back.
+
+    A take `/api/voice/watch` opened, that someone began by speaking over the
+    question or holding the talk key, is this take: it is returned when it
+    ends, from its first word. One nobody began is closed, and this take is
+    recorded afresh.
     """
+    _bounds(duration, silence_ms, hint)
+    adopted = _adopt_watch()
+    if adopted is not None:
+        adopted.finished.wait()
+        control.quiet()
+        if adopted.error is not None:
+            raise adopted.error
+        return adopted.result
+    return _listen_once(duration, device, until_silence, silence_ms, hint)
+
+
+def _bounds(duration: float, silence_ms: int, hint: str | None) -> None:
     if not 0 < duration <= 60:
         raise HTTPException(status_code=400, detail="duration must be between 0 and 60 seconds")
     if not 100 <= silence_ms <= 5000:
         raise HTTPException(status_code=400, detail="silence_ms must be between 100 and 5000")
     if hint is not None and len(hint) > 500:
         raise HTTPException(status_code=400, detail="hint must be at most 500 characters")
+
+
+def _listen_once(duration: float, device: str | None, until_silence: bool, silence_ms: int,
+                 hint: str | None, watch: Watch | None = None) -> dict:
+    """One take, recorded and transcribed: the listen route's, or a watch's."""
     global transcript, last_take
     voice = Voice()
     live = LiveTranscript(
@@ -414,21 +443,36 @@ def voice_listen(
         publish=lambda **event: conversation.publish("transcript", **event),
         datapoints=datapoints,
     )
-    transcript = live
-    # A question was just asked: the cue to speak, finished before the
-    # microphone opens so it is never recorded.
-    if conversation.snapshot()["state"] == "speaking":
-        Cue.play("turn", settle=True)
+    if watch is None:
+        transcript = live
+        on_event = _report
+        # A question was just asked: the cue to speak, finished before the
+        # microphone opens so it is never recorded -- unless the answer was
+        # already given by key, and the turn is over before it began.
+        if conversation.snapshot()["state"] == "speaking" and not control.snapshot()["answer_waiting"]:
+            Cue.play("turn", settle=True)
+    else:
+        def shown() -> None:
+            global transcript
+            transcript = live
+
+        watch.on_begin = shown
+
+        def on_event(state: str, **detail) -> None:
+            # Over the question, nothing is published until someone begins.
+            if state == "level" or watch.begun.is_set():
+                _report(state, **detail)
     try:
         result = voice.listen(
             duration=duration,
             device=device,
             until_silence=until_silence,
             silence_after=silence_ms / 1000,
-            on_event=_report,
+            on_event=on_event,
             hint=hint,
             control=control,
             live=live,
+            watch=watch,
         )
         if result.get("source") == "key":
             Cue.play("heard")
@@ -438,11 +482,87 @@ def voice_listen(
                              source=result.get("source", "voice"), hint=hint,
                              text=result.get("text", ""), confidence=result.get("confidence"),
                              segments=len(live.segments),
-                             struck={s.index: sorted(s.struck) for s in live.segments if s.struck})
+                             struck={s.index: sorted(s.struck) for s in live.segments if s.struck},
+                             over_question=watch is not None)
         return result
     except NoMicrophoneError as exc:
-        conversation.publish("idle", text=f"The microphone could not record: {exc}")
+        if watch is None:
+            conversation.publish("idle", text=f"The microphone could not record: {exc}")
         raise HTTPException(status_code=503, detail=str(exc))
+
+
+@app.post("/api/voice/watch")
+def voice_watch(
+    duration: float = 5.0,
+    device: str | None = None,
+    until_silence: bool = True,
+    silence_ms: int = 800,
+    hint: str | None = None,
+):
+    """Opens a take while a question is still being asked, so a person who
+    answers over it is heard from their first word.
+
+    Takes `/api/voice/listen`'s parameters and returns at once. Until someone
+    begins -- speech louder than the question's own echo, or the talk key
+    held -- nothing is published and nothing counts toward the cap; once they
+    have, `/api/voice/control` reports `interrupted`, so the question can
+    stop, and the next listen returns the take. A new watch closes the last.
+    `JOE_BARGE_IN=0` leaves only the keys to interrupt (`Modules.Watch`).
+    """
+    global watching
+    _bounds(duration, silence_ms, hint)
+    _close_watch()
+    control.quiet()
+    watch = Watch(control=control)
+
+    def record() -> None:
+        try:
+            watch.result = _listen_once(duration, device, until_silence, silence_ms, hint, watch=watch)
+        except Unwatched:
+            pass
+        except Exception as exc:  # noqa: BLE001 -- the listen that comes for it raises it
+            watch.error = exc
+        finally:
+            watch.finished.set()
+
+    with _watch_lock:
+        watching = watch
+    threading.Thread(target=record, name="joe-watch", daemon=True).start()
+    return {"watching": True, "voice": watch.voice}
+
+
+@app.post("/api/voice/unwatch")
+def voice_unwatch():
+    """Closes a watch that will not be listened to, begun or not."""
+    _close_watch()
+    control.quiet()
+    return {"watching": False}
+
+
+def _take_watch() -> Watch | None:
+    global watching
+    with _watch_lock:
+        watch, watching = watching, None
+    return watch
+
+
+def _close_watch() -> None:
+    watch = _take_watch()
+    if watch is not None:
+        watch.close()
+        watch.finished.wait(timeout=STALL_SECONDS + 1)
+
+
+def _adopt_watch() -> Watch | None:
+    """The open watch when someone began it; otherwise None, with any watch
+    closed and its microphone released for the take that replaces it."""
+    watch = _take_watch()
+    if watch is None:
+        return None
+    if watch.adopt():
+        return watch
+    watch.finished.wait(timeout=STALL_SECONDS + 1)
+    return None
 
 
 def _report(state: str, **detail) -> None:
@@ -488,7 +608,9 @@ async def voice_hold(request: Request):
 
 @app.get("/api/voice/control")
 def voice_control():
-    """Whether a key is held and whether an answer is waiting for a take."""
+    """Whether a key is held, whether an answer is waiting for a take, and
+    whether the question being said is interrupted -- by either of those, or
+    by speech over it that a watch heard."""
     return control.snapshot()
 
 
