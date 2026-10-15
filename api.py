@@ -24,6 +24,7 @@ Endpoints:
     POST /api/voice/watch           Opens a take while a question is still being asked
     POST /api/voice/unwatch         Closes a watch that will not be listened to
     GET  /api/voice/vocabulary      joe's own spoken words, and what each does
+    GET  /api/voice/history         The whole transcript: every take heard and every sentence said
     POST /api/voice/strike          Strike or restore a word of the take being transcribed
     GET  /api/voice/transcript      The take being transcribed, or the last one, once
 
@@ -617,6 +618,19 @@ def voice_control():
     return control.snapshot()
 
 
+@app.get("/api/voice/history")
+def voice_history(limit: int = 200):
+    """The whole transcript, oldest first: every take joe heard, with its
+    segments, what was struck and how it was labelled, and every sentence the
+    program asking said -- read from the datapoints, so the page keeps it
+    across a reload. `kept` is false when `JOE_DATAPOINTS=0` keeps none."""
+    if not 1 <= limit <= 2000:
+        raise HTTPException(status_code=400, detail="limit must be between 1 and 2000")
+    from Modules import History
+
+    return {"entries": History.read(datapoints.manifest, limit), "kept": datapoints.enabled}
+
+
 @app.get("/api/voice/vocabulary")
 def voice_vocabulary():
     """joe's own spoken words -- what a segment saying each does -- for the
@@ -703,6 +717,10 @@ async def voice_conversation_post(request: Request):
             )
         detail["options"] = [o.strip() for o in options]
     event = conversation.publish(state, text=str(body.get("text") or ""), **detail)
+    # What the program asking said, so the transcript read back holds both sides.
+    if state == "speaking" and event["text"]:
+        datapoints.write("said", text=event["text"], reason=detail.get("reason"),
+                         options=detail.get("options"))
     # What the dialog made of the last take: the label a later pass tunes against.
     if state in ("recorded", "gave_up") and last_take:
         datapoints.write("outcome", take=last_take, state=state, text=event["text"])

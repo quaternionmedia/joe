@@ -209,7 +209,9 @@ def test_a_dialog_s_outcome_is_recorded_against_the_last_take(monkeypatch):
     client.post("/api/voice/conversation", json={"state": "speaking", "text": "Anything else?"})
 
     records = [json.loads(line) for line in api.datapoints.manifest.read_text().splitlines()]
-    assert records == [{"kind": "outcome", "at": records[0]["at"], "take": "t1", "state": "recorded", "text": "approve"}]
+    outcomes = [r for r in records if r["kind"] == "outcome"]  # the speaking post is a `said`, not one
+    assert outcomes == [{"kind": "outcome", "at": outcomes[0]["at"], "take": "t1", "state": "recorded",
+                         "text": "approve"}]
 
 
 def test_a_take_with_speech_is_recorded_with_its_text(monkeypatch):

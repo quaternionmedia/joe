@@ -25,7 +25,9 @@ one JSON object per line with a `kind`:
 - `outcome` -- what the dialog asking made of the take (`recorded` with the
   answer it accepted, or `gave_up`), posted to the conversation route;
 - `label` -- a take marked by voice as `misheard` or `heard right`, by the take
-  that said so: the ground truth a tuning pass needs most.
+  that said so: the ground truth a tuning pass needs most;
+- `said` -- a sentence the program asking said, from its `speaking` post, so
+  the transcript read back (`Modules.History`) holds both sides.
 
 **SOME WORDS ARE SAID TO JOE.** A segment saying one of joe's own phrases
 (`Modules/vocabulary.toml`) is struck and acted on here: "scratch that" strikes
