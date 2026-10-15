@@ -23,6 +23,7 @@ Endpoints:
     GET  /api/voice/control         Whether a key is held, an answer is waiting, and the question is interrupted
     POST /api/voice/watch           Opens a take while a question is still being asked
     POST /api/voice/unwatch         Closes a watch that will not be listened to
+    GET  /api/voice/vocabulary      joe's own spoken words, and what each does
     POST /api/voice/strike          Strike or restore a word of the take being transcribed
     GET  /api/voice/transcript      The take being transcribed, or the last one, once
 
@@ -442,6 +443,8 @@ def _listen_once(duration: float, device: str | None, until_silence: bool, silen
         hint=hint,
         publish=lambda **event: conversation.publish("transcript", **event),
         datapoints=datapoints,
+        previous=last_take,
+        notify=lambda state, **detail: conversation.publish(state, **detail),
     )
     if watch is None:
         transcript = live
@@ -612,6 +615,15 @@ def voice_control():
     whether the question being said is interrupted -- by either of those, or
     by speech over it that a watch heard."""
     return control.snapshot()
+
+
+@app.get("/api/voice/vocabulary")
+def voice_vocabulary():
+    """joe's own spoken words -- what a segment saying each does -- for the
+    page to show beside what the program asking listens for."""
+    from Modules import Vocabulary
+
+    return {"phrases": Vocabulary.entries()}
 
 
 @app.get("/api/voice/transcript")

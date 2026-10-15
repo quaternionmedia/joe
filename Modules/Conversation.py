@@ -32,6 +32,8 @@ from collections import deque
 STATES = (
     "speaking", "listening", "holding", "hearing", "pausing", "transcribing",
     "heard", "no_speech", "recorded", "gave_up", "idle", "transcript",
+    # What joe says of a segment said to it: a take marked, the voice's level.
+    "note",
 )
 
 # The states another program may post. The rest are the microphone's, and a
