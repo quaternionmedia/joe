@@ -48,6 +48,12 @@ def read(manifest: Path, limit: int = 200) -> list[dict]:
     return entries[-limit:]
 
 
+def take(manifest: Path, take_id: str) -> dict | None:
+    """One take's entry, by its id, or None."""
+    return next((e for e in read(manifest, limit=10**9)
+                 if e["kind"] == "take" and e["take"] == take_id), None)
+
+
 def _take(record: dict, parts: list[dict]) -> dict:
     struck = {int(index): set(words) for index, words in (record.get("struck") or {}).items()}
     shown = []
