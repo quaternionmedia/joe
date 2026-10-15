@@ -562,6 +562,17 @@ def hint_prompt(hint: str | None) -> str | None:
     return ", ".join(words) + "." if words else None
 
 
+def take_confidence(segments) -> float | None:
+    """How sure whisper was of a transcript: the lowest of its segments' mean
+    token probabilities (`exp(avg_logprob)`), so one doubtful stretch decides.
+    None when no segment carries one."""
+    import math
+
+    probs = [math.exp(s["avg_logprob"]) for s in segments or []
+             if isinstance(s, dict) and isinstance(s.get("avg_logprob"), (int, float))]
+    return round(min(probs), 3) if probs else None
+
+
 def decode_options(hint: str | None, seconds: float, cuda: bool = False) -> dict:
     """How one take is decoded.
 
@@ -794,7 +805,7 @@ class Voice:
         except Answered as given:
             _tell(on_event, "heard", text=given.text, source="key")
             return {"text": given.text, "segments": [], "language": None, "audio_path": "",
-                    "speech_detected": True, "source": "key"}
+                    "speech_detected": True, "source": "key", "confidence": 1.0}
         if speech_detected is False:
             if live is not None:
                 live.finish()
@@ -804,11 +815,12 @@ class Voice:
             _tell(on_event, "transcribing")
             text = live.finish()
             result = {"text": text, "segments": live.snapshot()["segments"], "language": None,
-                      "take": live.take}
+                      "take": live.take, "confidence": live.confidence()}
             _tell(on_event, "heard", text=text)
         else:
             _tell(on_event, "transcribing")
             result = self.transcribe(wav_path, hint=hint)
+            result["confidence"] = take_confidence(result.get("segments"))
             _tell(on_event, "heard", text=result.get("text", ""))
         result["audio_path"] = wav_path
         result["speech_detected"] = speech_detected

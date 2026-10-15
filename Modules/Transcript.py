@@ -33,6 +33,7 @@ Like the takes themselves, nothing here is deleted.
 from __future__ import annotations
 
 import json
+import math
 import os
 import queue
 import re
@@ -100,6 +101,8 @@ class Segment:
     words: list[str] = field(default_factory=list)
     struck: set[int] = field(default_factory=set)
     pending: bool = True
+    # The mean probability whisper gave its tokens, from its `avg_logprob`.
+    confidence: float | None = None
 
     def view(self) -> dict:
         return {"index": self.index, "start": round(self.start, 2), "end": round(self.end, 2),
@@ -158,6 +161,8 @@ class LiveTranscript:
                 segment.text = (heard.get("text") or "").strip()
                 segment.words = segment.text.split()
                 segment.pending = False
+                logprob = (heard.get("info") or {}).get("avg_logprob")
+                segment.confidence = math.exp(logprob) if isinstance(logprob, (int, float)) else None
                 if plain(segment.text) in SCRATCH:
                     segment.struck = set(range(len(segment.words)))
                     if segment.index > 0:
@@ -221,6 +226,15 @@ class LiveTranscript:
             self._queue.put(None)
             self._worker.join(timeout)
         return self.text()
+
+    def confidence(self) -> float | None:
+        """How sure the transcript is: its weakest segment's confidence, struck
+        segments left out, so one doubtful stretch decides. None when no
+        standing segment was weighed."""
+        with self._lock:
+            weighed = [s.confidence for s in self.segments
+                       if s.confidence is not None and len(s.struck) < len(s.words)]
+        return round(min(weighed), 3) if weighed else None
 
     def text(self) -> str:
         with self._lock:

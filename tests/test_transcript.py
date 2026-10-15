@@ -255,3 +255,61 @@ def test_an_output_naming_several_or_none_is_refused(monkeypatch):
         Cue.output_device("realtek")
     with pytest.raises(ValueError, match="no output"):
         Cue.output_device("monitor")
+
+
+# --- how sure the take is ---------------------------------------------------------
+
+
+def test_the_take_is_as_sure_as_its_weakest_standing_segment():
+    """Mutation: take the mean -- red; count a struck segment -- red."""
+    import math
+
+    class Weighed:
+        def __init__(self, *pairs):
+            self.pairs = list(pairs)
+
+        def __call__(self, samples, prompt):
+            text, logprob = self.pairs.pop(0)
+            return {"text": text, "info": {"avg_logprob": logprob}}
+
+    live = LiveTranscript(Weighed(("deploy qmcp", math.log(0.9)), ("to the pie", math.log(0.5))))
+    live.add(_samples(), 0.0, 1.0)
+    live.add(_samples(), 1.5, 2.5)
+    live.finish()
+
+    assert live.confidence() == 0.5
+    for word in range(3):
+        live.strike(1, word)
+    assert live.confidence() == 0.9
+
+
+def test_a_whole_recording_is_as_sure_as_its_weakest_segment_and_unweighed_is_none():
+    """The fallback path, when no segment arrived live. Mutation: take the
+    largest -- red."""
+    import math
+
+    from Modules.Voice import take_confidence
+
+    assert take_confidence([{"avg_logprob": math.log(0.6)}, {"avg_logprob": math.log(0.9)}]) == 0.6
+    assert take_confidence([]) is None and take_confidence([{"text": "x"}]) is None
+
+
+def test_listen_says_how_sure_it_is_and_a_key_is_sure(tmp_path, monkeypatch):
+    import Modules.Voice as voice_module
+    from Modules.Control import Control
+
+    control = Control()
+    control.answer("hold")
+    keyed = voice_module.Voice(capture_dir=str(tmp_path)).listen(until_silence=True, control=control)
+
+    def capture(*, on_segment=None, **kw):
+        on_segment(_samples(), 0.0, 1.0, {})
+        return _samples(), None, True
+
+    monkeypatch.setattr(voice_module, "_capture_until_silence", capture)
+    monkeypatch.setattr(voice_module, "resolve_input_device", lambda d: 0)
+    live = LiveTranscript(lambda s, p: {"text": "approve", "info": {"avg_logprob": -0.2231}})
+    spoken = voice_module.Voice(capture_dir=str(tmp_path)).listen(until_silence=True, live=live)
+
+    assert keyed["confidence"] == 1.0
+    assert spoken["confidence"] == 0.8
