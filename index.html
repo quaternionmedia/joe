@@ -6,8 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.2/lib/p5.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.2/lib/addons/p5.sound.js"></script>
-    <script type="module" crossorigin src="/joe/assets/index-CD0bXOZb.js"></script>
-    <link rel="stylesheet" crossorigin href="/joe/assets/index-Dl1abVc_.css">
+    <script type="module" crossorigin src="/joe/assets/index-DU73phjS.js"></script>
+    <link rel="stylesheet" crossorigin href="/joe/assets/index-yAZ9IZxb.css">
   </head>
 
   <body>
@@ -123,6 +123,20 @@
     </section>
 
     <!-- ─── First-run hint (dismissed via localStorage) ─────────────────── -->
+    <!-- The whole spoken exchange, readable in full; T opens and closes it -->
+    <aside id="transcript-pane" data-testid="transcript-pane" hidden aria-label="Transcript">
+      <header class="tp-head">
+        <span class="tp-title">Transcript</span>
+        <button type="button" data-testid="transcript-say-toggle"
+                title="Everything the conversation and joe listen for">What can be said</button>
+        <button type="button" data-testid="transcript-close" title="Close (T)"
+                aria-label="Close the transcript">×</button>
+      </header>
+      <section class="tp-say" data-testid="transcript-say" hidden></section>
+      <p class="tp-empty" data-testid="transcript-empty" hidden></p>
+      <ol class="tp-entries" data-testid="transcript-entries"></ol>
+    </aside>
+
     <div id="first-run-hint" class="first-run-hint" role="note" aria-label="Quick start guide">
       <span class="hint-steps">
         <span class="hint-step"><b>1.</b> Joe, go! — start audio</span>
@@ -180,6 +194,8 @@
       <div class="tg">
         <button id="capture-toggle" data-testid="capture-toggle" type="button">Library</button>
         <button id="results-toggle" data-testid="results-toggle" type="button">Results</button>
+        <button id="transcript-toggle" data-testid="transcript-toggle" type="button"
+                title="The whole spoken exchange (T)">Transcript</button>
       </div>
 
       <div class="td"></div>
