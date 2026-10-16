@@ -312,10 +312,9 @@ Records `duration` seconds (default `5.0`, max `60`) from an input device,
 writes it to `Data/Voice/`, and transcribes the result.
 
 The device is opened at *its* native sample rate and channel count, and the
-audio is downmixed and resampled to 16 kHz mono afterwards. Asking a device
-to open at 16 kHz fails on most of them — one machine here has twenty inputs
-and every one refused, WASAPI saying "Invalid sample rate" and the others
-less.
+audio is downmixed and resampled to 16 kHz mono afterwards: many devices
+refuse to open at 16 kHz (WASAPI answers "Invalid sample rate").
+[modules.md](modules.md#voice) says how a device is chosen, opened and read.
 
 **Query params**
 
@@ -389,8 +388,8 @@ and read the peaks.
 { "device": 12, "name": "USB Microphone", "peak": 0.0812, "rms": 0.0091, "silent": false }
 ```
 
-`silent` is the useful field: a device returning digital silence is either
-the wrong one or muted, and a device list cannot tell those apart.
+`silent` says whether anything arrived: a device returning digital silence
+is either the wrong one or muted, and a device list cannot tell those apart.
 
 **Errors**
 
