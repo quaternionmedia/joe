@@ -105,28 +105,37 @@ Examples:
 
 ## Required Pre-PR Checks
 
-Run before opening a PR:
+Run before opening a PR. The suite is what `tests.yml` runs on every PR,
+and the build what `deploy.yml` runs on every PR against `main`:
 
 ```powershell
-python -m pytest -q
+uv run --frozen pytest tests/ -q
 npm run build
 ```
 
-If your change affects frontend behaviour, also run E2E tests:
+The media API's tests make their media with ffmpeg and skip without one. On
+a machine with none on `PATH`, name one with `JOE_FFMPEG` so they run here
+as they run in CI on Linux.
+
+If your change affects frontend behaviour, also run E2E tests, which CI runs
+on every PR as well:
 
 ```powershell
 npm run test:e2e
 ```
 
-If your change affects runtime behaviour, also run the backend pipeline:
+If your change affects runtime behaviour, also run the backend pipeline. No
+CI job runs it:
 
 ```powershell
-python main.py
+uv run python main.py
 ```
 
 ## Frontend Testing
 
 E2E tests live in `tests/e2e/` and use [Playwright](https://playwright.dev/).
+`playwright.config.js` starts the Vite dev server itself, or outside CI
+reuses one already on port 3000.
 
 ```powershell
 npm run test:e2e
@@ -138,12 +147,19 @@ Reports are written to `playwright-report/` (git-ignored). To open the HTML repo
 npx playwright show-report
 ```
 
-Test coverage:
+What the specs cover:
 
-- Page load — canvas renders, no JS errors
-- "Joe, go!" button present and clickable
-- Arrow-key setlist navigation does not crash
-- Pipeline JSON contract — fixture validates the shape of `Process_Data_*.json`
+| Spec | Covers |
+| --- | --- |
+| `app.spec.js` | Page load, **Joe, go!**, setlist navigation, and the pipeline JSON contract, against a fixture |
+| `process.spec.js` | Processing and playing a file from the Library, and how a failure shows |
+| `results.spec.js` | The Results panel and the piano roll it loads |
+| `voice.spec.js` | The voice panel through a whole exchange |
+| `voice-keys.spec.js` | Answering by button and by key |
+| `voice-queue.spec.js` | Answering qmcp's waiting requests from the panel |
+| `voice-instruct.spec.js` | **Instruct by voice** |
+| `voice-transcript.spec.js` | The take as it is written, and striking its words |
+| `transcript-pane.spec.js` | The whole transcript beside the piano roll |
 
 ## Pull Request Expectations
 
@@ -162,13 +178,22 @@ If you change commands, paths, setup flow, or contributor workflows, update:
 - `docs/modules.md` (if module behaviour/path details changed)
 - `docs/contributing.md` (if process/checks changed)
 
-## Expected CI Checks
+## CI
 
-A GitHub Actions workflow on PRs would run:
+GitHub Actions runs three workflows, none of them filtered by path:
 
-| Check | Command | When |
-| --- | --- | --- |
-| Python tests | `python -m pytest -q` | Always |
-| Frontend build | `npm run build` | Always |
-| E2E tests | `npm run test:e2e` | PRs touching `src/` |
-| Backend pipeline | `python main.py` | PRs touching `Modules/` or `main.py` |
+| Workflow | When | Runs on | What it does |
+| --- | --- | --- | --- |
+| `tests.yml` | Every PR, and every push to `main` | `windows-latest` and `ubuntu-latest`, neither cancelled when the other fails | `uv sync --frozen`, then `uv run --frozen pytest tests/ -q`. Linux installs `libportaudio2` and `ffmpeg` first; Windows installs no ffmpeg, so the media tests that need one skip there |
+| `e2e.yml` | Every PR, every push to `main`, and by hand | `windows-latest`, Node 22 | `npm ci`, `npx playwright install --with-deps chromium`, then `npm run test:e2e` |
+| `deploy.yml` | Every PR against `main`, every push to `main`, and by hand | `ubuntu-latest` | `npm ci` and `npm run build`, then publishes `dist/` to the `gh-pages` branch |
+
+The deploy step runs on every event the workflow does, so a PR from a branch
+of this repository publishes its build to GitHub Pages before it is merged.
+No CI job runs `main.py`. No runner has the whisper model cached, so the one
+test that runs it, marked `whisper_model`, skips in CI.
+
+Dependabot opens update PRs every Wednesday for the workflows' actions and
+for npm packages, npm's minor and patch updates grouped into one PR for
+production dependencies and one for development dependencies. It does not
+watch Python dependencies: `uv.lock` changes only by hand.

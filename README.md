@@ -228,7 +228,7 @@ See [docs/cookbook.md](docs/cookbook.md) for step-by-step recipes.
 
 | Document | Contents |
 | --- | --- |
-| [docs/contributing.md](docs/contributing.md) | Local setup, UI control groups, troubleshooting, branch naming, pre-PR checks |
+| [docs/contributing.md](docs/contributing.md) | Local setup, UI control groups, troubleshooting, branch naming, pre-PR checks, what CI runs |
 | [docs/cookbook.md](docs/cookbook.md) | Step-by-step recipes for common workflows |
 | [docs/api.md](docs/api.md) | FastAPI endpoint reference with `curl` examples |
 | [docs/media.md](docs/media.md) | The media API a video editor uses: uploads, transcripts with word times, analysis |
