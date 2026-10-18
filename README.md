@@ -125,6 +125,15 @@ own WAV under `Data/Voice/segments/` and described in `Data/Voice/segments.jsonl
 own confidence, the text, the words struck, and what the dialog asking finally
 accepted. `JOE_DATAPOINTS=0` writes none; nothing deletes them.
 
+**The audio engine of a video editor:** alfred uploads a clip, or the mixed
+sound of a timeline, to `/api/media` and asks by id what is said in it -- each
+segment and word with its time, for captions -- and how it moves: tempo,
+beats, onsets, loudness (dBFS and LUFS), silences and a waveform's peaks.
+Uploads are kept privately under `Data/Media/` for an hour after their last
+use. It needs ffmpeg (on PATH, or named by `JOE_FFMPEG`). Beside alfred, which
+has port 8000, run the API alone: `uv run uvicorn api:app --port 8010`.
+[docs/media.md](docs/media.md) is its reference.
+
 See [docs/api.md](docs/api.md) for the full API endpoint reference.
 
 ### Python setup
@@ -154,6 +163,10 @@ Run Python tests:
 python -m pytest -q
 ```
 
+The media API's tests make their media with ffmpeg and skip without it; name
+one with `JOE_FFMPEG` to run them. One runs the real whisper model, when it is
+already cached here (`-m "not whisper_model"` leaves it out).
+
 Run frontend E2E tests:
 
 ```powershell
@@ -177,7 +190,7 @@ Input audio is read from `Data/Audio/`.
 ## Project Structure
 
 - `Data/`: input audio and generated outputs (git-ignored)
-- `Modules/`: core Python classes (`Audio`, `Chroma`, `MIDI`, `Note`, utilities) — see [docs/modules.md](docs/modules.md)
+- `Modules/`: core Python classes (`Audio`, `Chroma`, `MIDI`, `Note`, utilities), and `Media` and `Analysis` behind the media API — see [docs/modules.md](docs/modules.md)
 - `src/`: frontend source (`p5.js` + Vite) — components, config, sketch
 - `tests/`: Python unit tests; `tests/e2e/` for Playwright E2E tests
 - `docs/`: contributor guide, module reference, API reference
@@ -218,6 +231,7 @@ See [docs/cookbook.md](docs/cookbook.md) for step-by-step recipes.
 | [docs/contributing.md](docs/contributing.md) | Local setup, UI control groups, troubleshooting, branch naming, pre-PR checks |
 | [docs/cookbook.md](docs/cookbook.md) | Step-by-step recipes for common workflows |
 | [docs/api.md](docs/api.md) | FastAPI endpoint reference with `curl` examples |
+| [docs/media.md](docs/media.md) | The media API a video editor uses: uploads, transcripts with word times, analysis |
 | [docs/modules.md](docs/modules.md) | Python module architecture and data flow |
 
 ## Contributing

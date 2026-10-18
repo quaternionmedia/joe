@@ -29,9 +29,12 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Native audio library
+      # ffmpeg beside it: the media API decodes every upload with it, and its
+      # tests make their media with it. Without one they skip; nothing
+      # installs one on the Windows runner.
+      - name: Native audio library and ffmpeg
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libportaudio2
+        run: sudo apt-get update && sudo apt-get install -y libportaudio2 ffmpeg
 
       # --frozen, per the commit that regenerated the lock: it changes only
       # when a dependency edit calls for it, never as a side effect of a run.
