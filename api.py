@@ -41,11 +41,13 @@ Or via the CLI:
 """
 
 import asyncio
+import functools
 import json
 import os
 import sys
 import threading
 import traceback
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -55,8 +57,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.routing import APIRoute
-from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.requests import ClientDisconnect
 
 from capture import AudioCapture
 
@@ -805,6 +807,19 @@ def voice_level(duration: float = 1.0, device: str | None = None):
 
 media_store = Media.MediaStore()
 
+# Media work runs on threads of its own, never on the event loop nor on the
+# pool FastAPI answers plain `def` routes with -- the voice API's among them, so
+# a video editor's queue never keeps a conversation waiting. Transcriptions
+# take turns on one thread, in the order they came (they share one whisper
+# model); decoding uploads and analysing them, up to four at once.
+_speech_work = ThreadPoolExecutor(max_workers=1, thread_name_prefix="joe-media-speech")
+_media_work = ThreadPoolExecutor(max_workers=4, thread_name_prefix="joe-media")
+
+
+async def _on(pool: ThreadPoolExecutor, work, /, *args, **kwargs):
+    """`work(*args, **kwargs)` on `pool`, awaited."""
+    return await asyncio.get_running_loop().run_in_executor(pool, functools.partial(work, *args, **kwargs))
+
 
 def _sweep_media(stop: threading.Event) -> None:
     """Sweep expired uploads now and then until `stop`: a quarter of the TTL,
@@ -844,8 +859,8 @@ class _MediaRoute(APIRoute):
                 raise HTTPException(status_code=422, detail=_refusal(exc.errors())) from None
             except Media.MediaError as exc:
                 raise HTTPException(status_code=exc.status, detail=exc.detail) from None
-            except StarletteHTTPException:
-                raise
+            except (StarletteHTTPException, ClientDisconnect):
+                raise  # answered as it is; a client that left hears nothing
             except Exception as exc:  # noqa: BLE001 -- answered in V1's shape, and logged
                 traceback.print_exc()
                 raise HTTPException(status_code=500, detail=f"{type(exc).__name__}: {exc}") from None
@@ -882,9 +897,9 @@ async def media_upload(request: Request):
     The headers are judged before a byte is read: 415 for a type joe does not
     take, 413 for a declared length over `JOE_MEDIA_MAX_BYTES`, 503 when there
     is no ffmpeg. The body is written to disk as it arrives and refused (413)
-    the moment it passes the cap; ffmpeg's decode runs off the event loop. 422
-    for a file with no decodable audio -- a video with no sound track among
-    them -- and 413 for a sound longer than `JOE_MEDIA_MAX_SECONDS`.
+    the moment it passes the cap; ffmpeg's decode runs on the media threads.
+    422 for a file with no decodable audio -- a video with no sound track
+    among them -- and 413 for a sound longer than `JOE_MEDIA_MAX_SECONDS`.
     """
     content_type = request.headers.get("content-type")
     kind = Media.content_kind(content_type)
@@ -903,7 +918,7 @@ async def media_upload(request: Request):
     if ffmpeg is None:
         raise HTTPException(status_code=503,
                             detail="ffmpeg was not found: set JOE_FFMPEG to its path or put it on PATH")
-    await run_in_threadpool(media_store.sweep)
+    await _on(_media_work, media_store.sweep)
     with media_store.receiving() as (media_id, folder):
         upload = folder / f"upload.{Media.FORMATS[kind]}"
         written = 0
@@ -914,7 +929,7 @@ async def media_upload(request: Request):
                     raise HTTPException(status_code=413, detail=too_large)
                 out.write(chunk)
         try:
-            sound = await run_in_threadpool(Media.extract, upload, folder, ffmpeg)
+            sound = await _on(_media_work, Media.extract, upload, folder, ffmpeg)
         finally:
             upload.unlink(missing_ok=True)
         return media_store.commit(media_id, sound).answer()
@@ -939,7 +954,7 @@ def _features(asked: str | None) -> list[str]:
 
 
 @media.post("/{media_id}/analyze")
-def media_analyze(
+async def media_analyze(
     media_id: str,
     features: str | None = None,
     peaks_rate: int = Query(Analysis.DEFAULT_PEAKS_RATE, ge=1, le=1000),
@@ -951,30 +966,38 @@ def media_analyze(
 
     `peaks_rate` is the waveform's values per second; `silence_db` and
     `silence_min` are the level a silence stays under and how long it lasts.
-    A plain `def`, so FastAPI runs it on its thread pool, off the event loop.
+    Measured on the media threads.
     """
     wanted = _features(features)
-    with media_store.use(media_id) as item:
-        found = Analysis.analyze(
-            item.sound, item.rhythm, wanted, peaks_rate=peaks_rate, silence_db=silence_db,
-            silence_min=silence_min, ffmpeg=Media.ffmpeg_path(),
-        )
-    return {"duration": item.duration, **{key: found[key] for key in _ANALYSIS_KEYS if key in found}}
+
+    def analyze() -> dict:
+        with media_store.use(media_id) as item:
+            found = Analysis.analyze(
+                item.sound, item.rhythm, wanted, peaks_rate=peaks_rate, silence_db=silence_db,
+                silence_min=silence_min, ffmpeg=Media.ffmpeg_path(),
+            )
+        return {"duration": item.duration, **{key: found[key] for key in _ANALYSIS_KEYS if key in found}}
+
+    return await _on(_media_work, analyze)
 
 
 @media.post("/{media_id}/transcribe")
-def media_transcribe(media_id: str, language: str | None = None, words: bool = True):
+async def media_transcribe(media_id: str, language: str | None = None, words: bool = True):
     """`{"text", "language", "segments": [{"start", "end", "text", "words":
     [{"start", "end", "word", "probability"}]}], "info"}`, in seconds of the
     uploaded media.
 
     `language` is a code or a name; absent or empty, whisper detects it.
     `words=false` leaves every segment's `words` empty. Transcriptions take
-    turns on media's own whisper model, never the voice loop's; a plain `def`,
-    so the wait and the work are on FastAPI's thread pool, off the event loop.
+    turns, in the order they came, on media's own thread and whisper model --
+    never the voice loop's.
     """
-    with media_store.use(media_id) as item:
-        return Media.transcribe(item, language=language, words=words)
+
+    def transcribe() -> dict:
+        with media_store.use(media_id) as item:
+            return Media.transcribe(item, language=language, words=words)
+
+    return await _on(_speech_work, transcribe)
 
 
 @media.delete("/{media_id}", status_code=204)

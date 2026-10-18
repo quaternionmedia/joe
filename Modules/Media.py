@@ -307,7 +307,9 @@ class MediaStore:
         ends; if the block ends without a commit -- a refusal, a failure, a
         client gone -- the directory is removed.
         """
-        self.root.mkdir(parents=True, exist_ok=True)
+        # Private from the top: where the mode is honoured, nobody else can
+        # list the ids, which are the only way in.
+        self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         media_id = secrets.token_hex(16)
         path = self.root / media_id
         path.mkdir(mode=0o700)

@@ -348,6 +348,23 @@ def test_the_rest_of_the_api_still_answers_as_fastapi_does(client):
     assert isinstance(res.json()["detail"], list)
 
 
+def test_decoding_and_analysis_run_on_the_media_threads(client, ffmpeg, made, monkeypatch):
+    """Not on the pool FastAPI answers the voice API's routes with. Mutation:
+    run either with `run_in_threadpool` -- red."""
+    ran_on = {}
+    extract, analyze = Media.extract, Analysis.analyze
+    monkeypatch.setattr(Media, "extract", lambda *a, **k: ran_on.setdefault(
+        "extract", threading.current_thread().name) and extract(*a, **k))
+    monkeypatch.setattr(Analysis, "analyze", lambda *a, **k: ran_on.setdefault(
+        "analyze", threading.current_thread().name) and analyze(*a, **k))
+    path, content_type = make_kind(ffmpeg, "wav", made)
+
+    media_id = upload_file(client, path, content_type)["media_id"]
+    assert client.post(f"/api/media/{media_id}/analyze", params={"features": "peaks"}).status_code == 200
+
+    assert ran_on["extract"].startswith("joe-media") and ran_on["analyze"].startswith("joe-media")
+
+
 def test_an_unforeseen_failure_is_a_500_in_the_same_shape(client, ffmpeg, made, monkeypatch):
     path, content_type = make_kind(ffmpeg, "wav", made)
     media_id = upload_file(client, path, content_type)["media_id"]

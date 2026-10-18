@@ -172,6 +172,21 @@ def test_media_transcriptions_take_turns_on_one_model(client, two_seconds, monke
     assert model.most_at_once == 1
 
 
+def test_a_transcription_runs_on_media_s_own_thread(client, two_seconds, monkeypatch):
+    """Not on the pool FastAPI answers the voice API's routes with, so captions
+    queued behind each other never keep a conversation waiting. Mutation: run
+    it with `run_in_threadpool` -- red."""
+    model = FakeWhisper()
+    ran_on = []
+    original = model.transcribe
+    model.transcribe = lambda audio, **o: ran_on.append(threading.current_thread().name) or original(audio, **o)
+    monkeypatch.setattr(Media.MediaSpeech, "_load_model", classmethod(lambda cls, size: model))
+
+    assert client.post(f"/api/media/{two_seconds}/transcribe").status_code == 200
+
+    assert ran_on and ran_on[0].startswith("joe-media-speech")
+
+
 def test_media_has_a_whisper_of_its_own_and_never_the_voice_loop_s(client, two_seconds, monkeypatch):
     """Two decodes on one whisper model corrupt each other, so the voice loop's
     model -- loaded already, of the same size -- is not reused. Mutation: drop
