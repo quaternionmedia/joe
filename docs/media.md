@@ -18,7 +18,9 @@ GET    /api/media/capabilities           -> {"formats", "features", "speech_mode
 ```
 
 Every time joe answers is in seconds of the uploaded media. Every failure is
-`{"detail": str}` -- a sentence, never a list.
+`{"detail": str}` -- a sentence, never a list. That includes a failure of
+joe's own, on any of these routes: a `500` whose `detail` names the
+exception, with its traceback in the server's log.
 
 ## Running it beside alfred
 
@@ -149,7 +151,10 @@ with no audio is refused, not kept.
 | `413` | The sound is longer than `JOE_MEDIA_MAX_SECONDS` | `this media's sound is longer than 7200 seconds (JOE_MEDIA_MAX_SECONDS)` |
 | `422` | No audio stream -- a video with no sound track | `this media has no audio stream` |
 | `422` | Nothing ffmpeg can decode | `this media has no audio ffmpeg can decode: Error opening input files: Invalid data found when processing input` |
+| `422` | An audio stream that holds no samples -- a WAV with no frames | `this media's audio stream holds no samples` |
+| `422` | ffmpeg has not finished decoding after 600 seconds | `ffmpeg did not finish decoding this media in 600 s` |
 | `503` | No ffmpeg | `ffmpeg was not found: set JOE_FFMPEG to its path or put it on PATH` |
+| `503` | An ffmpeg that cannot be run -- `JOE_FFMPEG` names a file this machine cannot execute | `ffmpeg could not be run: [WinError 216] This version of %1 is not compatible with the version of Windows you're running. ...` |
 
 A 413 judged on `Content-Length` is answered while the client may still be
 sending; a client that checks `max_bytes` first never meets it.
@@ -209,7 +214,9 @@ client's timeout room.
 **Errors:** `404` for an id that is not here; `422` for a `language` whisper
 does not know (`unknown language 'klingon'; give a code such as 'en' or a name
 such as 'English'`) or a `words` that is not a boolean
-(`words: Input should be a valid boolean, unable to interpret input`).
+(`words: Input should be a valid boolean, unable to interpret input`). `words`
+is judged before the id is looked up, so an unknown id with a bad `words` is
+a `422`; `language` is judged after it.
 
 ## `POST /api/media/{media_id}/analyze`
 
@@ -270,7 +277,9 @@ signal (`Modules/Analysis.py`).
 **Errors:** `404` for an id that is not here; `422` for an unknown feature
 (`unknown feature 'pitch'; joe measures tempo, beats, onsets, loudness,
 silence, peaks`) or a parameter out of bounds (`peaks_rate: Input should be
-greater than or equal to 1`).
+greater than or equal to 1`) or not a number (`peaks_rate: Input should be a
+valid integer, unable to parse string as an integer`). Both are judged before
+the id is looked up, so an unknown id with either is a `422`.
 
 ## `DELETE /api/media/{media_id}`
 
