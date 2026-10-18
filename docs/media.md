@@ -35,6 +35,12 @@ and point alfred at `http://host.docker.internal:8010` (from its containers) or
 `http://localhost:8010`. `curl http://localhost:8010/openapi.json` names the
 server -- `Joe API` -- before you trust an answer from that port.
 
+That command listens on loopback, `127.0.0.1`, uvicorn's default. On Docker
+Desktop that is enough: it resolves `host.docker.internal` itself and hands
+a container's connection to the host's loopback, where joe sees it arrive
+from `127.0.0.1`. A Linux Docker host does neither; *On a Linux Docker host*,
+below, says what it takes there.
+
 **ffmpeg is required.** joe decodes uploads with it, and measures LUFS with its
 `ebur128` filter. It is `JOE_FFMPEG` when set (a path to the binary), else
 `ffmpeg` on PATH. Without one, `GET /api/media/capabilities` lists no formats
@@ -56,6 +62,47 @@ seconds of speech took eighteen seconds the first time and three after.
 | `JOE_MEDIA_TTL` | `3600` | Seconds an upload is kept after its last use |
 | `JOE_MEDIA_MAX_BYTES` | `1073741824` (1 GiB) | The largest upload taken |
 | `JOE_MEDIA_MAX_SECONDS` | `7200` (two hours) | The longest sound taken |
+
+### On a Linux Docker host
+
+Two things change when alfred's containers run on Docker Engine on Linux:
+
+- **`host.docker.internal` has to be mapped.** A container resolves it only
+  when it is started with the name mapped to the host gateway --
+  `extra_hosts: ["host.docker.internal:host-gateway"]` in compose,
+  `--add-host host.docker.internal:host-gateway` to `docker run` -- as
+  alfred's dev stack declares for its api and renderer. The name then
+  resolves to the default bridge's gateway, docker0's address: `172.17.0.1`
+  unless the daemon's `host-gateway-ip` says otherwise, and
+  `ip -4 addr show docker0` prints it.
+- **joe has to listen where that address arrives.** A connection to the
+  gateway address arrives at that address, not at loopback, so a joe on
+  `127.0.0.1` refuses it. Listen on the gateway address itself:
+
+  ```sh
+  uv run uvicorn api:app --host 172.17.0.1 --port 8010
+  ```
+
+  It is then not on `localhost`: ask it who it is at that address,
+  `curl http://172.17.0.1:8010/openapi.json`. Or listen on every address
+  with `--host 0.0.0.0`, on a network you trust. A host firewall that
+  filters incoming connections, as ufw does by default, also has to let the
+  containers' subnets reach the port.
+
+**joe has no authentication.** Whatever reaches its port can use every route
+it serves, not only these: record from this machine's microphone, as a
+transcript (`/api/voice/listen`) or as a WAV it can then download
+(`/api/capture/start`, `/api/audio/{filename}`); answer a question being
+asked as if by key (`/api/voice/answer`); read the transcript of every
+conversation (`/api/voice/history`); list, download and add to the audio
+library; and upload media for this machine's CPU to transcribe. On loopback,
+that is this machine. On docker0's address, it is this machine and its
+containers -- and, unless a firewall says otherwise, a machine on the same
+network that routes that address through this one. On `0.0.0.0`, it is
+everything that can reach this machine on that port: every device on its
+network, and the internet if a router forwards the port. Use `0.0.0.0` only
+on a network you trust; a firewall rule admitting the port from the Docker
+subnets alone narrows it to this machine and its containers.
 
 ## Uploads are private and kept for a while
 
