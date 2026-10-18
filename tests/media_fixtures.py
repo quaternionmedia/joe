@@ -2,12 +2,15 @@
 
 Sound is generated with numpy and written with soundfile; containers and codecs
 are made by the same ffmpeg joe runs (`Modules.Media.ffmpeg_path`), and the
-tests needing one skip when there is none.
+tests needing one skip when there is none. Speech, for the one test that runs
+the real whisper model, is synthesized by the platform's own speech engine.
 """
 
 from __future__ import annotations
 
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -125,3 +128,32 @@ def video_with_late_audio(ffmpeg: str, folder: Path) -> Path:
                     "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=1.5",
                     "-c:v", "mpeg4", "-c:a", "aac")
     return out
+
+
+# ─── Speech ───────────────────────────────────────────────────────────────────
+
+
+def synthesize_speech(text: str, out: Path) -> Path:
+    """`text` spoken by the platform's speech engine into a 16 kHz mono WAV:
+    Windows' own SAPI voices, or espeak-ng/espeak elsewhere. Skips when there
+    is none -- speech is not faked."""
+    if sys.platform == "win32" and shutil.which("powershell"):
+        script = (
+            "Add-Type -AssemblyName System.Speech;"
+            "$s = New-Object System.Speech.Synthesis.SpeechSynthesizer;"
+            "$f = New-Object System.Speech.AudioFormat.SpeechAudioFormatInfo(16000,"
+            " [System.Speech.AudioFormat.AudioBitsPerSample]::Sixteen,"
+            " [System.Speech.AudioFormat.AudioChannel]::Mono);"
+            f"$s.SetOutputToWaveFile('{out}', $f); $s.Speak('{text}'); $s.Dispose()"
+        )
+        done = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+                              capture_output=True, text=True, check=False, timeout=120)
+        if done.returncode == 0 and out.exists() and out.stat().st_size > 1000:
+            return out
+    for engine in ("espeak-ng", "espeak"):
+        found = shutil.which(engine)
+        if found:
+            done = subprocess.run([found, "-w", str(out), text], capture_output=True, check=False)
+            if done.returncode == 0 and out.exists():
+                return out
+    pytest.skip("no speech synthesizer here (Windows SAPI, espeak-ng or espeak) to make speech with")

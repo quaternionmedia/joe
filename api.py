@@ -27,7 +27,9 @@ Endpoints:
     GET  /api/voice/history         The whole transcript: every take heard and every sentence said
     POST /api/voice/strike          Strike or restore a word of the take being transcribed
     GET  /api/voice/transcript      The take being transcribed, or the last one, once
-    POST /api/media                 Takes audio or video and keeps its sound for a while (docs/media.md)
+    GET  /api/media/capabilities    What the media API takes and does (docs/media.md)
+    POST /api/media                 Takes audio or video and keeps its sound for a while
+    POST /api/media/{id}/transcribe What is said in an upload, with segment and word times
     POST /api/media/{id}/analyze    Tempo, beats, onsets, loudness, silences and peaks of an upload
     DELETE /api/media/{id}          Removes an upload now
 
@@ -854,6 +856,24 @@ class _MediaRoute(APIRoute):
 media = APIRouter(prefix="/api/media", route_class=_MediaRoute)
 
 
+@media.get("/capabilities")
+def media_capabilities():
+    """What this engine takes and does, for a client to check before sending:
+    `{"formats", "features", "speech_model", "word_timestamps", "max_bytes",
+    "max_seconds", "ttl_seconds"}`. `formats` is empty when there is no ffmpeg,
+    since then nothing can be taken."""
+    return {
+        "formats": sorted(Media.FORMATS) if Media.ffmpeg_path() else [],
+        "features": list(Analysis.FEATURES),
+        "speech_model": Media.speech_model(),
+        # The locked openai-whisper has had word timestamps since 20230314.
+        "word_timestamps": True,
+        "max_bytes": Media.max_bytes(),
+        "max_seconds": Media.max_seconds(),
+        "ttl_seconds": float(media_store.ttl),
+    }
+
+
 @media.post("", status_code=201)
 async def media_upload(request: Request):
     """Audio or video as the raw body, its type in `Content-Type`. Answers `201
@@ -940,6 +960,21 @@ def media_analyze(
             silence_min=silence_min, ffmpeg=Media.ffmpeg_path(),
         )
     return {"duration": item.duration, **{key: found[key] for key in _ANALYSIS_KEYS if key in found}}
+
+
+@media.post("/{media_id}/transcribe")
+def media_transcribe(media_id: str, language: str | None = None, words: bool = True):
+    """`{"text", "language", "segments": [{"start", "end", "text", "words":
+    [{"start", "end", "word", "probability"}]}], "info"}`, in seconds of the
+    uploaded media.
+
+    `language` is a code or a name; absent or empty, whisper detects it.
+    `words=false` leaves every segment's `words` empty. Transcriptions take
+    turns on media's own whisper model, never the voice loop's; a plain `def`,
+    so the wait and the work are on FastAPI's thread pool, off the event loop.
+    """
+    with media_store.use(media_id) as item:
+        return Media.transcribe(item, language=language, words=words)
 
 
 @media.delete("/{media_id}", status_code=204)

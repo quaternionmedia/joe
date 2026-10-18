@@ -3,6 +3,14 @@
 import pytest
 
 
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "whisper_model: runs the real whisper model from this machine's cache; skipped when it "
+        "is not cached (nothing is downloaded), deselected with -m 'not whisper_model'",
+    )
+
+
 @pytest.fixture(autouse=True)
 def _no_cues(monkeypatch):
     """No test plays a tone through the machine's speakers. A test of the cues

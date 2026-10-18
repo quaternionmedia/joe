@@ -1,8 +1,9 @@
 """Media: audio and video taken in for the video pipeline, kept privately for a while.
 
 A video editor sends joe a clip or a mixed timeline; joe keeps its sound and
-answers questions about how it moves (`Modules.Analysis`). The routes are under
-`/api/media` in `api.py`; this module is everything behind them.
+answers questions about it -- what is said in it, and when (`transcribe`), and
+how it moves (`Modules.Analysis`). The routes are under `/api/media` in
+`api.py`; this module is everything behind them.
 
 **ONE DECODE, THREE COPIES.** ffmpeg decodes the upload's first audio stream
 once and writes it three ways (`extract`): `sound.wav` at the source's own rate
@@ -21,9 +22,15 @@ sound it returns.
 **PRIVATE, AND KEPT FOR A WHILE.** Each upload is a directory under
 `JOE_MEDIA_DIR` (`Data/Media/` by default) named by a random 128-bit id, which
 is the only way to reach it. It is kept `JOE_MEDIA_TTL` seconds after it was
-last used -- uploaded or analysed -- and then swept; `DELETE`
+last used -- uploaded, transcribed or analysed -- and then swept; `DELETE`
 removes it at once. A media in use is never swept, and one deleted while in use
 goes when its last use ends.
+
+**ITS OWN WHISPER.** Transcription loads whisper through `Voice._load_model`,
+joe's one loader, but into a cache of its own (`MediaSpeech`): two decodes on
+one whisper model at once corrupt each other -- each installs hooks on the
+same attention layers -- and the voice loop's takes must not queue behind an
+hour of captions. Media transcriptions take turns among themselves.
 """
 
 from __future__ import annotations
@@ -42,6 +49,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import soundfile as sf
+
+from Modules.Voice import Voice
 
 # Content types joe takes, and the extension the upload is written with. Audio
 # as V1 lists it -- wav, mp3, ogg, flac, m4a/aac, webm -- and video -- mp4, mov,
@@ -397,3 +406,110 @@ class MediaStore:
             shutil.rmtree(path, ignore_errors=True)
             removed.append(media_id)
         return removed
+
+
+# ─── Transcription ────────────────────────────────────────────────────────────
+
+
+class MediaSpeech(Voice):
+    """whisper for media: `Voice._load_model`, joe's one loader, caching into
+    these class attributes rather than Voice's, so the voice loop and the
+    media API never decode on one model at once."""
+
+    _model = None
+    _model_size: str | None = None
+
+
+# One media transcription at a time: they share MediaSpeech's model.
+_speaking = threading.Lock()
+
+
+def speech_model_size() -> str:
+    """The whisper model media is transcribed with: Voice's own default."""
+    return Voice().model_size
+
+
+def speech_model() -> str:
+    """The model's name as the capabilities and every transcript give it."""
+    return f"whisper-{speech_model_size()}"
+
+
+def language_code(language: str | None) -> str | None:
+    """whisper's code for a language given as a code or a name ("en",
+    "English"); None for none given, which leaves whisper to detect it.
+    MediaError 422 for one whisper does not know."""
+    if language is None or not language.strip():
+        return None
+    from whisper.tokenizer import LANGUAGES, TO_LANGUAGE_CODE
+
+    key = language.strip().lower()
+    if key in LANGUAGES:
+        return key
+    if key in TO_LANGUAGE_CODE:
+        return TO_LANGUAGE_CODE[key]
+    raise MediaError(422, f"unknown language {language!r}; give a code such as 'en' or a name such as 'English'")
+
+
+def transcribe(media: Media, language: str | None = None, words: bool = True) -> dict:
+    """What is said in the media, with segment and word times in its seconds.
+
+    `language` is a code or name, or None for whisper to detect it. `words`
+    asks whisper for word timestamps; without them each segment's `words` is
+    empty. Returns `{"text", "language", "segments": [{"start", "end", "text",
+    "words": [{"start", "end", "word", "probability"}]}], "info"}`.
+
+    A segment's `text` is trimmed; its words are whisper's own, leading space
+    included, so they join back into the segment's text in any language.
+    """
+    code = language_code(language)
+    audio, rate = sf.read(str(media.speech), dtype="float32")
+    if rate != SPEECH_RATE or audio.ndim != 1:  # pragma: no cover -- extract wrote it
+        raise MediaError(500, "this media's speech copy is not 16 kHz mono")
+    size = speech_model_size()
+    with _speaking:
+        model = MediaSpeech._load_model(size)
+        cuda = getattr(getattr(model, "device", None), "type", None) == "cuda"
+        options: dict = {"word_timestamps": bool(words), "fp16": cuda, "verbose": None}
+        if code:
+            options["language"] = code
+        result = model.transcribe(audio, **options)
+    return _transcript(result, f"whisper-{size}", code, bool(words), media.duration)
+
+
+def _seconds(value) -> float:
+    return round(float(value), 3)
+
+
+def _transcript(result: dict, model: str, language: str | None, words: bool, duration: float) -> dict:
+    parts = [p for p in result.get("segments") or [] if isinstance(p, dict)]
+    segments = []
+    for part in parts:
+        segments.append({
+            "start": _seconds(part.get("start", 0.0)),
+            "end": _seconds(part.get("end", 0.0)),
+            "text": str(part.get("text", "")).strip(),
+            "words": [
+                {"start": _seconds(w.get("start", 0.0)), "end": _seconds(w.get("end", 0.0)),
+                 "word": str(w.get("word", "")), "probability": round(float(w.get("probability", 0.0)), 4)}
+                for w in (part.get("words") or []) if words and isinstance(w, dict)
+            ],
+        })
+
+    def values(key):
+        return [float(p[key]) for p in parts if isinstance(p.get(key), (int, float))]
+
+    logprobs = values("avg_logprob")
+    return {
+        "text": str(result.get("text", "")).strip(),
+        "language": result.get("language") or language,
+        "segments": segments,
+        "info": {
+            "model": model,
+            "language": language,
+            "words": words,
+            "duration": duration,
+            "avg_logprob": round(sum(logprobs) / len(logprobs), 4) if logprobs else None,
+            "no_speech_prob": round(max(values("no_speech_prob")), 4) if values("no_speech_prob") else None,
+            "compression_ratio": round(max(values("compression_ratio")), 4) if values("compression_ratio") else None,
+        },
+    }
