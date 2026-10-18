@@ -19,3 +19,12 @@ def _datapoints_in_the_test_s_own_folder(monkeypatch, tmp_path):
     monkeypatch.setattr(api, "datapoints", Datapoints(root=tmp_path / "voice", enabled=True))
     monkeypatch.setattr(api, "transcript", None)
     monkeypatch.setattr(api, "last_take", None)
+
+
+@pytest.fixture(autouse=True)
+def _media_in_the_test_s_own_folder(monkeypatch, tmp_path):
+    """No test keeps uploads in the checkout's `Data/Media`."""
+    import api
+    from Modules.Media import MediaStore
+
+    monkeypatch.setattr(api, "media_store", MediaStore(root=tmp_path / "media", ttl_seconds=3600))

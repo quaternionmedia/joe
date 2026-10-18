@@ -27,6 +27,9 @@ Endpoints:
     GET  /api/voice/history         The whole transcript: every take heard and every sentence said
     POST /api/voice/strike          Strike or restore a word of the take being transcribed
     GET  /api/voice/transcript      The take being transcribed, or the last one, once
+    POST /api/media                 Takes audio or video and keeps its sound for a while (docs/media.md)
+    POST /api/media/{id}/analyze    Tempo, beats, onsets, loudness, silences and peaks of an upload
+    DELETE /api/media/{id}          Removes an upload now
 
 Run directly:
     python -m uvicorn api:app --reload --port 8000
@@ -40,23 +43,42 @@ import json
 import os
 import sys
 import threading
+import traceback
+from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import APIRouter, FastAPI, HTTPException, Query, Request, Response
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.routing import APIRoute
+from starlette.concurrency import run_in_threadpool
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from capture import AudioCapture
 
-from Modules import Cue
+from Modules import Analysis, Cue, Media
 from Modules.Control import Control
 from Modules.Transcript import Datapoints, LiveTranscript
 from Modules.Conversation import POSTED, Conversation
 from Modules.Voice import STALL_SECONDS, NoMicrophoneError, Voice, input_level, list_input_devices
 from Modules.Watch import Unwatched, Watch
 
-app = FastAPI(title="Joe API", version="0.1.0")
+
+@asynccontextmanager
+async def _lifespan(_app):
+    """While the server runs, uploaded media is swept as it expires -- even when
+    nothing is being asked of it (`_sweep_media`)."""
+    stop = threading.Event()
+    threading.Thread(target=_sweep_media, args=(stop,), name="joe-media-sweep", daemon=True).start()
+    try:
+        yield
+    finally:
+        stop.set()
+
+
+app = FastAPI(title="Joe API", version="0.1.0", lifespan=_lifespan)
 
 # Allow the Vite dev server to call us directly (backup for when proxy isn't used)
 app.add_middleware(
@@ -770,3 +792,162 @@ def voice_level(duration: float = 1.0, device: str | None = None):
         return input_level(duration=duration, device=device)
     except NoMicrophoneError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
+
+
+# ─── Media for the video pipeline ─────────────────────────────────────────────
+#
+# Audio or video uploaded once, then analysed -- and transcribed -- by id, for a
+# video editor's captions and timeline. Every failure is `{"detail": str}`.
+# docs/media.md is the reference; Modules/Media.py and Modules/Analysis.py are
+# the work.
+
+media_store = Media.MediaStore()
+
+
+def _sweep_media(stop: threading.Event) -> None:
+    """Sweep expired uploads now and then until `stop`: a quarter of the TTL,
+    at most a minute apart. A sweep that fails waits for the next."""
+    while True:
+        try:
+            media_store.sweep()
+        except Exception:  # noqa: BLE001 -- the next sweep tries again
+            traceback.print_exc()
+        if stop.wait(min(60.0, max(1.0, media_store.ttl / 4))):
+            return
+
+
+def _refusal(errors) -> str:
+    """FastAPI's validation errors as one sentence: `where: what`, joined."""
+    said = []
+    for error in errors:
+        where = ".".join(str(part) for part in tuple(error.get("loc", ()))[1:]) or "request"
+        said.append(f"{where}: {error.get('msg', 'is not valid')}")
+    return "; ".join(said) or "the request is not valid"
+
+
+class _MediaRoute(APIRoute):
+    """A media route answers every failure as `{"detail": str}`, V1's one error
+    shape: a refused parameter as well, which FastAPI would answer with a list,
+    a `Media.MediaError` with its own status, and anything unforeseen as a 500
+    whose traceback goes to the server's log. Scoped to `/api/media`, so every
+    other route answers as it always has."""
+
+    def get_route_handler(self):
+        handle = super().get_route_handler()
+
+        async def route(request: Request):
+            try:
+                return await handle(request)
+            except RequestValidationError as exc:
+                raise HTTPException(status_code=422, detail=_refusal(exc.errors())) from None
+            except Media.MediaError as exc:
+                raise HTTPException(status_code=exc.status, detail=exc.detail) from None
+            except StarletteHTTPException:
+                raise
+            except Exception as exc:  # noqa: BLE001 -- answered in V1's shape, and logged
+                traceback.print_exc()
+                raise HTTPException(status_code=500, detail=f"{type(exc).__name__}: {exc}") from None
+
+        return route
+
+
+media = APIRouter(prefix="/api/media", route_class=_MediaRoute)
+
+
+@media.post("", status_code=201)
+async def media_upload(request: Request):
+    """Audio or video as the raw body, its type in `Content-Type`. Answers `201
+    {"media_id", "duration", "sample_rate", "channels", "has_audio"}`.
+
+    The headers are judged before a byte is read: 415 for a type joe does not
+    take, 413 for a declared length over `JOE_MEDIA_MAX_BYTES`, 503 when there
+    is no ffmpeg. The body is written to disk as it arrives and refused (413)
+    the moment it passes the cap; ffmpeg's decode runs off the event loop. 422
+    for a file with no decodable audio -- a video with no sound track among
+    them -- and 413 for a sound longer than `JOE_MEDIA_MAX_SECONDS`.
+    """
+    content_type = request.headers.get("content-type")
+    kind = Media.content_kind(content_type)
+    if kind is None:
+        given = (content_type or "").split(";")[0].strip().lower() or "none"
+        raise HTTPException(
+            status_code=415,
+            detail=f"unsupported media type '{given}'; joe takes {', '.join(sorted(Media.FORMATS))}",
+        )
+    cap = Media.max_bytes()
+    too_large = f"media larger than {cap} bytes (JOE_MEDIA_MAX_BYTES)"
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > cap:
+        raise HTTPException(status_code=413, detail=too_large)
+    ffmpeg = Media.ffmpeg_path()
+    if ffmpeg is None:
+        raise HTTPException(status_code=503,
+                            detail="ffmpeg was not found: set JOE_FFMPEG to its path or put it on PATH")
+    await run_in_threadpool(media_store.sweep)
+    with media_store.receiving() as (media_id, folder):
+        upload = folder / f"upload.{Media.FORMATS[kind]}"
+        written = 0
+        with open(upload, "wb") as out:
+            async for chunk in request.stream():
+                written += len(chunk)
+                if written > cap:
+                    raise HTTPException(status_code=413, detail=too_large)
+                out.write(chunk)
+        try:
+            sound = await run_in_threadpool(Media.extract, upload, folder, ffmpeg)
+        finally:
+            upload.unlink(missing_ok=True)
+        return media_store.commit(media_id, sound).answer()
+
+
+# The analysis's answer, in V1's order: every key but `duration` is a feature's.
+_ANALYSIS_KEYS = ("tempo", "beats", "onsets", "loudness", "silences", "peaks")
+
+
+def _features(asked: str | None) -> list[str]:
+    """`features`, comma-separated; absent or empty means all of them."""
+    names = [name.strip().lower() for name in (asked or "").split(",") if name.strip()]
+    if not names:
+        return list(Analysis.FEATURES)
+    unknown = [name for name in names if name not in Analysis.FEATURES]
+    if unknown:
+        raise HTTPException(
+            status_code=422,
+            detail=f"unknown feature '{unknown[0]}'; joe measures {', '.join(Analysis.FEATURES)}",
+        )
+    return names
+
+
+@media.post("/{media_id}/analyze")
+def media_analyze(
+    media_id: str,
+    features: str | None = None,
+    peaks_rate: int = Query(Analysis.DEFAULT_PEAKS_RATE, ge=1, le=1000),
+    silence_db: float = Query(Analysis.DEFAULT_SILENCE_DB, ge=-120.0, le=0.0),
+    silence_min: float = Query(Analysis.DEFAULT_SILENCE_MIN, gt=0.0, le=3600.0),
+):
+    """`{"duration", "tempo", "beats", "onsets", "loudness", "silences", "peaks"}`,
+    with only the features asked for. Times are seconds of the uploaded media.
+
+    `peaks_rate` is the waveform's values per second; `silence_db` and
+    `silence_min` are the level a silence stays under and how long it lasts.
+    A plain `def`, so FastAPI runs it on its thread pool, off the event loop.
+    """
+    wanted = _features(features)
+    with media_store.use(media_id) as item:
+        found = Analysis.analyze(
+            item.sound, item.rhythm, wanted, peaks_rate=peaks_rate, silence_db=silence_db,
+            silence_min=silence_min, ffmpeg=Media.ffmpeg_path(),
+        )
+    return {"duration": item.duration, **{key: found[key] for key in _ANALYSIS_KEYS if key in found}}
+
+
+@media.delete("/{media_id}", status_code=204)
+def media_delete(media_id: str):
+    """Removes an upload now -- or, if it is being transcribed or analysed, as
+    soon as that ends. 404 for one that is not here."""
+    media_store.delete(media_id)
+    return Response(status_code=204)
+
+
+app.include_router(media)
