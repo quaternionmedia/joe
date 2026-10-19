@@ -57,7 +57,6 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.routing import APIRoute
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -98,13 +97,13 @@ async def _lifespan(_app):
 
 app = FastAPI(title="Joe API", version="0.1.0", lifespan=_lifespan)
 
-# Allow the Vite dev server to call us directly (backup for when proxy isn't used)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
-    allow_methods=["GET", "POST"],
-    allow_headers=["*"],
-)
+# Pages joe takes requests from may read its answers: the Vite dev page calling
+# the API directly (a backup for when its proxy is not used), and any page in
+# JOE_ALLOWED_ORIGINS.
+app.add_middleware(Access.PageCORS, allow_methods=["GET", "POST"], allow_headers=["*"])
+# Outermost: a request a browser was made to send from another site, or under a
+# name joe does not answer to, is refused before anything else sees it.
+app.add_middleware(Access.Guard)
 
 OUTPUT_DIR = Path("Data/Output")
 AUDIO_DIR  = Path("Data/Audio")
@@ -732,6 +731,13 @@ async def voice_strike(request: Request):
 
 
 async def _json_body(request: Request):
+    """The request's JSON body: 415 for one not sent as JSON, 400 for one that
+    is not JSON. A form, or text/plain holding JSON, is what a page on another
+    site can make a browser send without asking first (docs/security.md)."""
+    kind = (request.headers.get("content-type") or "").split(";")[0].strip().lower()
+    if kind != "application/json" and not kind.endswith("+json"):
+        raise HTTPException(status_code=415,
+                            detail="the body must be JSON, sent as Content-Type: application/json")
     try:
         return await request.json()
     except ValueError:
@@ -752,10 +758,7 @@ async def voice_conversation_post(request: Request):
     states are accepted (`speaking`, `recorded`, `gave_up`, `idle`); the
     microphone's are joe's to report.
     """
-    try:
-        body = await request.json()
-    except ValueError:
-        raise HTTPException(status_code=400, detail="body must be JSON")
+    body = await _json_body(request)
     state = body.get("state") if isinstance(body, dict) else None
     if state not in POSTED:
         raise HTTPException(

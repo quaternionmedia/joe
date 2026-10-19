@@ -26,6 +26,14 @@ def _every_capability_on(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _the_test_client_s_host(monkeypatch):
+    """FastAPI's test client sends `Host: testserver`, a name joe does not
+    answer to unless told (`Modules.Access.host_allowed`). The tests of the
+    guard itself (`test_guard.py`) choose their own."""
+    monkeypatch.setenv("JOE_ALLOWED_HOSTS", "testserver")
+
+
+@pytest.fixture(autouse=True)
 def _no_cues(monkeypatch):
     """No test plays a tone through the machine's speakers. A test of the cues
     themselves turns them back on and stands in for the output device."""
