@@ -41,6 +41,13 @@ and point alfred at `http://host.docker.internal:8010` (from its containers) or
 `http://localhost:8010`. `curl http://localhost:8010/openapi.json` names the
 server -- `Joe API` -- before you trust an answer from that port.
 
+From an alfred checkout, `./al family up` does both: it starts this joe --
+the checkout beside alfred's, or the one `ALFRED_FAMILY_JOE` names -- on 8010
+with nothing turned on beyond the media API, then alfred's dev stack pointed
+at it. `./al family smoke` checks the path through to an analysis by this
+engine, and `./al family down` stops both. alfred's `docs/family.md` has the
+rest.
+
 That command listens on loopback, `127.0.0.1`, uvicorn's default. On Docker
 Desktop that is enough: it resolves `host.docker.internal` itself and hands
 a container's connection to the host's loopback, where joe sees it arrive
