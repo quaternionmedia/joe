@@ -1,5 +1,11 @@
 # joe's media API
 
+> **joe has no authentication.** Whatever reaches its port can use every
+> route that is on. The media API is on in a fresh joe -- a video editor
+> needs no setting -- and nothing that records or hands data out is; run joe
+> on loopback, on one machine you trust. [security.md](security.md) is the
+> threat model.
+
 joe is the audio engine of a video pipeline: a video editor (alfred) sends it a
 clip, or the mixed sound of a timeline, and asks what is said in it and when
 (captions), and how it moves -- tempo, beats, onsets, loudness, silences and a
@@ -62,6 +68,8 @@ seconds of speech took eighteen seconds the first time and three after.
 | `JOE_MEDIA_TTL` | `3600` | Seconds an upload is kept after its last use |
 | `JOE_MEDIA_MAX_BYTES` | `1073741824` (1 GiB) | The largest upload taken |
 | `JOE_MEDIA_MAX_SECONDS` | `7200` (two hours) | The longest sound taken |
+| `JOE_ALLOW_MEDIA` | `1` | `0` turns the media API off: every route here answers `403` |
+| `JOE_ALLOWED_HOSTS` | none | Host names joe answers to besides loopback names, IP addresses and `host.docker.internal` -- a container's service name, say ([security.md](security.md)) |
 
 ### On a Linux Docker host
 
@@ -90,19 +98,25 @@ Two things change when alfred's containers run on Docker Engine on Linux:
   containers' subnets reach the port.
 
 **joe has no authentication.** Whatever reaches its port can use every route
-it serves, not only these: record from this machine's microphone, as a
-transcript (`/api/voice/listen`) or as a WAV it can then download
-(`/api/capture/start`, `/api/audio/{filename}`); answer a question being
-asked as if by key (`/api/voice/answer`); read the transcript of every
-conversation (`/api/voice/history`); list, download and add to the audio
-library; and upload media for this machine's CPU to transcribe. On loopback,
-that is this machine. On docker0's address, it is this machine and its
+that is on, not only these. A fresh joe serves these alone: uploads for this
+machine's CPU to decode and transcribe, reached afterwards only by their
+ids. Each of the rest is a setting someone has to turn on, and the server
+warns as it starts when they have: `JOE_ALLOW_MICROPHONE` records from this
+machine's microphone (`/api/voice/listen`, `/api/capture/start`) and answers
+a question being asked as if by key (`/api/voice/answer`);
+`JOE_ALLOW_TRANSCRIPTS` serves the transcript of every conversation
+(`/api/voice/history`); `JOE_ALLOW_LIBRARY` lists, serves and adds to the
+audio library. Requests a page on another site makes a browser send are
+refused whatever is on ([security.md](security.md)). On loopback, the
+callers are this machine's. On docker0's address, they are this machine and its
 containers -- and, unless a firewall says otherwise, a machine on the same
-network that routes that address through this one. On `0.0.0.0`, it is
+network that routes that address through this one. On `0.0.0.0`, they are
 everything that can reach this machine on that port: every device on its
 network, and the internet if a router forwards the port. Use `0.0.0.0` only
 on a network you trust; a firewall rule admitting the port from the Docker
-subnets alone narrows it to this machine and its containers.
+subnets alone narrows it to this machine and its containers. The first
+request from each address beyond loopback is announced in the server's
+output, once.
 
 ## Uploads are private and kept for a while
 

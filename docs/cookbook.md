@@ -1,7 +1,10 @@
 # Joe Cookbook
 
 Practical user stories for common workflows. Each recipe assumes both servers are running
-(`uv run joe dev`) and the browser is open at `http://localhost:3000/joe`.
+and the browser is open at `http://localhost:3000/joe`. joe has no authentication, so a
+fresh joe serves only the media API; each recipe names what it needs turned on, and
+`uv run joe dev --allow library` serves recipes 1 to 9 but the fourth, which needs
+`--allow microphone` as well ([security.md](security.md)).
 
 ---
 
@@ -53,6 +56,9 @@ The recording is saved automatically to `Data/Audio/`. Open **Library** to see i
 
 **Goal:** Record at higher quality via `sounddevice` (no browser compression).
 
+**Needs:** `uv run joe dev --allow microphone --allow library` -- the microphone to
+record through the API, the library to play and process what it saved.
+
 1. Select **Backend** in the capture mode selector in the transport bar.
 2. Click **Joe, go!** then **Live** — this triggers `POST /api/capture/start`.
 3. Play or route audio through your system device.
@@ -77,6 +83,8 @@ The piano roll renders immediately — no server required for this path.
 ## Recipe 6 — Upload an audio file via the API and process it
 
 **Goal:** Automate intake and processing with `curl` (CI / scripting use case).
+
+**Needs:** `--allow library` (or `JOE_ALLOW_LIBRARY=1` in the API's environment).
 
 ```bash
 # Upload
@@ -176,7 +184,8 @@ cutting. No browser here — this is joe as an engine, over HTTP.
    ```
 
 2. Start the API alone on a port alfred does not use (alfred has 8000), and
-   check that it is joe answering there:
+   check that it is joe answering there. The media API needs no setting: it is
+   the one thing a fresh joe serves.
 
    ```powershell
    uv run uvicorn api:app --port 8010

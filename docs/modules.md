@@ -49,6 +49,23 @@ signals where phase structure differs from the original STFT.
 After outputs are generated, `utilities.save_json()` writes process metadata and note details to:
 - `Data/Output/<timestamp>/Process_Data_<timestamp>.json`
 
+## Access (who may ask for what)
+
+joe has no authentication, and `Access` is what stands in for it
+([security.md](security.md)):
+
+- **Capabilities.** Each route of `api.py` but the health check and the
+  vocabulary belongs to `media`, `microphone`, `transcripts` or `library`,
+  turned on by `JOE_ALLOW_<NAME>`. A fresh joe has `media` alone; a route of a
+  capability that is off answers 403 naming its setting. `banner` is what the
+  server prints as it starts, with a warning for each one on; `problems`
+  stops it starting on a setting it cannot read.
+- **The guard.** `Guard`, outermost of the API's middleware, refuses a
+  `Host` joe does not answer to (DNS rebinding), a state-changing request
+  from another site's page (`Origin`), and anything a browser marks
+  cross-site but a link followed; and announces each address beyond loopback
+  it answers. `PageCORS` lets the same pages read the answers.
+
 ## Media and Analysis (the video pipeline's audio engine)
 
 Beside the pipeline above, two modules answer a video editor over `/api/media`
