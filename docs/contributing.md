@@ -106,7 +106,7 @@ Examples:
 ## Required Pre-PR Checks
 
 Run before opening a PR. The suite is what `tests.yml` runs on every PR,
-and the build what `deploy.yml` runs on every PR against `main`:
+and the build what `deploy.yml` checks on every PR against `main`:
 
 ```powershell
 uv run --frozen pytest tests/ -q
@@ -186,11 +186,13 @@ GitHub Actions runs three workflows, none of them filtered by path:
 | --- | --- | --- | --- |
 | `tests.yml` | Every PR, and every push to `main` | `windows-latest` and `ubuntu-latest`, neither cancelled when the other fails | `uv sync --frozen`, then `uv run --frozen pytest tests/ -q`. Linux installs `libportaudio2` and `ffmpeg` first; Windows installs no ffmpeg, so the media tests that need one skip there |
 | `e2e.yml` | Every PR, every push to `main`, and by hand | `windows-latest`, Node 22 | `npm ci`, `npx playwright install --with-deps chromium`, then `npm run test:e2e` |
-| `deploy.yml` | Every PR against `main`, every push to `main`, and by hand | `ubuntu-latest` | `npm ci` and `npm run build`, then publishes `dist/` to the `gh-pages` branch |
+| `deploy.yml` | Every PR against `main`, every push to `main`, and by hand | `ubuntu-latest` | `npm ci` and `npm run build`; then, only for a push to `main` or a run by hand on `main`, publishes `dist/` to the `gh-pages` branch |
 
-The deploy step runs on every event the workflow does, so a PR from a branch
-of this repository publishes its build to GitHub Pages before it is merged.
-No CI job runs `main.py`. No runner has the whisper model cached, so the one
+A PR's build is checked and never published. Every job runs with a
+read-only token except `deploy.yml`'s publish, which runs no project code
+and is the one job that can write: it takes the build its first job made,
+which ran `npm ci` and the project's scripts without that right
+(`tests/test_workflows.py` holds both). No CI job runs `main.py`. No runner has the whisper model cached, so the one
 test that runs it, marked `whisper_model`, skips in CI.
 
 Dependabot opens update PRs every Wednesday for the workflows' actions and
