@@ -24,6 +24,13 @@
 
 import { LiveAnalysis } from './LiveAnalysis.js';
 
+const MARKUP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+
+/** `text` as it may stand in markup, in an element or an attribute's quotes. */
+function escapeHtml(text) {
+  return String(text).replace(/[&<>"']/g, ch => MARKUP[ch]);
+}
+
 export class CapturePanel {
   /**
    * @param {HTMLElement} el         - The #capture-panel element
@@ -173,27 +180,39 @@ export class CapturePanel {
   // ─── Audio library ────────────────────────────────────────────────────────
 
   async _loadLibrary() {
-    let files;
+    let res, files;
     try {
-      const res = await fetch('/api/audio/files');
+      res   = await fetch('/api/audio/files');
       files = await res.json();
     } catch {
       return;
     }
 
     const list = this._el.querySelector('[data-testid="capture-file-list"]');
+    if (!res.ok) {
+      // A refusal says why in its detail: a joe serving no library names the
+      // setting that turns it on (docs/security.md).
+      const said = document.createElement('li');
+      said.className = 'lib-empty';
+      said.textContent = files?.detail || `The library could not be read (HTTP ${res.status}).`;
+      list.replaceChildren(said);
+      return;
+    }
     if (!files.length) {
       list.innerHTML = '<li class="lib-empty">No recordings yet.</li>';
       return;
     }
 
+    // A name is whatever the folder holds, and this page can drive joe's API:
+    // it goes into the markup as text, never as markup.
     list.innerHTML = files.map(f => {
-      const kb = (f.size / 1024).toFixed(0);
-      return `<li data-name="${f.name}">
-        <span class="lib-name" title="${f.name}">${f.name}</span>
+      const kb   = (f.size / 1024).toFixed(0);
+      const name = escapeHtml(f.name);
+      return `<li data-name="${name}">
+        <span class="lib-name" title="${name}">${name}</span>
         <span class="lib-size">${kb} KB</span>
-        <button data-action="play"    data-name="${f.name}" type="button">Play</button>
-        <button data-action="process" data-name="${f.name}" type="button">Process</button>
+        <button data-action="play"    data-name="${name}" type="button">Play</button>
+        <button data-action="process" data-name="${name}" type="button">Process</button>
       </li>`;
     }).join('');
 
