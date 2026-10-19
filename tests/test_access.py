@@ -126,8 +126,13 @@ def test_readable_settings_are_no_problem():
 def test_a_refusal_names_the_setting_that_turns_it_on():
     for name, capability in Access.CAPABILITIES.items():
         said = Access.refusal(name)
-        assert said.startswith(f"{capability.title} is off on this joe: {capability.setting}=1 turns it on")
+        assert capability.setting in said
         assert "no authentication" in said and "docs/security.md" in said
+    assert [Access.refusal(name).split(":")[0] for name in Access.CAPABILITIES] == [
+        "the media API is off on this joe", "the microphone is off on this joe",
+        "the transcripts are off on this joe", "the audio library is off on this joe"]
+    assert "JOE_ALLOW_TRANSCRIPTS=1 turns them on" in Access.refusal("transcripts")
+    assert "JOE_ALLOW_LIBRARY=1 turns it on" in Access.refusal("library")
 
 
 # ─── What the server says as it starts ────────────────────────────────────────

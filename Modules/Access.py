@@ -81,6 +81,11 @@ class Capability:
     def setting(self) -> str:
         return f"{PREFIX}{self.name.upper()}"
 
+    @property
+    def plural(self) -> bool:
+        """Whether its title takes "are": "the transcripts are off"."""
+        return self.title.endswith("s")
+
 
 CAPABILITIES = {
     capability.name: capability
@@ -146,8 +151,9 @@ def allowed_map(environ: Mapping[str, str] | None = None) -> dict[str, bool]:
 def refusal(name: str) -> str:
     """The `detail` of a route's 403 while its capability is off."""
     capability = CAPABILITIES[name]
-    return (f"{capability.title} is off on this joe: {capability.setting}=1 turns it on, for "
-            f"whatever can reach this port -- joe has no authentication ({SECURITY_DOC})")
+    are, them = ("are", "them") if capability.plural else ("is", "it")
+    return (f"{capability.title} {are} off on this joe: {capability.setting}=1 turns {them} on, "
+            f"for whatever can reach this port -- joe has no authentication ({SECURITY_DOC})")
 
 
 def _listed(setting: str, environ: Mapping[str, str] | None) -> list[str]:
