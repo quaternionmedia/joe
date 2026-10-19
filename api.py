@@ -259,14 +259,15 @@ _UPLOAD_MIME_TO_EXT = {
 @app.post("/api/audio/upload", dependencies=LIBRARY)
 async def audio_upload(request: Request):
     """
-    Receive a raw audio blob from the browser and save it to Data/Audio/.
-    Content-Type must be one of the allowed audio MIME types.
-    Limited to 100 MB; uses a microsecond timestamp to avoid collisions.
-    """
-    body = await request.body()
-    if len(body) > _UPLOAD_MAX_BYTES:
-        raise HTTPException(status_code=413, detail="File too large (max 100 MB)")
+    Receive a raw audio blob from the browser and save it to Data/Audio/,
+    named by a microsecond timestamp.
 
+    The headers are judged before a byte is read: 415 for a Content-Type that
+    is not one of the allowed audio types, 413 for a declared length over
+    100 MB. The body is written as it arrives, under Data/Audio/.incoming/
+    where no route reaches it, and refused (413) the moment it passes 100 MB;
+    only a whole upload is moved into the library. Nothing holds it in memory.
+    """
     raw_ct = request.headers.get("content-type", "").split(";")[0].strip().lower()
     ext = _UPLOAD_MIME_TO_EXT.get(raw_ct)
     if ext is None:
@@ -274,11 +275,27 @@ async def audio_upload(request: Request):
             status_code=415,
             detail=f"Unsupported media type '{raw_ct}'. Allowed: {', '.join(_UPLOAD_MIME_TO_EXT)}"
         )
+    too_large = HTTPException(status_code=413, detail="File too large (max 100 MB)")
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > _UPLOAD_MAX_BYTES:
+        raise too_large
 
     ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     filename = f"capture_{ts}.{ext}"
-    AUDIO_DIR.mkdir(parents=True, exist_ok=True)
-    (AUDIO_DIR / filename).write_bytes(body)
+    incoming = AUDIO_DIR / ".incoming"
+    incoming.mkdir(parents=True, exist_ok=True)
+    partial = incoming / filename
+    try:
+        written = 0
+        with open(partial, "wb") as out:  # noqa: ASYNC230 -- each chunk as it arrives, as media_upload
+            async for chunk in request.stream():
+                written += len(chunk)
+                if written > _UPLOAD_MAX_BYTES:
+                    raise too_large
+                out.write(chunk)
+        os.replace(partial, AUDIO_DIR / filename)
+    finally:
+        partial.unlink(missing_ok=True)
     return {"filename": filename}
 
 
