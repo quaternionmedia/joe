@@ -1,39 +1,42 @@
 """
 Joe FastAPI server — exposes pipeline results and a trigger endpoint.
 
-Endpoints:
-    GET  /api/health                Health check
-    GET  /api/results/latest        Returns the most-recent Process_Data JSON
-    POST /api/run                   Runs the pipeline on Data/Audio/ (all files)
-    POST /api/capture/start         Start backend sounddevice recording
-    POST /api/capture/stop          Stop recording, flush WAV, return filename
-    POST /api/audio/upload          Receive audio blob from browser, save to Data/Audio/
-    GET  /api/audio/files           List saved audio files sorted by mtime
-    GET  /api/audio/{filename}      Serve an audio file for browser playback
-    POST /api/run/{filename}        Run the pipeline on a specific file in Data/Audio/
-    GET  /api/voice/devices         Lists the server's audio input devices
-    POST /api/voice/transcribe      Transcribes an audio file under Data/Audio/ or Data/Voice/
-    POST /api/voice/listen          Records from an input device and transcribes it
-    POST /api/voice/level           How loud one input device is right now
-    GET  /api/voice/conversation    The conversation's states as they happen (server-sent events)
-    GET  /api/voice/conversation/state  The current state and recent events, once
-    POST /api/voice/conversation    A dialog's own state: speaking, recorded, gave_up, idle
-    POST /api/voice/answer          An answer given by key or button, as if said
-    POST /api/voice/hold            A held key: the turn stays open until it is released
-    GET  /api/voice/control         Whether a key is held, an answer is waiting, and the question is interrupted
-    POST /api/voice/watch           Opens a take while a question is still being asked
-    POST /api/voice/unwatch         Closes a watch that will not be listened to
+Endpoints. Each but the health check and the vocabulary belongs to the
+capability in brackets, and answers 403 while it is off; a fresh joe has only
+[media] on (Modules/Access.py, docs/security.md):
+    GET  /api/health                Health check, and which capabilities are on
+    GET  /api/results/latest        Returns the most-recent Process_Data JSON  [library]
+    POST /api/run                   Runs the pipeline on Data/Audio/ (all files)  [library]
+    POST /api/capture/start         Start backend sounddevice recording  [microphone]
+    POST /api/capture/stop          Stop recording, flush WAV, return filename  [microphone]
+    POST /api/audio/upload          Receive audio blob from browser, save to Data/Audio/  [library]
+    GET  /api/audio/files           List saved audio files sorted by mtime  [library]
+    GET  /api/audio/{filename}      Serve an audio file for browser playback  [library]
+    POST /api/run/{filename}        Run the pipeline on a specific file in Data/Audio/  [library]
+    GET  /api/voice/devices         Lists the server's audio input devices  [microphone]
+    POST /api/voice/transcribe      Transcribes an audio file under Data/Audio/ or Data/Voice/  [library]
+    POST /api/voice/listen          Records from an input device and transcribes it  [microphone]
+    POST /api/voice/level           How loud one input device is right now  [microphone]
+    GET  /api/voice/conversation    The conversation's states as they happen (server-sent events)  [transcripts]
+    GET  /api/voice/conversation/state  The current state and recent events, once  [transcripts]
+    POST /api/voice/conversation    A dialog's own state: speaking, recorded, gave_up, idle  [microphone]
+    POST /api/voice/answer          An answer given by key or button, as if said  [microphone]
+    POST /api/voice/hold            A held key: the turn stays open until it is released  [microphone]
+    GET  /api/voice/control         Whether a key is held, an answer is waiting, and the question is interrupted  [microphone]
+    POST /api/voice/watch           Opens a take while a question is still being asked  [microphone]
+    POST /api/voice/unwatch         Closes a watch that will not be listened to  [microphone]
     GET  /api/voice/vocabulary      joe's own spoken words, and what each does
-    GET  /api/voice/history         The whole transcript: every take heard and every sentence said
-    POST /api/voice/strike          Strike or restore a word of the take being transcribed
-    GET  /api/voice/transcript      The take being transcribed, or the last one, once
-    GET  /api/media/capabilities    What the media API takes and does (docs/media.md)
-    POST /api/media                 Takes audio or video and keeps its sound for a while
-    POST /api/media/{id}/transcribe What is said in an upload, with segment and word times
-    POST /api/media/{id}/analyze    Tempo, beats, onsets, loudness, silences and peaks of an upload
-    DELETE /api/media/{id}          Removes an upload now
+    GET  /api/voice/history         The whole transcript: every take heard and every sentence said  [transcripts]
+    POST /api/voice/strike          Strike or restore a word of the take being transcribed  [microphone]
+    GET  /api/voice/transcript      The take being transcribed, or the last one, once  [transcripts]
+    GET  /api/media/capabilities    What the media API takes and does (docs/media.md)  [media]
+    POST /api/media                 Takes audio or video and keeps its sound for a while  [media]
+    POST /api/media/{id}/transcribe What is said in an upload, with segment and word times  [media]
+    POST /api/media/{id}/analyze    Tempo, beats, onsets, loudness, silences and peaks of an upload  [media]
+    DELETE /api/media/{id}          Removes an upload now  [media]
 
-Run directly:
+Run directly, with JOE_ALLOW_<NAME>=1 in the environment for each capability
+to turn on:
     python -m uvicorn api:app --reload --port 8000
 
 Or via the CLI:
@@ -52,7 +55,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, FastAPI, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
@@ -62,7 +65,7 @@ from starlette.requests import ClientDisconnect
 
 from capture import AudioCapture
 
-from Modules import Analysis, Cue, Media
+from Modules import Access, Analysis, Cue, Media
 from Modules.Control import Control
 from Modules.Transcript import Datapoints, LiveTranscript
 from Modules.Conversation import POSTED, Conversation
@@ -72,8 +75,19 @@ from Modules.Watch import Unwatched, Watch
 
 @asynccontextmanager
 async def _lifespan(_app):
-    """While the server runs, uploaded media is swept as it expires -- even when
-    nothing is being asked of it (`_sweep_media`)."""
+    """As the server starts, it says that it has no authentication and what it
+    lets callers do, with a warning for each capability turned on -- or, on a
+    setting it cannot read, says which and does not start (`Modules.Access`).
+
+    While it runs, uploaded media is swept as it expires -- even when nothing
+    is being asked of it (`_sweep_media`)."""
+    problems = Access.problems()
+    for problem in problems:
+        print(f"joe: {problem}", file=sys.stderr, flush=True)
+    if problems:
+        raise RuntimeError("joe will not start on a setting it cannot read (above)")
+    for line in Access.banner():
+        print(line, file=sys.stderr, flush=True)
     stop = threading.Event()
     threading.Thread(target=_sweep_media, args=(stop,), name="joe-media-sweep", daemon=True).start()
     try:
@@ -111,6 +125,22 @@ MEDIA_TYPES = {
 
 _capture = AudioCapture()
 
+
+def _needs(capability: str) -> list:
+    """A route's dependency on one capability: a 403 naming its setting while
+    it is off, judged before anything the route was asked."""
+
+    async def allowed() -> None:
+        if not Access.allowed(capability):
+            raise HTTPException(status_code=403, detail=Access.refusal(capability))
+
+    allowed.capability = capability
+    return [Depends(allowed)]
+
+
+MEDIA, MICROPHONE, TRANSCRIPTS, LIBRARY = (
+    _needs(name) for name in ("media", "microphone", "transcripts", "library"))
+
 # The one conversation this process has: its microphone is the only one.
 conversation = Conversation()
 control = Control()
@@ -131,11 +161,11 @@ ANSWER_CHARS = 100
 
 @app.get("/api/health")
 def health():
-    """Returns ok when the server is running."""
-    return {"status": "ok"}
+    """Returns ok when the server is running, and which capabilities are on."""
+    return {"status": "ok", "allowed": Access.allowed_map()}
 
 
-@app.get("/api/results/latest")
+@app.get("/api/results/latest", dependencies=LIBRARY)
 def get_latest():
     """
     Returns the content of the most recently written Process_Data JSON file.
@@ -162,7 +192,7 @@ def get_latest():
     return json.loads(files[0].read_text(encoding="utf-8"))
 
 
-@app.post("/api/run")
+@app.post("/api/run", dependencies=LIBRARY)
 async def run_pipeline():
     """
     Runs the pipeline on all files in Data/Audio/ and returns stdout/stderr.
@@ -195,7 +225,7 @@ async def run_pipeline():
 
 # ─── Backend capture ──────────────────────────────────────────────────────────
 
-@app.post("/api/capture/start")
+@app.post("/api/capture/start", dependencies=MICROPHONE)
 def capture_start():
     """Start recording from the default audio input device to Data/Audio/."""
     if _capture.is_recording:
@@ -206,7 +236,7 @@ def capture_start():
     return {"status": "recording", "filename": filename}
 
 
-@app.post("/api/capture/stop")
+@app.post("/api/capture/stop", dependencies=MICROPHONE)
 def capture_stop():
     """Stop the active backend recording and flush the WAV file."""
     if not _capture.is_recording:
@@ -227,7 +257,7 @@ _UPLOAD_MIME_TO_EXT = {
     "audio/flac": "flac",
 }
 
-@app.post("/api/audio/upload")
+@app.post("/api/audio/upload", dependencies=LIBRARY)
 async def audio_upload(request: Request):
     """
     Receive a raw audio blob from the browser and save it to Data/Audio/.
@@ -253,7 +283,7 @@ async def audio_upload(request: Request):
     return {"filename": filename}
 
 
-@app.get("/api/audio/files")
+@app.get("/api/audio/files", dependencies=LIBRARY)
 def audio_files():
     """List all audio files in Data/Audio/, sorted by modification time (newest first)."""
     AUDIO_DIR.mkdir(parents=True, exist_ok=True)
@@ -315,7 +345,7 @@ def _audio_file(filename: str) -> Path:
     return candidate
 
 
-@app.get("/api/audio/{filename}")
+@app.get("/api/audio/{filename}", dependencies=LIBRARY)
 def audio_serve(filename: str):
     """Serve an audio file from Data/Audio/ for browser playback."""
     path = _audio_file(filename)
@@ -325,7 +355,7 @@ def audio_serve(filename: str):
 
 PIPELINE_EXTENSIONS = {".wav", ".webm", ".mp3", ".ogg", ".flac"}
 
-@app.post("/api/run/{filename}")
+@app.post("/api/run/{filename}", dependencies=LIBRARY)
 async def run_on_file(filename: str):
     """
     Run the pipeline on a specific file in Data/Audio/.
@@ -389,7 +419,7 @@ def _resolve_audio_path(filename: str) -> Path:
     raise not_found
 
 
-@app.get("/api/voice/devices")
+@app.get("/api/voice/devices", dependencies=MICROPHONE)
 def voice_devices():
     """Audio input devices the server's machine can see, and which one is default.
 
@@ -404,7 +434,7 @@ def voice_devices():
     }
 
 
-@app.post("/api/voice/transcribe")
+@app.post("/api/voice/transcribe", dependencies=LIBRARY)
 def voice_transcribe(filename: str):
     """Transcribes an audio file already present under Data/Audio/ or Data/Voice/."""
     path = _resolve_audio_path(filename)
@@ -412,7 +442,7 @@ def voice_transcribe(filename: str):
     return voice.transcribe(str(path))
 
 
-@app.post("/api/voice/listen")
+@app.post("/api/voice/listen", dependencies=MICROPHONE)
 def voice_listen(
     duration: float = 5.0,
     device: str | None = None,
@@ -521,7 +551,7 @@ def _listen_once(duration: float, device: str | None, until_silence: bool, silen
         raise HTTPException(status_code=503, detail=str(exc))
 
 
-@app.post("/api/voice/watch")
+@app.post("/api/voice/watch", dependencies=MICROPHONE)
 def voice_watch(
     duration: float = 5.0,
     device: str | None = None,
@@ -561,7 +591,7 @@ def voice_watch(
     return {"watching": True, "voice": watch.voice}
 
 
-@app.post("/api/voice/unwatch")
+@app.post("/api/voice/unwatch", dependencies=MICROPHONE)
 def voice_unwatch():
     """Closes a watch that will not be listened to, begun or not."""
     _close_watch()
@@ -606,7 +636,7 @@ def _report(state: str, **detail) -> None:
             Cue.play("heard")
 
 
-@app.post("/api/voice/answer")
+@app.post("/api/voice/answer", dependencies=MICROPHONE)
 async def voice_answer(request: Request):
     """An answer given without speaking -- a key or a button -- taken as if said.
 
@@ -623,7 +653,7 @@ async def voice_answer(request: Request):
     return control.snapshot()
 
 
-@app.post("/api/voice/hold")
+@app.post("/api/voice/hold", dependencies=MICROPHONE)
 async def voice_hold(request: Request):
     """A held key. Body: `{"held": true}` when pressed, `{"held": false}` when
     released. While held, a take does not end on a pause or at its cap; the
@@ -636,7 +666,7 @@ async def voice_hold(request: Request):
     return control.snapshot()
 
 
-@app.get("/api/voice/control")
+@app.get("/api/voice/control", dependencies=MICROPHONE)
 def voice_control():
     """Whether a key is held, whether an answer is waiting for a take, and
     whether the question being said is interrupted -- by either of those, or
@@ -644,7 +674,7 @@ def voice_control():
     return control.snapshot()
 
 
-@app.get("/api/voice/history")
+@app.get("/api/voice/history", dependencies=TRANSCRIPTS)
 def voice_history(limit: int = 200):
     """The whole transcript, oldest first: every take joe heard, with its
     segments, what was struck and how it was labelled, and every sentence the
@@ -666,7 +696,7 @@ def voice_vocabulary():
     return {"phrases": Vocabulary.entries()}
 
 
-@app.get("/api/voice/transcript")
+@app.get("/api/voice/transcript", dependencies=TRANSCRIPTS)
 def voice_transcript():
     """The take being transcribed, or the last one: its segments, the words
     struck, and the text so far."""
@@ -675,7 +705,7 @@ def voice_transcript():
     return transcript.snapshot()
 
 
-@app.post("/api/voice/strike")
+@app.post("/api/voice/strike", dependencies=MICROPHONE)
 async def voice_strike(request: Request):
     """Strike a word of the take being transcribed, or restore a struck one.
 
@@ -708,13 +738,13 @@ async def _json_body(request: Request):
         raise HTTPException(status_code=400, detail="body must be JSON")
 
 
-@app.get("/api/voice/conversation/state")
+@app.get("/api/voice/conversation/state", dependencies=TRANSCRIPTS)
 def voice_conversation_state():
     """The current state, the recent events, and the microphone level, once."""
     return conversation.snapshot()
 
 
-@app.post("/api/voice/conversation")
+@app.post("/api/voice/conversation", dependencies=MICROPHONE)
 async def voice_conversation_post(request: Request):
     """A dialog's own state, posted by the program asking the question.
 
@@ -772,7 +802,7 @@ async def _conversation_events(request: Request, poll: float = 0.05):
         await asyncio.sleep(poll)
 
 
-@app.get("/api/voice/conversation")
+@app.get("/api/voice/conversation", dependencies=TRANSCRIPTS)
 async def voice_conversation(request: Request):
     """The conversation's states as they happen, as server-sent events."""
     return StreamingResponse(
@@ -782,7 +812,7 @@ async def voice_conversation(request: Request):
     )
 
 
-@app.post("/api/voice/level")
+@app.post("/api/voice/level", dependencies=MICROPHONE)
 def voice_level(duration: float = 1.0, device: str | None = None):
     """How loud one input device is right now. Records briefly, keeps nothing.
 
@@ -868,7 +898,7 @@ class _MediaRoute(APIRoute):
         return route
 
 
-media = APIRouter(prefix="/api/media", route_class=_MediaRoute)
+media = APIRouter(prefix="/api/media", route_class=_MediaRoute, dependencies=MEDIA)
 
 
 @media.get("/capabilities")
