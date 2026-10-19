@@ -3,15 +3,22 @@ Joe CLI - dev launcher for the Joe Audio Workbench.
 
 Usage (with uv):
     uv run joe frontend   # Vite dev server only  (localhost:3000)
-    uv run joe backend    # FastAPI server only    (localhost:8000)
+    uv run joe backend    # FastAPI server only    (127.0.0.1:8000): the media API alone
     uv run joe dev        # Both servers together
     uv run joe run        # Run the pipeline once  (Data/Audio/ -> Data/Output/)
+
+joe has no authentication. `backend` and `dev` serve the media API and nothing
+that records or hands data out until `--allow` turns it on: `--allow
+microphone`, `--allow transcripts`, `--allow library`, or `--allow all`
+(docs/security.md).
 
 After `uv tool install -e .` the bare `joe` command works everywhere.
 """
 
+import os
 import subprocess
 import sys
+from typing import Annotated
 
 import typer
 
@@ -52,6 +59,44 @@ def _kill(proc: subprocess.Popen) -> None:
     except subprocess.TimeoutExpired:
         proc.kill()
 
+Allow = Annotated[list[str] | None, typer.Option(
+    "--allow", metavar="CAPABILITY",
+    help="Turn a capability of the API on: microphone, transcripts, library, or all; repeat for "
+         "more. joe has no authentication: whatever reaches the port gets what is on "
+         "(docs/security.md).",
+)]
+
+
+def _api_env(allow: list[str] | None) -> dict[str, str]:
+    """The API's environment: this one, with `JOE_ALLOW_<NAME>=1` for each
+    capability `--allow` names, and every one for `all`. A name that is no
+    capability is a usage error, before anything starts."""
+    from Modules import Access
+
+    env = dict(os.environ)
+    for given in allow or []:
+        name = given.strip().lower()
+        if name == "all":
+            names = list(Access.CAPABILITIES)
+        elif name in Access.CAPABILITIES:
+            names = [name]
+        else:
+            raise typer.BadParameter(
+                f"{given!r} is no capability of joe's: there are {', '.join(Access.CAPABILITIES)}, "
+                f"and all", param_hint="--allow")
+        for each in names:
+            env[Access.CAPABILITIES[each].setting] = "1"
+    return env
+
+
+def _disclaim() -> None:
+    """What `backend` and `dev` say before anything starts."""
+    _echo("joe has no authentication: whatever can reach the API's port is answered, with this "
+          "account's rights.")
+    _echo("The API listens on loopback, 127.0.0.1:8000, for this machine alone, and lists what it "
+          "serves as it starts (docs/security.md).")
+
+
 app = typer.Typer(
     help="Joe Audio Workbench - dev CLI",
     no_args_is_help=True,
@@ -71,24 +116,35 @@ def frontend():
 
 
 @app.command()
-def backend():
-    """Start the FastAPI backend API server (localhost:8000)."""
+def backend(allow: Allow = None):
+    """Start the FastAPI backend API server (127.0.0.1:8000).
+
+    It serves the media API alone until `--allow` turns more on."""
+    env = _api_env(allow)
+    _disclaim()
     subprocess.run(
         [sys.executable, "-m", "uvicorn", "api:app", "--reload", "--port", "8000"],
         check=False,
+        env=env,
     )
 
 
 @app.command()
-def dev():
-    """Start both frontend and backend dev servers. Ctrl+C stops both."""
+def dev(allow: Allow = None):
+    """Start both frontend and backend dev servers. Ctrl+C stops both.
+
+    The API serves the media API alone until `--allow` turns more on: the
+    page's Library and Results need `library`, its Backend capture and voice
+    keys `microphone`, and its voice panel and transcript `transcripts`."""
+    env = _api_env(allow)
+    _disclaim()
     _echo("Starting Vite  -> http://localhost:3000/joe")
     _echo("Starting API   -> http://localhost:8000/api/health")
     _echo("Ctrl+C to stop both.\n")
 
     fe = subprocess.Popen([_npm, "run", "dev"])
     be = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "api:app", "--reload", "--port", "8000"]
+        [sys.executable, "-m", "uvicorn", "api:app", "--reload", "--port", "8000"], env=env
     )
 
     try:
