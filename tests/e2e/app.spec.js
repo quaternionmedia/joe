@@ -140,3 +140,36 @@ test('Canvas mode badge is empty on initial load', async ({ page }) => {
   // No recording or results — badge should be blank
   await expect(page.locator('#canvas-mode')).toHaveText('');
 });
+
+// ─── Scripts from the CDN ────────────────────────────────────────────────────
+
+const CDN_SCRIPTS = {
+  'https://cdn.jsdelivr.net/npm/p5@1.11.2/lib/p5.min.js': 'node_modules/p5/lib/p5.min.js',
+  'https://cdn.jsdelivr.net/npm/p5@1.11.2/lib/addons/p5.sound.js': 'node_modules/p5/lib/addons/p5.sound.js',
+};
+
+test('each CDN script is held to the bytes of the p5 the lockfile installs', async () => {
+  const { createHash } = require('crypto');
+  const root = join(__dirname, '..', '..');
+  const html = readFileSync(join(root, 'src', 'index.html'), 'utf-8');
+  const tags = [...html.matchAll(/<script src="(https:[^"]+)"\s+integrity="([^"]+)"\s+crossorigin="anonymous">/g)];
+
+  expect(Object.fromEntries(tags.map(([, src, integrity]) => [src, integrity]))).toEqual(
+    Object.fromEntries(Object.entries(CDN_SCRIPTS).map(([src, file]) => [
+      src, `sha384-${createHash('sha384').update(readFileSync(join(root, file))).digest('base64')}`,
+    ])),
+  );
+  expect(html.match(/<script src="https:/g)).toHaveLength(tags.length);
+});
+
+test('p5 and p5.sound load from the CDN past their integrity check', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (err) => errors.push(err.message));
+
+  await page.goto('/');
+  await page.waitForSelector('canvas');
+
+  expect(await page.evaluate(() => typeof window.p5)).toBe('function');
+  expect(await page.evaluate(() => typeof window.p5.FFT)).toBe('function');
+  expect(errors).toHaveLength(0);
+});
