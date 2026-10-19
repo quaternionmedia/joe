@@ -33,6 +33,10 @@ is re-pointed at 127.0.0.1 -- DNS rebinding -- can read the answers too.
 Clients that are not browsers -- alfred through vox, qmcp, curl -- send no
 Origin and no Sec-Fetch-Site, so only the Host rule applies to them.
 
+**A REQUEST FROM BEYOND LOOPBACK IS ANNOUNCED.** The first request from each
+address that is not this machine's loopback prints a warning (`notice`): the
+port is reachable from there, with everything that is on.
+
 Every setting is read when it is asked about, so the banner, the routes and
 the guard always agree with the environment the server runs in.
 """
@@ -41,6 +45,8 @@ from __future__ import annotations
 
 import ipaddress
 import os
+import sys
+import threading
 from collections.abc import Mapping
 from dataclasses import dataclass
 from urllib.parse import urlsplit
@@ -297,7 +303,8 @@ def judge(method: str, headers: Headers,
 
 class Guard:
     """ASGI middleware refusing what `judge` refuses, as `{"detail": str}`,
-    before any route -- or CORS -- sees the request."""
+    before any route -- or CORS -- sees the request; and announcing each
+    address beyond loopback it answers (`notice`)."""
 
     def __init__(self, app, environ: Mapping[str, str] | None = None):
         self.app = app
@@ -310,6 +317,7 @@ class Guard:
                 status, detail = refused
                 await JSONResponse({"detail": detail}, status_code=status)(scope, receive, send)
                 return
+            notice(scope.get("client"))
         await self.app(scope, receive, send)
 
 
@@ -320,3 +328,42 @@ class PageCORS(CORSMiddleware):
 
     def is_allowed_origin(self, origin: str) -> bool:
         return origin.strip().lower().rstrip("/") in page_origins()
+
+
+# ─── Who is asking ────────────────────────────────────────────────────────────
+
+# Addresses beyond loopback already announced, and how many are announced at
+# most, so a busy network cannot grow the set without bound.
+NOTICE_LIMIT = 64
+_noticed: set[str] = set()
+_noticed_lock = threading.Lock()
+
+
+def beyond_loopback(address: str) -> bool:
+    """Whether a client's address is another machine's, or a container's. Not
+    an address at all -- a test client, a Unix socket -- is not."""
+    try:
+        ip = ipaddress.ip_address(address)
+    except ValueError:
+        return False
+    mapped = getattr(ip, "ipv4_mapped", None)
+    return not (ip.is_loopback or (mapped is not None and mapped.is_loopback))
+
+
+def notice(client, stream=None) -> bool:
+    """Announce, once per address, a request from beyond this machine's
+    loopback: the port is reachable from there, with everything that is on.
+    Returns whether this call announced one."""
+    if not client:
+        return False
+    address = str(client[0])
+    if not beyond_loopback(address):
+        return False
+    with _noticed_lock:
+        if address in _noticed or len(_noticed) >= NOTICE_LIMIT:
+            return False
+        _noticed.add(address)
+    print(f"joe: !!! WARNING: answering {address}, which is not this machine's loopback. "
+          f"Everything that is on is reachable from there ({SECURITY_DOC}).",
+          file=stream or sys.stderr, flush=True)
+    return True

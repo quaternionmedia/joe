@@ -282,3 +282,50 @@ def test_the_banner_names_what_else_joe_answers_to():
     assert "joe: also answers to the host names joe (JOE_ALLOWED_HOSTS)" in lines
     assert "joe: also takes requests from pages at https://studio.example (JOE_ALLOWED_ORIGINS)" in lines
     assert not any("also" in line for line in Access.banner({}))
+
+
+# ─── Who is asking ────────────────────────────────────────────────────────────
+
+@pytest.fixture
+def unnoticed(monkeypatch):
+    monkeypatch.setattr(Access, "_noticed", set())
+
+
+@pytest.mark.parametrize("address", ["127.0.0.1", "127.8.9.10", "::1", "::ffff:127.0.0.1", "testclient"])
+def test_loopback_and_the_test_client_are_not_announced(unnoticed, address, capsys):
+    assert Access.notice((address, 50000)) is False
+    assert capsys.readouterr().err == ""
+
+
+@pytest.mark.parametrize("address", ["192.168.1.20", "172.17.0.2", "203.0.113.9", "fe80::1"])
+def test_a_request_from_beyond_loopback_is_announced_once(unnoticed, address, capsys):
+    assert Access.notice((address, 50000)) is True
+    assert Access.notice((address, 50001)) is False
+
+    said = capsys.readouterr().err
+    assert said == (f"joe: !!! WARNING: answering {address}, which is not this machine's loopback. "
+                    "Everything that is on is reachable from there (docs/security.md).\n")
+
+
+def test_no_more_addresses_are_kept_than_the_limit(unnoticed, monkeypatch, capsys):
+    monkeypatch.setattr(Access, "NOTICE_LIMIT", 2)
+
+    assert [Access.notice((f"10.0.0.{n}", 1)) for n in range(4)] == [True, True, False, False]
+    assert len(Access._noticed) == 2
+
+
+def test_the_guard_announces_who_it_answers(unnoticed, capsys):
+    """As uvicorn hands it a connection from the network."""
+    import asyncio
+
+    reached = []
+
+    async def app(scope, receive, send):
+        reached.append(scope["client"])
+
+    scope = {"type": "http", "method": "GET", "path": "/api/health", "client": ("192.168.1.20", 5555),
+             "headers": [(b"host", b"192.168.1.10:8010")]}
+    asyncio.run(Access.Guard(app, environ={})(scope, None, None))
+
+    assert reached == [("192.168.1.20", 5555)]
+    assert "answering 192.168.1.20" in capsys.readouterr().err
