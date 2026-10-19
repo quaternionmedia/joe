@@ -107,11 +107,18 @@ export class ResultsPanel {
   _renderMeta(data, notes) {
     const tracks = Object.keys(data.audio || {});
     const types  = [...new Set(notes.map(n => n.type))];
-    this._metaEl.innerHTML = `
-      <div>Iteration: ${data.iteration || '—'}</div>
-      <div>Track${tracks.length !== 1 ? 's' : ''}: ${tracks.join(', ') || '—'}</div>
-      <div>Notes: ${notes.length} events across ${types.join(', ')}</div>
-    `;
+    // A track is named after its file, which is whatever Data/Audio/ held:
+    // text, never markup, on a page that can drive joe's API.
+    const line = text => {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div;
+    };
+    this._metaEl.replaceChildren(
+      line(`Iteration: ${data.iteration || '—'}`),
+      line(`Track${tracks.length !== 1 ? 's' : ''}: ${tracks.join(', ') || '—'}`),
+      line(`Notes: ${notes.length} events across ${types.join(', ')}`),
+    );
   }
 
   _showError() {
