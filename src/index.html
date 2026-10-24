@@ -149,12 +149,13 @@
       <span class="hint-steps">
         <span class="hint-step"><b>1.</b> Joe, go! — start audio</span>
         <span class="hint-sep">·</span>
-        <span class="hint-step"><b>2.</b> Browser/Backend + Live — record</span>
+        <span class="hint-step" data-needs="library" data-what="recording"><b>2.</b> Browser/Backend + Live — record</span>
         <span class="hint-sep">·</span>
-        <span class="hint-step"><b>3.</b> Library → Process — run pipeline</span>
+        <span class="hint-step" data-needs="library" data-what="the pipeline"><b>3.</b> Library → Process — run pipeline</span>
         <span class="hint-sep">·</span>
-        <span class="hint-step"><b>4.</b> Results — view piano roll</span>
+        <span class="hint-step" data-needs="library" data-what="results"><b>4.</b> Results — view piano roll</span>
       </span>
+      <span class="hint-off" data-testid="hint-off" hidden></span>
       <button id="hint-dismiss" type="button" aria-label="Dismiss">×</button>
     </div>
 

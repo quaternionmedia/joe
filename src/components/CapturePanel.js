@@ -23,6 +23,7 @@
  */
 
 import { LiveAnalysis } from './LiveAnalysis.js';
+import { offNote } from './Capabilities.js';
 
 const MARKUP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 
@@ -190,11 +191,14 @@ export class CapturePanel {
 
     const list = this._el.querySelector('[data-testid="capture-file-list"]');
     if (!res.ok) {
-      // A refusal says why in its detail: a joe serving no library names the
-      // setting that turns it on (docs/security.md).
+      // 403 is a joe serving no library: say so, and what turning it on exposes.
       const said = document.createElement('li');
       said.className = 'lib-empty';
-      said.textContent = files?.detail || `The library could not be read (HTTP ${res.status}).`;
+      if (res.status === 403) {
+        said.classList.add('lib-off');
+        said.append(offNote('library'));
+      }
+      else said.textContent = `The library could not be read (HTTP ${res.status}).`;
       list.replaceChildren(said);
       return;
     }

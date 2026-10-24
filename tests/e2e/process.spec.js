@@ -295,7 +295,7 @@ test('A file name is shown as text, never as markup', async ({ page }) => {
   expect(errors).toHaveLength(0);
 });
 
-test('A library joe does not serve says why, in its own words', async ({ page }) => {
+test('A library joe does not serve says so, and what turning it on exposes', async ({ page }) => {
   const errors = [];
   page.on('pageerror', err => errors.push(err.message));
   const detail = 'the audio library is off on this joe: JOE_ALLOW_LIBRARY=1 turns it on, for '
@@ -310,7 +310,8 @@ test('A library joe does not serve says why, in its own words', async ({ page })
   await page.waitForSelector('canvas');
   await page.getByTestId('capture-toggle').click();
 
-  await expect(page.getByTestId('capture-file-list')).toHaveText(detail);
+  await expect(page.getByTestId('capture-file-list')).toHaveText('The library is off. Turning it on lets '
+    + 'anything that reaches this port read and add recordings. docs/security.md');
   await expect(page.locator('[data-action="play"]')).toHaveCount(0);
   expect(errors).toHaveLength(0);
 });
