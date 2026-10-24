@@ -1,5 +1,6 @@
 """`joe backend` and `joe dev`: the disclaimer first, and `--allow` for each
-capability the API should serve beyond the media API."""
+capability the API should serve beyond the media API. `joe dev` with no
+`--allow` serves every one, on loopback."""
 
 import os
 
@@ -79,11 +80,51 @@ def test_a_name_that_is_no_capability_starts_nothing(started):
     assert started == []
 
 
+def uvicorn(calls):
+    """The command the API was started with."""
+    return next(args for args, env in calls if "uvicorn" in args)
+
+
+def test_the_api_listens_on_loopback_alone(started):
+    for command in (["backend"], ["dev"]):
+        started.clear()
+        assert runner.invoke(cli.app, command).exit_code == 0
+        args = uvicorn(started)
+        assert args[args.index("--host") + 1] == "127.0.0.1", command
+
+
+def test_dev_with_no_allow_turns_every_capability_on_and_says_so(started):
+    result = runner.invoke(cli.app, ["dev"])
+
+    assert result.exit_code == 0
+    assert "joe has no authentication" in result.output
+    assert "joe dev turns every capability on" in result.output
+    assert all(allowed(api(started)).values())
+
+
+def test_dev_keeps_a_setting_the_environment_already_has(started, monkeypatch):
+    monkeypatch.setenv("JOE_ALLOW_MICROPHONE", "0")
+
+    assert runner.invoke(cli.app, ["dev"]).exit_code == 0
+    assert allowed(api(started)) == {
+        "media": True, "microphone": False, "transcripts": True, "library": True}
+
+
+def test_dev_allow_media_serves_the_media_api_alone(started):
+    result = runner.invoke(cli.app, ["dev", "--allow", "media"])
+
+    assert result.exit_code == 0
+    assert "turns every capability on" not in result.output
+    assert allowed(api(started)) == {
+        "media": True, "microphone": False, "transcripts": False, "library": False}
+
+
 def test_dev_hands_the_api_what_allow_says_and_leaves_vite_alone(started):
     result = runner.invoke(cli.app, ["dev", "--allow", "transcripts"])
 
     assert result.exit_code == 0
     assert "joe has no authentication" in result.output
-    assert allowed(api(started))["transcripts"] is True
+    assert allowed(api(started)) == {
+        "media": True, "microphone": False, "transcripts": True, "library": False}
     vite = next(env for args, env in started if "uvicorn" not in args)
     assert vite is None  # Vite inherits this environment as it is

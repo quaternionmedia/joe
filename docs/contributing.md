@@ -26,8 +26,8 @@ npx playwright install --with-deps chromium
 The `joe` CLI launches frontend and backend independently for easier troubleshooting:
 
 ```powershell
-# Start everything, with what the page uses turned on (docs/security.md)
-uv run joe dev --allow all
+# Start everything, every capability on, on loopback (docs/security.md)
+uv run joe dev
 
 # Or start separately (useful for isolating issues):
 uv run joe frontend                  # Vite only → http://localhost:3000/joe
@@ -81,7 +81,7 @@ Joe, go!  ->  enables Live  ->  recording  ->  stop  ->  Library: Process  ->  R
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
 | `Live` button is greyed out | Web Audio not started | Click **Joe, go!** first |
-| Library says "the audio library is off on this joe" | joe serves only the media API until told | Start it with `--allow library` (`JOE_ALLOW_LIBRARY=1`); [security.md](security.md) says what each capability exposes |
+| **Library** is greyed and says "The library is off." | joe was started as `backend`, or `dev --allow` without `library` | `uv run joe dev`, or `--allow library` (`JOE_ALLOW_LIBRARY=1`); [security.md](security.md) says what each capability exposes |
 | `Live` starts but no notes appear | Mic permission denied or wrong source | Check browser mic permissions; try **Backend** mode |
 | `Play` button is greyed out | Live recording is active | Click **Stop** to end recording first |
 | **Fetch Latest** returns 404 | No pipeline output yet | Run `uv run joe run` (or process a file via Library) |

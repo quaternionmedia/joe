@@ -10,10 +10,11 @@
 > from the microphone (`JOE_ALLOW_MICROPHONE=1`), the transcripts of what was
 > said (`JOE_ALLOW_TRANSCRIPTS=1`) and the audio library and pipeline
 > (`JOE_ALLOW_LIBRARY=1`) each wait for their setting -- or `--allow
-> microphone`, `--allow transcripts`, `--allow library` on `joe backend` and
-> `joe dev` -- and each one on is announced with a warning as the server
-> starts. [docs/security.md](docs/security.md) is the threat model, and says
-> which setting each program that uses joe needs.
+> microphone`, `--allow transcripts`, `--allow library` on `joe backend` --
+> and each one on is announced with a warning as the server starts. `joe dev`,
+> for working on joe on this machine, turns every one on unless `--allow`
+> names fewer. [docs/security.md](docs/security.md) is the threat model, and
+> says which setting each program that uses joe needs.
 
 Joe (named after Joseph Fourier) is an audio workbench for turning audio files into chroma visualizations and MIDI outputs.
 
@@ -37,7 +38,7 @@ Install everything and launch both servers in one step:
 ```powershell
 uv sync
 npm install
-uv run joe dev --allow library   # Vite :3000 + API :8000, with the audio library on
+uv run joe dev   # Vite :3000 + API on loopback :8000, every capability on
 ```
 
 Then in a second terminal, run the pipeline:
@@ -54,7 +55,7 @@ Open `http://localhost:3000/joe`, click **Results → Fetch Latest**.
 | --- | --- |
 | `uv run joe frontend` | Vite dev server only (`localhost:3000`) |
 | `uv run joe backend [--allow CAPABILITY]` | FastAPI API server only (`127.0.0.1:8000`); the media API alone unless `--allow` turns on `microphone`, `transcripts`, `library` or `all` |
-| `uv run joe dev [--allow CAPABILITY]` | Both servers (Ctrl+C to stop), the API as `backend` starts it |
+| `uv run joe dev [--allow CAPABILITY]` | Both servers (Ctrl+C to stop); the API on loopback with every capability on, or, given `--allow`, as `backend` starts it |
 | `uv run joe run` | Run the pipeline once |
 | `uv run joe voice setup` | **Start here for voice.** Find your microphone while you talk, save it, and prove it with a transcribed sentence |
 | `uv run joe voice listen [--device N] [--fixed]` | Record until you stop talking, then transcribe (`--fixed` records the whole `--duration`) |
@@ -69,9 +70,9 @@ recording — the CLI's and the backend's —
 uses it from then on, with no environment variable to set and no restart.
 `JOE_INPUT_DEVICE`, where set, still overrides it.
 
-**Watching a conversation:** with `uv run joe dev --allow microphone --allow
-transcripts` running -- the microphone for the backend to record, the
-transcripts for the page to show what it heard -- the page at
+**Watching a conversation:** with `uv run joe dev` running -- the microphone
+for the backend to record, the transcripts for the page to show what it
+heard -- the page at
 `http://localhost:3000/joe` shows a voice panel whenever something is spoken
 through the backend: asking, your turn, hearing you, pause, reading, and the
 answer. Each state has its own colour, motion and label. The backend reports
@@ -82,8 +83,9 @@ rest (`docs/api.md`, `/api/voice/conversation`).
 (`uv run python -m qmcp serve` in its checkout), whatever is waiting on you in
 qmcp appears in the panel, oldest first, with **Answer by voice**. Pressing it
 has qmcp ask the question aloud while joe's microphone hears the answer, and
-the panel shows the turn as it happens: joe needs `--allow microphone` for
-qmcp to listen through it, and `--allow transcripts` for the panel. Nothing is
+the panel shows the turn as it happens: joe needs the microphone on for qmcp
+to listen through it, and the transcripts for the panel; `joe dev` turns both
+on. Nothing is
 spoken until the button is pressed. If the conversation cannot start, the panel shows qmcp's own reason.
 The dev server reaches qmcp at `http://localhost:3141`; `QMCP_URL` moves it.
 
@@ -240,6 +242,7 @@ The Vite frontend (`src/`) has three layers:
 | Live capture | mode select + `Live` + indicator | Browser = MediaRecorder mic; Backend = sounddevice WAV |
 | Transport | mode badge + `Play/Stop` + scrub + `×` eject | Disabled while recording; badge shows `LIVE` or `RESULTS`; `×` clears active source |
 | Panels | `Library` + `Results` | Slide-in panels for file management and analysis output |
+| What is off | any of the above | The page reads `/api/health`: a control whose capability is off is greyed, its tooltip naming the setting, and its panel says so with a link to [docs/security.md](docs/security.md) |
 | Voice | `Instruct by voice` | One spoken instruction into qmcp's inbox; the outcome shows in the voice panel |
 
 See [docs/cookbook.md](docs/cookbook.md) for step-by-step recipes.
