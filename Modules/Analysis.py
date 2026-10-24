@@ -12,13 +12,13 @@ Six features, each named by the media API's `features` parameter:
   minimum length;
 - `peaks` -- a waveform: the loudest sample in each window, at a stated rate.
 
-**TWO COPIES OF ONE SOUND.** Levels, silences and peaks are read from the sound
+**Two copies of one sound.** Levels, silences and peaks are read from the sound
 at its own rate and channel count (`sound`), so a peak is the sample that was
 there. Tempo, beats and onsets are read from a 22050 Hz mono copy (`rhythm`):
 the rate librosa's beat tracker and its defaults are made for. `Modules.Media`
 writes both when a file is uploaded.
 
-**READ IN BLOCKS.** An hour of 48 kHz stereo is 1.4 GB as float32, and librosa's
+**Read in blocks.** An hour of 48 kHz stereo is 1.4 GB as float32, and librosa's
 tempo estimate over a whole hour builds an autocorrelation several gigabytes
 wide. So nothing here holds a whole signal: the levels are running sums, the
 mel spectrogram is computed a block of frames at a time, and the tempogram is
@@ -26,7 +26,7 @@ averaged block by block. The results are librosa's own -- the onset envelope,
 the tempo, the beats and the onsets match `librosa.beat.beat_track(y=...)` and
 `librosa.onset.onset_detect(y=...)` on the whole signal (the tests hold that).
 
-**NEVER LOUDNESS-NORMALISED.** The sound is analysed as it was uploaded; a level
+**Never loudness-normalised.** The sound is analysed as it was uploaded; a level
 is a measurement of it. Digital silence has no level in decibels, so every level
 is floored at `DB_FLOOR`.
 """
