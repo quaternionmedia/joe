@@ -24,3 +24,15 @@ export function takeWords(entry) {
   }
   return placed;
 }
+
+/**
+ * The word lit at `t` seconds: the standing word whose span holds `t`, from its
+ * start up to its end. A struck word is never lit.
+ *
+ * @param {Array<{ start: number, end: number, struck: boolean }>} words - as `takeWords` places them
+ * @param {number} t - the playhead, in seconds
+ * @returns {number} its index in `words`, or -1 when none is lit
+ */
+export function litWord(words, t) {
+  return words.findIndex(w => !w.struck && t >= w.start && t < w.end);
+}
