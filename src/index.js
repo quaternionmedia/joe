@@ -8,6 +8,7 @@ import { MainCanvas }   from './components/MainCanvas.js';
 import { Transport }    from './components/Transport.js';
 import { VoicePanel }   from './components/VoicePanel.js';
 import { VoiceQueue }   from './components/VoiceQueue.js';
+import { VoiceInstruct } from './components/VoiceInstruct.js';
 import { VoiceKeys }    from './components/VoiceKeys.js';
 import { VoiceTranscript } from './components/VoiceTranscript.js';
 import { TranscriptPane } from './components/TranscriptPane.js';
@@ -48,6 +49,12 @@ const voicePanel = new VoicePanel(document.getElementById('voice-panel'));
 voicePanel.mount();
 const voiceQueue = new VoiceQueue(document.querySelector('#voice-panel .voice-queue'), voicePanel);
 voiceQueue.mount();
+const voiceInstruct = new VoiceInstruct(
+  document.getElementById('voice-instruct'),
+  document.querySelector('#voice-panel .voice-instruct'),
+  voicePanel,
+);
+voiceInstruct.mount();
 const voiceKeys = new VoiceKeys(document.querySelector('#voice-panel .voice-controls'), voicePanel);
 voiceKeys.mount();
 const voiceTranscript = new VoiceTranscript(document.querySelector('#voice-panel .voice-transcript'), voicePanel);
@@ -61,7 +68,8 @@ transcriptPane.onShow = entry => {
   const words = takeWords(entry);
   mainCanvas.clearNotes();
   mainCanvas.setWords(words, words.length ? words[words.length - 1].end : 0);
-  _activateAudio(`take ${entry.take}`, `/api/voice/takes/${encodeURIComponent(entry.take)}/audio`);
+  _activateAudio(`take ${entry.take}`, `/api/voice/takes/${encodeURIComponent(entry.take)}/audio`,
+                 { unavailable: 'recording not kept' });
   transport.play();
 };
 transcriptPane.mount();
@@ -152,11 +160,12 @@ function _exitLiveScrubMode() {
  *
  * @param {string} name - display filename
  * @param {string} url  - audio source URL
+ * @param {object} [opts] - passed to Transport.setFile
  */
-function _activateAudio(name, url) {
+function _activateAudio(name, url, opts) {
   _activeAudioName = name;
   _exitLiveScrubMode();
-  transport.setFile(name, url);
+  transport.setFile(name, url, opts);
   // Connect audio element to p5 FFT (no-op if audio context not yet started;
   // the startBtn handler reconnects when the context resumes).
   if (_audioActive) sketchInstance.connectAudioSource(transport.audioElement);

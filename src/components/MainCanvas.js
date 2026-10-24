@@ -13,6 +13,8 @@
  * Coordinate system matches sketch.js so the two canvases are pixel-aligned.
  */
 
+import { litWord } from './takeWords.js';
+
 const PITCH_MIN = 20;
 const PITCH_MAX = 107;
 const PITCH_RNG = PITCH_MAX - PITCH_MIN;   // 87
@@ -34,6 +36,19 @@ const LIVE_DONE_COLOUR   = 'rgba(255,255,255,0.45)';
 const LIVE_ACTIVE_COLOUR = 'rgba(255,255,255,0.85)';
 
 const LIVE_WINDOW = 300;   // sketch frames visible across the draw area
+
+/**
+ * `text` as it fits in `maxWidth`: whole, or cut and ended with an ellipsis, or
+ * nothing when not even the ellipsis fits. `measure(s)` is the drawn width of `s`.
+ */
+export function fitText(text, maxWidth, measure) {
+  if (measure(text) <= maxWidth) return text;
+  for (let n = text.length - 1; n > 0; n--) {
+    const cut = `${text.slice(0, n)}…`;
+    if (measure(cut) <= maxWidth) return cut;
+  }
+  return measure('…') <= maxWidth ? '…' : '';
+}
 
 // The words lane — a take's words on the timeline, along the bottom.
 const LANE_H            = 26;
@@ -62,8 +77,18 @@ export class MainCanvas {
     this._bottomInset = 0;
 
     // Words lane: a take's words on the timeline
-    this._words    = [];
-    this._wordsDur = 0;
+    this._words     = [];
+    this._wordsDur  = 0;
+    this._litWord   = -1;
+    this._laneBoxes = [];   // where each word was last drawn, for the pointer
+    this._fitted    = new Map();
+    this._tip = document.createElement('div');
+    this._tip.className = 'lane-tip';
+    this._tip.dataset.testid = 'lane-tip';
+    this._tip.setAttribute('role', 'tooltip');
+    this._tip.hidden = true;
+    document.body.appendChild(this._tip);
+    window.addEventListener('mousemove', e => this._hoverLane(e));
 
     // Live layer
     this._liveActive      = false;
@@ -101,6 +126,7 @@ export class MainCanvas {
   /** Move the playhead to t seconds (clamped). Called by Transport each rAF. */
   setPlayhead(t) {
     this._playhead = Math.max(0, Math.min(t, Math.max(this._totalDur || 0, this._wordsDur || 0)));
+    this._syncLitWord();
   }
 
   // ─── Words lane API ─────────────────────────────────────────────────────
@@ -116,6 +142,7 @@ export class MainCanvas {
     this._playhead = 0;
     this._canvas.setAttribute('aria-label',
       `Words on the timeline: ${this._words.filter(w => !w.struck).map(w => w.text).join(' ')}`);
+    this._syncLitWord();
   }
 
   /** Keep the words lane above a bar along the bottom, `px` tall. */
@@ -131,10 +158,50 @@ export class MainCanvas {
   clearWords() {
     this._words    = [];
     this._wordsDur = 0;
+    this._laneBoxes = [];
+    this._tip.hidden = true;
     this._canvas.removeAttribute('aria-label');
+    this._syncLitWord();
   }
 
   get words() { return this._words; }
+
+  /** The lit word, as `data-current-word` on the canvas, for what reads the page rather than its pixels. */
+  _syncLitWord() {
+    const i = litWord(this._words, this._playhead);
+    if (i === this._litWord) return;
+    this._litWord = i;
+    if (i < 0) this._canvas.removeAttribute('data-current-word');
+    else this._canvas.setAttribute('data-current-word', this._words[i].text);
+  }
+
+  /** `text` fitted to `width` in the lane's font, remembered: the lane is drawn every frame. */
+  _fit(ctx, text, width) {
+    const key = `${Math.floor(width)}|${text}`;
+    if (!this._fitted.has(key)) {
+      if (this._fitted.size > 2000) this._fitted.clear();
+      this._fitted.set(key, fitText(text, width, s => ctx.measureText(s).width));
+    }
+    return this._fitted.get(key);
+  }
+
+  /** A clipped word in the lane, under the pointer, shown whole beside it. */
+  _hoverLane(e) {
+    const overRoll = e.target === document.body || e.target === document.documentElement
+      || e.target.tagName === 'CANVAS';
+    const box = overRoll && !this._liveActive
+      ? this._laneBoxes.find(b => b.clipped && e.clientX >= b.x0 && e.clientX < b.x1
+                                  && e.clientY >= b.y0 && e.clientY <= b.y1)
+      : null;
+    if (!box) {
+      this._tip.hidden = true;
+      return;
+    }
+    this._tip.textContent = box.text;
+    this._tip.style.left  = `${box.x0}px`;
+    this._tip.style.top   = `${box.y0 - 4}px`;
+    this._tip.hidden      = false;
+  }
 
   // ─── Live layer API ─────────────────────────────────────────────────────
 
@@ -267,10 +334,13 @@ export class MainCanvas {
       ctx.textAlign    = 'left';
       ctx.fillStyle    = LANE_BG;
       ctx.fillRect(LABEL_W, laneY, drawW, LANE_H);
-      for (const word of this._words) {
+      const lit = litWord(this._words, this._playhead);
+      this._laneBoxes = [];
+      this._words.forEach((word, i) => {
         const x       = LABEL_W + (word.start / dur) * drawW;
         const bw      = Math.max(2, ((word.end - word.start) / dur) * drawW - 1);
-        const current = !word.struck && this._playhead >= word.start && this._playhead < word.end;
+        const current = i === lit;
+        const shown   = this._fit(ctx, word.text, bw - 6);
         ctx.fillStyle = current ? WORD_CURRENT_BG : WORD_BG;
         ctx.fillRect(x, laneY + 2, bw, LANE_H - 4);
         ctx.save();
@@ -278,12 +348,14 @@ export class MainCanvas {
         ctx.rect(x, laneY, bw, LANE_H);
         ctx.clip();
         ctx.fillStyle = word.struck ? WORD_STRUCK : current ? WORD_CURRENT_TEXT : WORD_TEXT;
-        ctx.fillText(word.text, x + 3, laneY + LANE_H / 2);
+        ctx.fillText(shown, x + 3, laneY + LANE_H / 2);
         if (word.struck) {
-          ctx.fillRect(x + 2, laneY + LANE_H / 2, Math.min(bw - 4, ctx.measureText(word.text).width + 2), 1);
+          ctx.fillRect(x + 2, laneY + LANE_H / 2, Math.min(bw - 4, ctx.measureText(shown).width + 2), 1);
         }
         ctx.restore();
-      }
+        this._laneBoxes.push({ x0: x, x1: x + bw, y0: laneY, y1: laneY + LANE_H,
+                               text: word.text, clipped: shown !== word.text });
+      });
       // With no notes, the lane carries the playhead itself.
       if (!this._notes.length) {
         const px = LABEL_W + (this._playhead / dur) * drawW;
