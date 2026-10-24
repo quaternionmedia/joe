@@ -1,13 +1,13 @@
 """Who may ask a joe for what: the capabilities it serves, and the requests it
 refuses before any route sees them.
 
-**joe HAS NO AUTHENTICATION.** Whatever can reach its port is answered, with
+**joe has no authentication.** Whatever can reach its port is answered, with
 the rights of the account joe runs as. It is meant for one machine its owner
 trusts, listening on loopback; listening wider hands everything that is on to
 whatever can reach the port. docs/security.md is the threat model.
 
-**A FRESH joe SERVES THE MEDIA API AND NOTHING THAT RECORDS OR HANDS DATA
-OUT.** Each capability is a setting, `JOE_ALLOW_<NAME>`, `1` or `0`. `media` is
+**A fresh joe serves the media API and nothing that records or hands data
+out.** Each capability is a setting, `JOE_ALLOW_<NAME>`, `1` or `0`. `media` is
 on until it is turned off: a video editor's uploads, transcribed and analysed
 by an id only the uploader is given. The rest wait to be turned on: the
 microphone, the transcripts of what was said and heard, and the audio library.
@@ -16,7 +16,7 @@ route of one that is off answers 403 naming its setting (`refusal`); and a
 setting joe cannot read stops it starting (`problems`) rather than being
 guessed at.
 
-**A BROWSER IS NOT LET IN FROM ANOTHER SITE.** A page open in a browser on this
+**A browser is not let in from another site.** A page open in a browser on this
 machine can make the browser send requests to loopback, and a page whose name
 is re-pointed at 127.0.0.1 -- DNS rebinding -- can read the answers too.
 `Guard` refuses, before routing:
@@ -33,7 +33,7 @@ is re-pointed at 127.0.0.1 -- DNS rebinding -- can read the answers too.
 Clients that are not browsers -- alfred through vox, qmcp, curl -- send no
 Origin and no Sec-Fetch-Site, so only the Host rule applies to them.
 
-**A REQUEST FROM BEYOND LOOPBACK IS ANNOUNCED.** The first request from each
+**A request from beyond loopback is announced.** The first request from each
 address that is not this machine's loopback prints a warning (`notice`): the
 port is reachable from there, with everything that is on.
 
