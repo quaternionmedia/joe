@@ -131,8 +131,11 @@ segment and word with its time, for captions -- and how it moves: tempo,
 beats, onsets, loudness (dBFS and LUFS), silences and a waveform's peaks.
 Uploads are kept privately under `Data/Media/` for an hour after their last
 use. It needs ffmpeg (on PATH, or named by `JOE_FFMPEG`). Beside alfred, which
-has port 8000, run the API alone: `uv run uvicorn api:app --port 8010`.
-[docs/media.md](docs/media.md) is its reference.
+has port 8000, run the API alone: `uv run uvicorn api:app --port 8010`. That
+listens on loopback, which alfred's containers reach on Docker Desktop and not
+on a Linux Docker host; joe has no authentication, so mind what else can reach
+it before binding wider. [docs/media.md](docs/media.md) is its reference, and
+says how to run it on a Linux host and what that exposes.
 
 See [docs/api.md](docs/api.md) for the full API endpoint reference.
 
@@ -228,7 +231,7 @@ See [docs/cookbook.md](docs/cookbook.md) for step-by-step recipes.
 
 | Document | Contents |
 | --- | --- |
-| [docs/contributing.md](docs/contributing.md) | Local setup, UI control groups, troubleshooting, branch naming, pre-PR checks |
+| [docs/contributing.md](docs/contributing.md) | Local setup, UI control groups, troubleshooting, branch naming, pre-PR checks, what CI runs |
 | [docs/cookbook.md](docs/cookbook.md) | Step-by-step recipes for common workflows |
 | [docs/api.md](docs/api.md) | FastAPI endpoint reference with `curl` examples |
 | [docs/media.md](docs/media.md) | The media API a video editor uses: uploads, transcripts with word times, analysis |
