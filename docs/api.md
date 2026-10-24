@@ -31,8 +31,8 @@ naming the setting that turns it on, before judging anything it was asked:
 | `library` | `JOE_ALLOW_LIBRARY` | off | `/api/audio/*`, `/api/voice/transcribe`, `/api/run`, `/api/run/{filename}`, `/api/results/latest` |
 
 Set them in the API's environment, or start it with `uv run joe backend --allow
-microphone` (or `dev`; `--allow all` for every one). The server lists what is on as it
-starts, warning for each.
+microphone` (`--allow all` for every one); `uv run joe dev` turns every one on unless
+`--allow` names fewer. The server lists what is on as it starts, warning for each.
 
 ## Refused before routing
 
@@ -53,7 +53,8 @@ curl, vox and alfred send none of those headers, and reach joe at names it answe
 
 ### `GET /api/health`
 
-Returns `200 OK` when the server is up, with which capabilities are on. Always served.
+Returns `200 OK` when the server is up, with which capabilities are on. Always served. joe's
+page reads it once to grey what is off.
 
 **Response**
 

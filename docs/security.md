@@ -9,7 +9,8 @@
 > **A fresh joe serves the media API alone.** Everything that records from
 > the microphone or hands data back out -- recordings, transcripts, the audio
 > library -- is off until a setting turns it on, and the server warns at
-> startup for each one on.
+> startup for each one on. `joe dev`, for working on joe on this machine,
+> turns every one on, on loopback alone.
 
 This page is joe's threat model, and the findings of a security review of its
 API, page, dependencies and CI. `Modules/Access.py` enforces what it describes.
@@ -65,9 +66,11 @@ uv run uvicorn api:app --port 8010
 JOE_ALLOW_MICROPHONE=1 uv run uvicorn api:app --port 8010
 ```
 
-Under the CLI, name it: `uv run joe backend --allow microphone`, or
-`uv run joe dev --allow library --allow transcripts`; `--allow all` turns
-every one on. The CLI sets the same variables, for the API process alone.
+Under the CLI, name it: `uv run joe backend --allow microphone`; `--allow
+all` turns every one on. `uv run joe dev` turns every one on unasked, on
+loopback, keeping any setting already in the environment; given `--allow`, it
+serves what `backend` would, and `--allow media` the media API alone. The CLI
+sets the same variables, for the API process alone.
 
 **What the server prints as it starts**, before it takes a request (a fresh
 joe under `uvicorn api:app`):
@@ -106,7 +109,7 @@ joe: !!! WARNING: answering 192.168.1.20, which is not this machine's loopback. 
 | **vox's voice loop**, against a running joe: `vox doctor`, `vox self-report` (live) | `GET /api/health`, `GET /api/voice/devices`, `POST /api/voice/listen` | `JOE_ALLOW_MICROPHONE=1` |
 | `vox loop`, `vox self-report FILE` | `POST /api/voice/transcribe?filename=`, on a file it writes where joe resolves names (`--echo-dir`, joe's `Data/Voice/` or `Data/Audio/`) | `JOE_ALLOW_LIBRARY=1` |
 | **The family hub**: the performing family's demo, which starts joe with `joe serve` and checks it with `joe check` (joe's `feat/family-control`, not on this branch) | joe's page through Vite: the library, the pipeline and its results; and the hub's `POST /family/cue` and `GET /family/state`, which that branch adds | `JOE_ALLOW_LIBRARY=1`. The `/family` routes write into the library and run the pipeline, and have no capability yet: when that branch lands they belong to `library` or to one of their own |
-| **joe's own page** (`joe dev`) | **Library**, **Process**, **Results → Fetch Latest**, playing a recording: `library`. **Backend** capture: `microphone` (and `library` to play it back). The voice panel and the transcript pane: `transcripts`. Answering by key or button, holding the talk key, striking a word: `microphone` | `uv run joe dev --allow ...` with what you use. The Library panel shows a refusal's sentence; the others stay empty |
+| **joe's own page** (`joe dev`) | **Library**, **Process**, **Results → Fetch Latest**, playing a recording: `library`. **Backend** capture: `microphone` (and `library` to play it back). The voice panel and the transcript pane: `transcripts`. Answering by key or button, holding the talk key, striking a word: `microphone` | `uv run joe dev`, which turns every one on; `--allow` names fewer. With one off, its button is greyed, its tooltip naming the setting; the Library, the transcript pane and Results say it is off and link this page; the first-run hint keeps the steps that work |
 
 Without its setting, a consumer meets the 403 at its first request; alfred
 never does. Two report it vaguely ([F18](#findings)), for their own
@@ -374,7 +377,7 @@ Each fixed finding has its test.
 
 | # | Severity | Finding | Status |
 | --- | --- | --- | --- |
-| F1 | High | **Everything on, for whatever reaches the port.** A fresh joe served the microphone, every transcript, the library and the pipeline to any caller, with no authentication | **Fixed in part.** Off by default, each behind a `JOE_ALLOW_` setting with a warning at startup and a 403 naming it; a malformed setting stops the server. joe stays unauthenticated by design: one trusted machine |
+| F1 | High | **Everything on, for whatever reaches the port.** A fresh joe served the microphone, every transcript, the library and the pipeline to any caller, with no authentication | **Fixed in part.** Off by default, each behind a `JOE_ALLOW_` setting with a warning at startup and a 403 naming it; a malformed setting stops the server. `joe dev` turns them on, on loopback, for working on joe. joe stays unauthenticated by design: one trusted machine |
 | F2 | High | **Cross-site requests to loopback.** A page on any site could answer a question qmcp was asking (`/api/voice/answer`, a `text/plain` body read as JSON), post the dialog's state, open a take, start a recording or run the pipeline | **Fixed.** `Origin` and `Sec-Fetch-Site` refused from other sites; JSON routes take only JSON |
 | F3 | High | **DNS rebinding.** A page re-pointed at `127.0.0.1` read every answer: transcripts, recordings, the library | **Fixed.** Hosts joe does not answer to are refused |
 | F4 | Medium | **Markup from file names.** The Library list and the Results summary put file and track names into the page as HTML; a recording named `<img src=x onerror=...>.wav` would run script on the page that drives the API | **Fixed.** Shown as text |

@@ -1,4 +1,5 @@
 import { animate } from 'animejs';
+import { offNote } from './Capabilities.js';
 
 /**
  * ResultsPanel — slide-in right panel for backend JSON output.
@@ -16,6 +17,7 @@ export class ResultsPanel {
     this._mainCanvas = mainCanvas;
     this._fileInput  = el.querySelector('[data-testid="file-input"]');
     this._errorEl    = el.querySelector('[data-testid="load-error"]');
+    this._parseError = this._errorEl?.textContent || '';
     this._metaEl     = el.querySelector('[data-testid="results-meta"]');
     this._isOpen     = false;
     this._onFileChange = this._onFileChange.bind(this);
@@ -44,6 +46,10 @@ export class ResultsPanel {
   async fetchLatest() {
     try {
       const res = await fetch('/api/results/latest', { cache: 'no-store' });
+      if (res.status === 403) {
+        this._showError(offNote('library'));
+        return;
+      }
       if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
       const data = await res.json();
       this._clearError();
@@ -121,7 +127,9 @@ export class ResultsPanel {
     );
   }
 
-  _showError() {
+  /** Show `said` where results would be: by default, that the file did not parse. */
+  _showError(said = this._parseError) {
+    this._errorEl.replaceChildren(said);
     this._errorEl.hidden = false;
     this._metaEl.innerHTML = '';
     this._mainCanvas.clearNotes();

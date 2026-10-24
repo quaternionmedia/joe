@@ -4,13 +4,14 @@ Joe CLI - dev launcher for the Joe Audio Workbench.
 Usage (with uv):
     uv run joe frontend   # Vite dev server only  (localhost:3000)
     uv run joe backend    # FastAPI server only    (127.0.0.1:8000): the media API alone
-    uv run joe dev        # Both servers together
+    uv run joe dev        # Both servers together, every capability on, on loopback
     uv run joe run        # Run the pipeline once  (Data/Audio/ -> Data/Output/)
 
-joe has no authentication. `backend` and `dev` serve the media API and nothing
-that records or hands data out until `--allow` turns it on: `--allow
-microphone`, `--allow transcripts`, `--allow library`, or `--allow all`
-(docs/security.md).
+joe has no authentication. `backend` serves the media API and nothing that
+records or hands data out until `--allow` turns it on: `--allow microphone`,
+`--allow transcripts`, `--allow library`, or `--allow all`. `dev` is for working
+on joe on this machine: with no `--allow` it turns every capability on, and with
+one it serves what `backend` would (docs/security.md).
 
 After `uv tool install -e .` the bare `joe` command works everywhere.
 """
@@ -61,19 +62,23 @@ def _kill(proc: subprocess.Popen) -> None:
 
 Allow = Annotated[list[str] | None, typer.Option(
     "--allow", metavar="CAPABILITY",
-    help="Turn a capability of the API on: microphone, transcripts, library, or all; repeat for "
-         "more. joe has no authentication: whatever reaches the port gets what is on "
+    help="Turn a capability of the API on: media, microphone, transcripts, library, or all; repeat "
+         "for more. joe has no authentication: whatever reaches the port gets what is on "
          "(docs/security.md).",
 )]
 
 
-def _api_env(allow: list[str] | None) -> dict[str, str]:
+def _api_env(allow: list[str] | None, everything: bool = False) -> dict[str, str]:
     """The API's environment: this one, with `JOE_ALLOW_<NAME>=1` for each
     capability `--allow` names, and every one for `all`. A name that is no
-    capability is a usage error, before anything starts."""
+    capability is a usage error, before anything starts. `everything` turns on
+    each capability this environment does not already set."""
     from Modules import Access
 
     env = dict(os.environ)
+    if everything:
+        for capability in Access.CAPABILITIES.values():
+            env.setdefault(capability.setting, "1")
     for given in allow or []:
         name = given.strip().lower()
         if name == "all":
@@ -105,6 +110,10 @@ app = typer.Typer(
 voice_app = typer.Typer(help="Speech analysis: transcription and mic capture.", no_args_is_help=True)
 app.add_typer(voice_app, name="voice")
 
+# The API, on loopback alone: joe has no authentication.
+_UVICORN = [sys.executable, "-m", "uvicorn", "api:app", "--reload",
+            "--host", "127.0.0.1", "--port", "8000"]
+
 # npm is 'npm.cmd' on Windows when not in a shell
 _npm = "npm.cmd" if sys.platform == "win32" else "npm"
 
@@ -123,7 +132,7 @@ def backend(allow: Allow = None):
     env = _api_env(allow)
     _disclaim()
     subprocess.run(
-        [sys.executable, "-m", "uvicorn", "api:app", "--reload", "--port", "8000"],
+        _UVICORN,
         check=False,
         env=env,
     )
@@ -133,19 +142,23 @@ def backend(allow: Allow = None):
 def dev(allow: Allow = None):
     """Start both frontend and backend dev servers. Ctrl+C stops both.
 
-    The API serves the media API alone until `--allow` turns more on: the
-    page's Library and Results need `library`, its Backend capture and voice
-    keys `microphone`, and its voice panel and transcript `transcripts`."""
-    env = _api_env(allow)
+    With no `--allow`, the API serves every capability -- the page's Library
+    and Results need `library`, its Backend capture and voice keys
+    `microphone`, and its voice panel and transcript `transcripts` -- on
+    loopback alone. A setting already in the environment is kept. With
+    `--allow`, it serves what `backend` would: `--allow media` for the media
+    API alone."""
+    env = _api_env(allow, everything=allow is None)
     _disclaim()
+    if allow is None:
+        _echo("joe dev turns every capability on: name fewer with --allow, or run joe backend "
+              "for the media API alone.")
     _echo("Starting Vite  -> http://localhost:3000/joe")
     _echo("Starting API   -> http://localhost:8000/api/health")
     _echo("Ctrl+C to stop both.\n")
 
     fe = subprocess.Popen([_npm, "run", "dev"])
-    be = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "api:app", "--reload", "--port", "8000"], env=env
-    )
+    be = subprocess.Popen(_UVICORN, env=env)
 
     try:
         fe.wait()

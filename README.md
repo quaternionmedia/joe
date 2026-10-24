@@ -9,14 +9,15 @@
 > **A fresh joe serves only the media API a video editor uses.** Each of the
 > rest waits for a setting, and the server warns at startup for each one on:
 >
-> | To turn on | Set | Or, on `joe backend` and `joe dev` |
+> | To turn on | Set | Or, on `joe backend` |
 > | --- | --- | --- |
 > | Recording from the microphone | `JOE_ALLOW_MICROPHONE=1` | `--allow microphone` |
 > | The transcripts of what was said | `JOE_ALLOW_TRANSCRIPTS=1` | `--allow transcripts` |
 > | The audio library and pipeline | `JOE_ALLOW_LIBRARY=1` | `--allow library` |
 >
-> [docs/security.md](docs/security.md) is the threat model, and says which
-> settings each program using joe needs.
+> `joe dev`, for working on joe on this machine, turns every one on unless
+> `--allow` names fewer. [docs/security.md](docs/security.md) is the threat
+> model, and says which settings each program using joe needs.
 
 Joe (named after Joseph Fourier) is an audio workbench for turning audio files into chroma visualizations and MIDI outputs.
 
@@ -40,7 +41,7 @@ Install everything and launch both servers in one step:
 ```powershell
 uv sync
 npm install
-uv run joe dev --allow library   # Vite :3000 + API :8000, with the audio library on
+uv run joe dev   # Vite :3000 + API on loopback :8000, every capability on
 ```
 
 Then in a second terminal, run the pipeline:
@@ -57,7 +58,7 @@ Open `http://localhost:3000/joe`, click **Results → Fetch Latest**.
 | --- | --- |
 | `uv run joe frontend` | Vite dev server only (`localhost:3000`) |
 | `uv run joe backend [--allow CAPABILITY]` | FastAPI API server only (`127.0.0.1:8000`); the media API alone unless `--allow` turns on `microphone`, `transcripts`, `library` or `all` |
-| `uv run joe dev [--allow CAPABILITY]` | Both servers (Ctrl+C to stop), the API as `backend` starts it |
+| `uv run joe dev [--allow CAPABILITY]` | Both servers (Ctrl+C to stop); the API on loopback with every capability on, or, given `--allow`, as `backend` starts it |
 | `uv run joe run` | Run the pipeline once |
 | `uv run joe voice setup` | **Start here for voice.** Find your microphone while you talk, save it, and prove it with a transcribed sentence |
 | `uv run joe voice listen [--device N] [--fixed]` | Record until you stop talking, then transcribe (`--fixed` records the whole `--duration`) |
@@ -72,9 +73,9 @@ recording — the CLI's and the backend's —
 uses it from then on, with no environment variable to set and no restart.
 `JOE_INPUT_DEVICE`, where set, still overrides it.
 
-**Watching a conversation:** run `uv run joe dev --allow microphone --allow
-transcripts` (the microphone for the backend to record, the transcripts for
-the page to show what it heard). The page at `http://localhost:3000/joe`
+**Watching a conversation:** run `uv run joe dev`, which turns on the
+microphone, for the backend to record, and the transcripts, for the page to
+show what it heard. The page at `http://localhost:3000/joe`
 then shows a voice panel whenever something is spoken through the backend:
 asking, your turn, hearing you, pause, reading, and the answer. Each state
 has its own colour, motion and label. The backend reports the microphone's
@@ -85,10 +86,10 @@ states itself; the program asking the question posts the rest
 (`uv run python -m qmcp serve` in its checkout), whatever is waiting on you in
 qmcp appears in the panel, oldest first, with **Answer by voice**. Pressing it
 has qmcp ask the question aloud while joe's microphone hears the answer, and
-the panel shows the turn as it happens. joe needs `--allow microphone` for
-qmcp to listen through it, and `--allow transcripts` for the panel. Nothing
-is spoken until the button is pressed. If the conversation cannot start, the
-panel shows qmcp's own reason.
+the panel shows the turn as it happens. joe needs the microphone on for qmcp
+to listen through it, and the transcripts for the panel; `joe dev` turns both
+on. Nothing is spoken until the button is pressed. If the conversation cannot
+start, the panel shows qmcp's own reason.
 The dev server reaches qmcp at `http://localhost:3141`; `QMCP_URL` moves it.
 
 **Instructing by voice from the page:** **Instruct by voice** in the bottom bar
@@ -243,6 +244,7 @@ The Vite frontend (`src/`) has three layers:
 | Live capture | mode select + `Live` + indicator | Browser = MediaRecorder mic; Backend = sounddevice WAV |
 | Transport | mode badge + `Play/Stop` + scrub + `×` eject | Disabled while recording; badge shows `LIVE` or `RESULTS`; `×` clears active source |
 | Panels | `Library` + `Results` | Slide-in panels for file management and analysis output |
+| What is off | any of the above | The page reads `/api/health`: a control whose capability is off is greyed, its tooltip naming the setting, and its panel says so with a link to [docs/security.md](docs/security.md) |
 | Voice | `Instruct by voice` | One spoken instruction into qmcp's inbox; the outcome shows in the voice panel |
 
 See [docs/cookbook.md](docs/cookbook.md) for step-by-step recipes.

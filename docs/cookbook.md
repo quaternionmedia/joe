@@ -2,9 +2,8 @@
 
 Practical user stories for common workflows. Each recipe assumes both servers are running
 and the browser is open at `http://localhost:3000/joe`. joe has no authentication, so a
-fresh joe serves only the media API ([security.md](security.md)).
-`uv run joe dev --allow library` serves recipes 1 to 9, except recipe 4, which also needs
-`--allow microphone`.
+fresh joe serves only the media API, and `uv run joe dev` turns on everything the
+recipes need ([security.md](security.md)).
 
 ---
 
@@ -56,8 +55,8 @@ The recording is saved automatically to `Data/Audio/`. Open **Library** to see i
 
 **Goal:** Record at higher quality via `sounddevice` (no browser compression).
 
-**Needs:** `uv run joe dev --allow microphone --allow library`: the microphone to
-record through the API, the library to play and process what it saved.
+**Needs:** the microphone to record through the API, and the library to play and
+process what it saved; `uv run joe dev` turns both on.
 
 1. Select **Backend** in the capture mode selector in the transport bar.
 2. Click **Joe, go!** then **Live** — this triggers `POST /api/capture/start`.
