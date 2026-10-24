@@ -26,12 +26,12 @@ npx playwright install --with-deps chromium
 The `joe` CLI launches frontend and backend independently for easier troubleshooting:
 
 ```powershell
-# Start everything
+# Start everything, every capability on, on loopback (docs/security.md)
 uv run joe dev
 
 # Or start separately (useful for isolating issues):
-uv run joe frontend   # Vite only → http://localhost:3000/joe
-uv run joe backend    # API only  → http://localhost:8000/api/health
+uv run joe frontend                  # Vite only → http://localhost:3000/joe
+uv run joe backend --allow library   # API only  → http://localhost:8000/api/health
 
 # Run the pipeline
 uv run joe run
@@ -81,6 +81,7 @@ Joe, go!  ->  enables Live  ->  recording  ->  stop  ->  Library: Process  ->  R
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
 | `Live` button is greyed out | Web Audio not started | Click **Joe, go!** first |
+| **Library** is greyed and says "The library is off." | joe was started as `backend`, or `dev --allow` without `library` | `uv run joe dev`, or `--allow library` (`JOE_ALLOW_LIBRARY=1`); [security.md](security.md) says what each capability exposes |
 | `Live` starts but no notes appear | Mic permission denied or wrong source | Check browser mic permissions; try **Backend** mode |
 | `Play` button is greyed out | Live recording is active | Click **Stop** to end recording first |
 | **Fetch Latest** returns 404 | No pipeline output yet | Run `uv run joe run` (or process a file via Library) |
@@ -106,7 +107,7 @@ Examples:
 ## Required Pre-PR Checks
 
 Run before opening a PR. The suite is what `tests.yml` runs on every PR,
-and the build what `deploy.yml` runs on every PR against `main`:
+and the build what `deploy.yml` checks on every PR against `main`:
 
 ```powershell
 uv run --frozen pytest tests/ -q
@@ -186,11 +187,13 @@ GitHub Actions runs three workflows, none of them filtered by path:
 | --- | --- | --- | --- |
 | `tests.yml` | Every PR, and every push to `main` | `windows-latest` and `ubuntu-latest`, neither cancelled when the other fails | `uv sync --frozen`, then `uv run --frozen pytest tests/ -q`. Linux installs `libportaudio2` and `ffmpeg` first; Windows installs no ffmpeg, so the media tests that need one skip there |
 | `e2e.yml` | Every PR, every push to `main`, and by hand | `windows-latest`, Node 22 | `npm ci`, `npx playwright install --with-deps chromium`, then `npm run test:e2e` |
-| `deploy.yml` | Every PR against `main`, every push to `main`, and by hand | `ubuntu-latest` | `npm ci` and `npm run build`, then publishes `dist/` to the `gh-pages` branch |
+| `deploy.yml` | Every PR against `main`, every push to `main`, and by hand | `ubuntu-latest` | `npm ci` and `npm run build`; then, only for a push to `main` or a run by hand on `main`, publishes `dist/` to the `gh-pages` branch |
 
-The deploy step runs on every event the workflow does, so a PR from a branch
-of this repository publishes its build to GitHub Pages before it is merged.
-No CI job runs `main.py`. No runner has the whisper model cached, so the one
+A PR's build is checked and never published. Every job runs with a
+read-only token except `deploy.yml`'s publish, which runs no project code
+and is the one job that can write: it takes the build its first job made,
+which ran `npm ci` and the project's scripts without that right
+(`tests/test_workflows.py` holds both). No CI job runs `main.py`. No runner has the whisper model cached, so the one
 test that runs it, marked `whisper_model`, skips in CI.
 
 Dependabot opens update PRs every Wednesday for the workflows' actions and

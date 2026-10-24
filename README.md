@@ -1,5 +1,21 @@
 # Joe
 
+> **joe has no authentication.** Whatever can reach its port is answered,
+> with your account's rights. Run it on one machine you trust, listening on
+> loopback (`127.0.0.1`) -- which is what `joe backend`, `joe dev` and
+> `uvicorn api:app` do unless told otherwise. Listening on any other address
+> hands everything that is on to whatever can reach it.
+>
+> **A fresh joe serves only the media API a video editor uses.** Recording
+> from the microphone (`JOE_ALLOW_MICROPHONE=1`), the transcripts of what was
+> said (`JOE_ALLOW_TRANSCRIPTS=1`) and the audio library and pipeline
+> (`JOE_ALLOW_LIBRARY=1`) each wait for their setting -- or `--allow
+> microphone`, `--allow transcripts`, `--allow library` on `joe backend` --
+> and each one on is announced with a warning as the server starts. `joe dev`,
+> for working on joe on this machine, turns every one on unless `--allow`
+> names fewer. [docs/security.md](docs/security.md) is the threat model, and
+> says which setting each program that uses joe needs.
+
 Joe (named after Joseph Fourier) is an audio workbench for turning audio files into chroma visualizations and MIDI outputs.
 
 The repo has two primary parts:
@@ -22,7 +38,7 @@ Install everything and launch both servers in one step:
 ```powershell
 uv sync
 npm install
-uv run joe dev       # Vite :3000 + API :8000
+uv run joe dev   # Vite :3000 + API on loopback :8000, every capability on
 ```
 
 Then in a second terminal, run the pipeline:
@@ -38,8 +54,8 @@ Open `http://localhost:3000/joe`, click **Results → Fetch Latest**.
 | Command | What it does |
 | --- | --- |
 | `uv run joe frontend` | Vite dev server only (`localhost:3000`) |
-| `uv run joe backend` | FastAPI API server only (`localhost:8000`) |
-| `uv run joe dev` | Both servers (Ctrl+C to stop) |
+| `uv run joe backend [--allow CAPABILITY]` | FastAPI API server only (`127.0.0.1:8000`); the media API alone unless `--allow` turns on `microphone`, `transcripts`, `library` or `all` |
+| `uv run joe dev [--allow CAPABILITY]` | Both servers (Ctrl+C to stop); the API on loopback with every capability on, or, given `--allow`, as `backend` starts it |
 | `uv run joe run` | Run the pipeline once |
 | `uv run joe voice setup` | **Start here for voice.** Find your microphone while you talk, save it, and prove it with a transcribed sentence |
 | `uv run joe voice listen [--device N] [--fixed]` | Record until you stop talking, then transcribe (`--fixed` records the whole `--duration`) |
@@ -54,7 +70,9 @@ recording — the CLI's and the backend's —
 uses it from then on, with no environment variable to set and no restart.
 `JOE_INPUT_DEVICE`, where set, still overrides it.
 
-**Watching a conversation:** with `uv run joe dev` running, the page at
+**Watching a conversation:** with `uv run joe dev` running -- the microphone
+for the backend to record, the transcripts for the page to show what it
+heard -- the page at
 `http://localhost:3000/joe` shows a voice panel whenever something is spoken
 through the backend: asking, your turn, hearing you, pause, reading, and the
 answer. Each state has its own colour, motion and label. The backend reports
@@ -65,8 +83,10 @@ rest (`docs/api.md`, `/api/voice/conversation`).
 (`uv run python -m qmcp serve` in its checkout), whatever is waiting on you in
 qmcp appears in the panel, oldest first, with **Answer by voice**. Pressing it
 has qmcp ask the question aloud while joe's microphone hears the answer, and
-the panel shows the turn as it happens. Nothing is spoken until the button is
-pressed. If the conversation cannot start, the panel shows qmcp's own reason.
+the panel shows the turn as it happens: joe needs the microphone on for qmcp
+to listen through it, and the transcripts for the panel; `joe dev` turns both
+on. Nothing is
+spoken until the button is pressed. If the conversation cannot start, the panel shows qmcp's own reason.
 The dev server reaches qmcp at `http://localhost:3141`; `QMCP_URL` moves it.
 
 **Instructing by voice from the page:** **Instruct by voice** in the bottom bar
@@ -130,7 +150,8 @@ sound of a timeline, to `/api/media` and asks by id what is said in it -- each
 segment and word with its time, for captions -- and how it moves: tempo,
 beats, onsets, loudness (dBFS and LUFS), silences and a waveform's peaks.
 Uploads are kept privately under `Data/Media/` for an hour after their last
-use. It needs ffmpeg (on PATH, or named by `JOE_FFMPEG`). Beside alfred, which
+use. It needs ffmpeg (on PATH, or named by `JOE_FFMPEG`), and no setting: the
+media API is on in a fresh joe, and nothing else is. Beside alfred, which
 has port 8000, run the API alone: `uv run uvicorn api:app --port 8010`. That
 listens on loopback, which alfred's containers reach on Docker Desktop and not
 on a Linux Docker host; joe has no authentication, so mind what else can reach
@@ -221,6 +242,7 @@ The Vite frontend (`src/`) has three layers:
 | Live capture | mode select + `Live` + indicator | Browser = MediaRecorder mic; Backend = sounddevice WAV |
 | Transport | mode badge + `Play/Stop` + scrub + `×` eject | Disabled while recording; badge shows `LIVE` or `RESULTS`; `×` clears active source |
 | Panels | `Library` + `Results` | Slide-in panels for file management and analysis output |
+| What is off | any of the above | The page reads `/api/health`: a control whose capability is off is greyed, its tooltip naming the setting, and its panel says so with a link to [docs/security.md](docs/security.md) |
 | Voice | `Instruct by voice` | One spoken instruction into qmcp's inbox; the outcome shows in the voice panel |
 
 See [docs/cookbook.md](docs/cookbook.md) for step-by-step recipes.
@@ -235,6 +257,7 @@ See [docs/cookbook.md](docs/cookbook.md) for step-by-step recipes.
 | [docs/cookbook.md](docs/cookbook.md) | Step-by-step recipes for common workflows |
 | [docs/api.md](docs/api.md) | FastAPI endpoint reference with `curl` examples |
 | [docs/media.md](docs/media.md) | The media API a video editor uses: uploads, transcripts with word times, analysis |
+| [docs/security.md](docs/security.md) | The threat model: what joe serves without authentication, the settings that turn each part on, which ones each program using joe needs, and the review's findings |
 | [docs/modules.md](docs/modules.md) | Python module architecture and data flow |
 
 ## Contributing
