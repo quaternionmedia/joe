@@ -5,7 +5,7 @@ answers questions about it -- what is said in it, and when (`transcribe`), and
 how it moves (`Modules.Analysis`). The routes are under `/api/media` in
 `api.py`; this module is everything behind them.
 
-**ONE DECODE, THREE COPIES.** ffmpeg decodes the upload's first audio stream
+**One decode, three copies.** ffmpeg decodes the upload's first audio stream
 once and writes it three ways (`extract`): `sound.wav` at the source's own rate
 and channel count, for levels and peaks; `speech.wav`, 16 kHz mono, for whisper;
 and `rhythm.wav`, 22050 Hz mono, for librosa's beat tracker. Format, never
@@ -13,20 +13,20 @@ level: nothing is loudness-normalised. The upload itself is deleted once its
 sound is out. A track that starts after the media does is padded with silence
 to its start, so every time joe answers is in seconds of the uploaded media.
 
-**ONLY MEDIA FORMATS ARE OPENED.** The content type must be one of `FORMATS`,
+**Only media formats are opened.** The content type must be one of `FORMATS`,
 and ffmpeg may open the file only with the demuxers those formats need
 (`DEMUXERS`) and only from a local file: a playlist or a concat script sent as
 "audio" could otherwise make ffmpeg read other files on this machine into the
 sound it returns.
 
-**PRIVATE, AND KEPT FOR A WHILE.** Each upload is a directory under
+**Private, and kept for a while.** Each upload is a directory under
 `JOE_MEDIA_DIR` (`Data/Media/` by default) named by a random 128-bit id, which
 is the only way to reach it. It is kept `JOE_MEDIA_TTL` seconds after it was
 last used -- uploaded, transcribed or analysed -- and then swept; `DELETE`
 removes it at once. A media in use is never swept, and one deleted while in use
 goes when its last use ends.
 
-**ITS OWN WHISPER.** Transcription loads whisper through `Voice._load_model`,
+**Its own whisper.** Transcription loads whisper through `Voice._load_model`,
 joe's one loader, but into a cache of its own (`MediaSpeech`): two decodes on
 one whisper model at once corrupt each other -- each installs hooks on the
 same attention layers -- and the voice loop's takes must not queue behind an
