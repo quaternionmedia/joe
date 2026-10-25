@@ -45,10 +45,12 @@ export class VoicePanel {
    * @param {HTMLElement} el   - #voice-panel
    * @param {object} [opts]
    * @param {string} [opts.url] - the conversation stream
+   * @param {object} opts.window - the panel's window in the dock (Workspace.window)
    */
-  constructor(el, { url = '/api/voice/conversation' } = {}) {
+  constructor(el, { url = '/api/voice/conversation', window } = {}) {
     this._el      = el;
     this._url     = url;
+    this._window  = window;
     this._label   = el.querySelector('[data-testid="voice-label"]');
     this._hint    = el.querySelector('[data-testid="voice-hint"]');
     this._log     = el.querySelector('[data-testid="voice-log"]');
@@ -67,13 +69,19 @@ export class VoicePanel {
 
   /** Show the panel, whatever state it is in. */
   reveal() {
-    this._el.hidden = false;
+    this._open();
+  }
+
+  // The window opened if it is closed: one the person has put behind another
+  // tab is left there, so a conversation does not take the front from them.
+  _open() {
+    if (!this._window.isOpen) this._window.show({ focus: false });
   }
 
   /** Step aside if nothing is happening and nothing needs the panel. */
   settle() {
     const finished = FINISHED.includes(this._el.dataset.state);
-    if (finished && this._linger === null && !this.keepOpen()) this._el.hidden = true;
+    if (finished && this._linger === null && !this.keepOpen()) this._window.close();
   }
 
   mount() {
@@ -90,14 +98,14 @@ export class VoicePanel {
     // The take as it is written: not a turn of its own, so the state, the
     // label and the log are left as they are, for whatever follows the words.
     if (event.state === 'transcript') {
-      this._el.hidden = false;
+      this._open();
       if (this.onEvent) this.onEvent(event);
       return;
     }
     // Something joe says of a segment said to it -- a take marked for tuning,
     // the voice's level: logged, and no turn of its own.
     if (event.state === 'note') {
-      this._el.hidden = false;
+      this._open();
       this._append(event);
       if (this.onEvent) this.onEvent(event);
       return;
@@ -105,8 +113,10 @@ export class VoicePanel {
     const spec = STATES[event.state];
     if (!spec) return;
 
-    this._el.hidden = false;
+    // The state first: opening the window lays the panel out, and a state set
+    // after that would fade in from the last one's colour.
     this._el.dataset.state = event.state;
+    this._open();
     this._label.textContent = spec.label;
     this._hint.textContent =
       (event.state === 'speaking' && REASKS[event.reason]) ||
@@ -127,7 +137,7 @@ export class VoicePanel {
     if (FINISHED.includes(event.state)) {
       this._linger = setTimeout(() => {
         this._linger = null;
-        if (!this.keepOpen()) this._el.hidden = true;
+        if (!this.keepOpen()) this._window.close();
       }, LINGER_MS);
     }
   }

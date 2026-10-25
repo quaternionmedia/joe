@@ -12,17 +12,16 @@
  * "What can be said" lists joe's own words (GET /api/voice/vocabulary) and the
  * conversation's (GET /v1/voice/vocabulary, the program asking), checks included.
  *
- * Open and close with `T`, the transport's Transcript button, or ×; the choice is
- * remembered in this browser. While open, the piano roll keeps its notes out from
- * under the pane.
+ * A window of the dock: open and close it with `T`, the transport's Transcript
+ * button, or ×, and the dock keeps where it is across a reload.
  *
  * Usage:
- *   const pane = new TranscriptPane(document.getElementById('transcript-pane'), voicePanel, { canvas: mainCanvas });
+ *   const pane = new TranscriptPane(document.getElementById('transcript-pane'), voicePanel,
+ *                                   { window: workspace.window('transcript') });
  *   pane.mount();
  */
 import { offNote } from './Capabilities.js';
 
-const OPEN_KEY = 'joe.transcript.open';
 // How close to the bottom counts as following the newest line, in pixels.
 const FOLLOW_PX = 48;
 
@@ -67,34 +66,23 @@ export function dayLabel(date, now) {
   return date.toLocaleDateString([], parts);
 }
 
-function remembered(storage) {
-  try { return storage?.getItem(OPEN_KEY) === '1'; } catch { return false; }
-}
-
-function remember(storage, open) {
-  try { storage?.setItem(OPEN_KEY, open ? '1' : '0'); } catch { /* a private window keeps nothing */ }
-}
-
 export class TranscriptPane {
   /**
    * @param {HTMLElement} el      - #transcript-pane
    * @param {object} panel        - the VoicePanel whose events carry the exchange
    * @param {object} [opts]
-   * @param {object} [opts.canvas]  - the MainCanvas, told how much of it the pane covers
+   * @param {object} opts.window    - the pane's window in the dock (Workspace.window)
    * @param {string} [opts.base]    - joe's voice routes
    * @param {string} [opts.asking]  - the program asking's voice routes
    * @param {Document} [opts.doc]
-   * @param {Storage} [opts.storage]
    */
-  constructor(el, panel, { canvas = null, base = '/api/voice', asking = '/v1/voice',
-                           doc = document, storage = globalThis.localStorage } = {}) {
+  constructor(el, panel, { window, base = '/api/voice', asking = '/v1/voice', doc = document } = {}) {
     this._el      = el;
     this._panel   = panel;
-    this._canvas  = canvas;
+    this._window  = window;
     this._base    = base;
     this._asking  = asking;
     this._doc     = doc;
-    this._storage = storage;
     this._list    = el.querySelector('[data-testid="transcript-entries"]');
     this._say     = el.querySelector('[data-testid="transcript-say"]');
     this._empty   = el.querySelector('[data-testid="transcript-empty"]');
@@ -118,18 +106,18 @@ export class TranscriptPane {
       if (previous) previous(event);
       this._event(event);
     };
-    this.toggle(remembered(this._storage));
+    // Shown by the dock: follow the newest line again.
+    this._el.addEventListener('joe:window', e => { if (e.detail.shown) this._follow(true); });
     await this.refresh();
   }
 
-  get isOpen() { return !this._el.hidden; }
+  get isOpen() { return this._window.isOpen; }
 
-  toggle(open = !this.isOpen) {
-    this._el.hidden = !open;
-    this._doc.body.classList.toggle('transcript-open', open);
-    remember(this._storage, open);
-    this._canvas?.setInset?.(open ? this._el.offsetWidth : 0);
-    if (open) this._follow(true);
+  /** Close the window if it is in front, else bring it there; `open` says which. */
+  toggle(open) {
+    if (open === undefined) this._window.toggle();
+    else if (open) this._window.show();
+    else this._window.close();
   }
 
   /** Read the whole transcript again from joe. */

@@ -194,6 +194,23 @@ for (const width of [1024, 1280]) {
   });
 }
 
+test('with a take loaded and its note showing, Eject stays clear of the window buttons at 1280 px', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto('/');
+  await page.evaluate(() => {
+    document.querySelector('[data-testid="transport-name"]').textContent = 'take a1b2c3';
+    const note = document.querySelector('[data-testid="transport-note"]');
+    note.textContent = 'recording not kept';
+    note.hidden = false;
+    document.getElementById('transport-eject').hidden = false;
+  });
+
+  const eject = await page.getByTestId('transport-eject').boundingBox();
+  const library = await page.getByTestId('capture-toggle').boundingBox();
+  expect(eject.x + eject.width).toBeLessThanOrEqual(library.x);
+  await page.getByTestId('transport-eject').click({ trial: true });
+});
+
 // ─── Where Live records from ─────────────────────────────────────────────────
 
 test('the capture select says where Live records from, and what each choice is', async ({ page }) => {

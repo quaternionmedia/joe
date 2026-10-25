@@ -150,9 +150,11 @@ test('the outcome stepping aside leaves the panel to the queue', async ({ page }
   const left = await page.waitForFunction(() => {
     const outcome = document.querySelector('[data-testid="voice-instruct-outcome"]');
     if (!outcome.hidden) return null;
-    return { panelHidden: document.querySelector('[data-testid="voice-panel"]').hidden };
+    // The Voice window is still in the dock, its panel not parked.
+    return { panelOpen: Boolean(document.getElementById('paneltab-voice'))
+                        && !document.getElementById('parked').contains(document.querySelector('[data-testid="voice-panel"]')) };
   }, null, { timeout: 15000 });
-  expect(await left.jsonValue()).toEqual({ panelHidden: false });
+  expect(await left.jsonValue()).toEqual({ panelOpen: true });
   await expect(page.getByTestId('voice-queue-prompt')).toHaveText('Launch the audit?  (approve / hold)');
 });
 

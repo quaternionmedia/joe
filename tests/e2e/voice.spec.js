@@ -35,6 +35,47 @@ test('the panel stays out of the way until a conversation starts', async ({ page
   await expect(page.getByTestId('voice-panel')).toBeHidden();
 });
 
+test('a conversation opens the Voice window above the transcript, so both can be read', async ({ page }) => {
+  // The stream held until the transcript is open.
+  let release;
+  const held = new Promise(done => { release = done; });
+  await page.route('**/api/voice/conversation', async route => {
+    await held;
+    await route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' },
+                          body: sse([{ state: 'speaking', text: 'Anything else?' }]) });
+  });
+  await page.goto('/');
+  await page.getByTestId('transcript-toggle').click();
+  await expect(page.locator('#paneltab-transcript')).toBeVisible();
+
+  release();
+
+  await expect(page.getByTestId('voice-panel')).toBeVisible();
+  await expect(page.getByTestId('transcript-pane')).toBeVisible();
+  const voice = await page.locator('#panelbody-voice').boundingBox();
+  const transcript = await page.locator('#panelbody-transcript').boundingBox();
+  expect(voice.y + voice.height).toBeLessThanOrEqual(transcript.y);
+});
+
+test('a conversation leaves a tab the person put in front of the Voice window where it is', async ({ page }) => {
+  // The Voice window a tab behind the transcript's, as a person might have dragged it.
+  const window = id => ({ type: 'component', componentType: id, id, title: id });
+  await page.addInitScript(layout => {
+    if (sessionStorage.getItem('seeded')) return;
+    sessionStorage.setItem('seeded', '1');
+    localStorage.setItem('joe.layout.v1', layout);
+  }, JSON.stringify({ root: { type: 'row', content: [
+    { type: 'stack', content: [window('visualiser')] },
+    { type: 'stack', activeItemIndex: 0, content: [window('transcript'), window('voice')] },
+  ] } }));
+  await serve(page, [{ state: 'speaking', text: 'Anything else?' }, { state: 'listening' }]);
+  await page.goto('/');
+
+  await expect(page.getByTestId('voice-label')).toHaveText('Your turn');
+  await expect(page.locator('#paneltab-transcript')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('transcript-pane')).toBeVisible();
+});
+
 test('a whole exchange reads in order, ending on what was recorded', async ({ page }) => {
   const errors = [];
   page.on('pageerror', err => errors.push(err.message));
@@ -79,6 +120,21 @@ test('the microphone level shows only while the microphone is open', async ({ pa
   await expect(page.locator('.voice-level')).toBeVisible();
   // At the threshold's double the bar is full; at the threshold it is half.
   await expect(page.locator('.voice-level-fill')).toHaveAttribute('style', /width: 100%/);
+});
+
+test("a conversation's first state shows in its own colour at once, not faded in from another", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__faded = [];
+    document.addEventListener('transitionrun', e => {
+      if (e.target.id === 'voice-panel') window.__faded.push(e.propertyName);
+    }, true);
+  });
+  await serve(page, [{ state: 'speaking', text: 'Anything else?' }]);
+  await page.goto('/');
+
+  await expect(page.getByTestId('voice-panel')).toHaveAttribute('data-state', 'speaking');
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => window.__faded)).toEqual([]);
 });
 
 test('every state looks different from every other', async ({ page }) => {

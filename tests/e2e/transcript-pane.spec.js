@@ -64,7 +64,7 @@ test('the pane closes with ×, opens from the transport, and is remembered acros
   await page.goto('/');
   await page.getByTestId('transcript-toggle').click();
   await expect(page.getByTestId('transcript-pane')).toBeVisible();
-  await expect(page.locator('body')).toHaveClass(/transcript-open/);
+  await expect(page.locator('#paneltab-transcript')).toBeVisible();
 
   await page.reload();
   await expect(page.getByTestId('transcript-pane')).toBeVisible();
@@ -72,7 +72,7 @@ test('the pane closes with ×, opens from the transport, and is remembered acros
 
   await page.getByTestId('transcript-close').click();
   await expect(page.getByTestId('transcript-pane')).toBeHidden();
-  await expect(page.locator('body')).not.toHaveClass(/transcript-open/);
+  await expect(page.locator('#paneltab-transcript')).toHaveCount(0);
 });
 
 test('what is asked and the take being written arrive live', async ({ page }) => {
@@ -271,6 +271,20 @@ test('a day this year is named without its year, and one in another year with it
   expect(said).toEqual(['Today', 'Yesterday', true, false]);
 });
 
+test('opening the transcript shows its newest line', async ({ page }) => {
+  const entries = Array.from({ length: 60 }, (_, i) => ({ kind: 'said', text: `Question ${i + 1}?`, at: 1000 + i }));
+  await script(page, { history: { kept: true, entries } });
+  await page.goto('/');
+  const list = page.getByTestId('transcript-entries');
+  // Read while the window is closed.
+  await expect(list.locator('.tp-entry')).toHaveCount(60);
+
+  await page.keyboard.press('t');
+
+  await expect(list).toBeVisible();
+  await expect.poll(() => list.evaluate(el => el.scrollHeight - el.scrollTop - el.clientHeight)).toBeLessThan(2);
+});
+
 test('the first-run hint sits below the pane, not over its last lines', async ({ page }) => {
   await script(page);
   await page.goto('/');
@@ -284,6 +298,8 @@ test('the first-run hint sits below the pane, not over its last lines', async ({
 
   await page.locator('#hint-dismiss').click();
   await expect(hint).toBeHidden();
-  const viewport = page.viewportSize();
-  expect(await paneBottom()).toBeCloseTo(viewport.height - 48, 0);
+  // The dock takes the hint's room: the pane reaches the transport, within its window's border.
+  const barTop = (await page.locator('#transport').boundingBox()).y;
+  await expect.poll(async () => barTop - await paneBottom()).toBeLessThanOrEqual(2);
+  expect(await paneBottom()).toBeLessThanOrEqual(barTop + 0.5);
 });

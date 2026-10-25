@@ -37,9 +37,10 @@ export class CapturePanel {
    * @param {HTMLElement} el         - The #capture-panel element
    * @param {MainCanvas}  mainCanvas
    */
-  constructor(el, mainCanvas) {
+  constructor(el, mainCanvas, window) {
     this._el         = el;
     this._mainCanvas = mainCanvas;
+    this._window     = window;
     this._analysis   = new LiveAnalysis();
     this.isRecording = false;
     this._mode       = 'browser';
@@ -65,10 +66,10 @@ export class CapturePanel {
     this._loadLibrary();
   }
 
-  toggle() { this._el.classList.toggle('open'); }
-  open()   { this._el.classList.add('open'); }
-  close()  { this._el.classList.remove('open'); }
-  get isOpen() { return this._el.classList.contains('open'); }
+  toggle() { this._window.toggle(); }
+  open()   { this._window.show(); }
+  close()  { this._window.close(); }
+  get isOpen() { return this._window.isOpen; }
 
   /** Called by the bottom-bar Live toggle button. */
   async toggleRecord() {
