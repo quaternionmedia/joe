@@ -576,6 +576,22 @@ def saved_input_device() -> int | None:
     return None
 
 
+def missing_saved_device() -> str | None:
+    """The saved microphone's name when it is not among the devices now, or None.
+
+    None too when nothing is saved or the file cannot be read: then there is
+    no choice to miss.
+    """
+    try:
+        saved = json.loads(SAVED_DEVICE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    name = saved.get("name") if isinstance(saved, dict) else None
+    if not name or saved_input_device() is not None:
+        return None
+    return name
+
+
 def default_input_device() -> dict | None:
     """The device `record()` would actually use, or None if there isn't one."""
     devices = list_input_devices()
@@ -775,10 +791,16 @@ class Voice:
 
         `speech_detected` is None for a fixed window, which does not judge.
         """
+        missing = None
         if device is None:
             # An explicit device wins, then the environment, then the choice
             # `joe voice setup` saved, then the backend's default.
             device = os.environ.get("JOE_INPUT_DEVICE") or saved_input_device()
+            if device is None:
+                missing = missing_saved_device()
+                if missing:
+                    print(f"joe: the saved microphone, {missing}, is not connected; recording from "
+                          "the default input (`joe voice setup` saves another)", flush=True)
 
         if resolve_input_device(device) is None and not microphone_available():
             raise NoMicrophoneError(
@@ -787,20 +809,30 @@ class Voice:
             )
 
         speech_detected: bool | None = None
-        if until_silence:
-            frames, _, speech_detected = _capture_until_silence(
-                max_duration=duration,
-                device=device,
-                target_rate=sample_rate,
-                silence_after=silence_after,
-                on_event=on_event,
-                control=control,
-                on_segment=on_segment,
-                watch=watch,
-            )
-        else:
-            _tell(on_event, "listening")
-            frames, _ = _capture(duration, device, target_rate=sample_rate)
+        try:
+            if until_silence:
+                frames, _, speech_detected = _capture_until_silence(
+                    max_duration=duration,
+                    device=device,
+                    target_rate=sample_rate,
+                    silence_after=silence_after,
+                    on_event=on_event,
+                    control=control,
+                    on_segment=on_segment,
+                    watch=watch,
+                )
+            else:
+                _tell(on_event, "listening")
+                frames, _ = _capture(duration, device, target_rate=sample_rate)
+        except NoMicrophoneError as exc:
+            if not missing:
+                raise
+            # The default stood in for a microphone that is gone: say which, so
+            # the failure does not read as the saved one's.
+            raise NoMicrophoneError(
+                f"{exc}. The saved microphone, {missing}, is not connected, so the default "
+                "input was tried; `joe voice setup` saves another"
+            ) from exc
 
         os.makedirs(self.capture_dir, exist_ok=True)
         stamp = datetime.now().strftime("%m-%d-%y_%H-%M-%S")
