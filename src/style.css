@@ -725,5 +725,22 @@ body.transcript-open #voice-panel { right: calc(var(--pane-w) + 12px); }
 .tp-fold-toggle::before { content: '▸ '; }
 .tp-fold-toggle[aria-expanded="true"]::before { content: '▾ '; }
 .tp-fold-items { margin: 0; padding: 0 0 0 10px; list-style: none; }
+.tp-text.is-clamped {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+.tp-more {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #8a8a8a;
+  font: inherit;
+  font-size: 0.7rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
 .tp-word.is-struck { text-decoration: line-through; color: #666; }
 .tp-word.is-pending { color: #8a8a8a; }
