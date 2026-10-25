@@ -193,3 +193,15 @@ for (const width of [1024, 1280]) {
     expect(await page.locator('#transport').evaluate(bar => bar.scrollWidth <= bar.clientWidth)).toBe(true);
   });
 }
+
+// ─── Where Live records from ─────────────────────────────────────────────────
+
+test('the capture select says where Live records from, and what each choice is', async ({ page }) => {
+  await page.goto('/');
+  const select = page.getByRole('combobox', { name: 'Live records from' });
+  await expect(select).toHaveAttribute('title', 'Where Live records from');
+  await expect(select.locator('option')).toHaveText(['Browser mic', "joe's mic"]);
+  await expect(select.locator('option[value="browser"]')).toHaveAttribute('title', /This browser's microphone/);
+  await expect(select.locator('option[value="backend"]')).toHaveAttribute('title', /machine joe runs on/);
+  await expect(page.locator('#first-run-hint')).toContainText("Browser mic or joe's mic + Live — record");
+});
