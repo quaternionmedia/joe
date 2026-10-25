@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.2/lib/p5.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.2/lib/addons/p5.sound.js"></script>
-    <script type="module" crossorigin src="/joe/assets/index-kp5kwyak.js"></script>
+    <script type="module" crossorigin src="/joe/assets/index-DU73phjS.js"></script>
     <link rel="stylesheet" crossorigin href="/joe/assets/index-yAZ9IZxb.css">
   </head>
 
@@ -141,7 +141,7 @@
       <span class="hint-steps">
         <span class="hint-step"><b>1.</b> Joe, go! — start audio</span>
         <span class="hint-sep">·</span>
-        <span class="hint-step"><b>2.</b> Browser/Backend + Live — record</span>
+        <span class="hint-step"><b>2.</b> Browser mic or joe's mic + Live — record</span>
         <span class="hint-sep">·</span>
         <span class="hint-step"><b>3.</b> Library → Process — run pipeline</span>
         <span class="hint-sep">·</span>
@@ -162,9 +162,10 @@
 
       <!-- 2. Live capture: mode selector + record toggle + indicator -->
       <div class="tg">
-        <select id="capture-mode" data-testid="capture-mode" aria-label="Capture mode">
-          <option value="browser">Browser</option>
-          <option value="backend">Backend</option>
+        <select id="capture-mode" data-testid="capture-mode" aria-label="Live records from"
+                title="Where Live records from">
+          <option value="browser" title="This browser's microphone; the take is sent to joe's library">Browser mic</option>
+          <option value="backend" title="The microphone of the machine joe runs on, recorded by joe">joe's mic</option>
         </select>
         <button id="live-toggle" data-testid="live-toggle" type="button" disabled>Live</button>
         <span id="live-indicator" class="capture-indicator"></span>
@@ -192,10 +193,8 @@
 
       <!-- 4. Panel toggles -->
       <div class="tg">
-        <button id="capture-toggle" data-testid="capture-toggle" type="button"
-                title="Recordings, and the pipeline (L)">Library</button>
-        <button id="results-toggle" data-testid="results-toggle" type="button"
-                title="The analysis results (A)">Results</button>
+        <button id="capture-toggle" data-testid="capture-toggle" type="button">Library</button>
+        <button id="results-toggle" data-testid="results-toggle" type="button">Results</button>
         <button id="transcript-toggle" data-testid="transcript-toggle" type="button"
                 title="The whole spoken exchange (T)">Transcript</button>
       </div>
