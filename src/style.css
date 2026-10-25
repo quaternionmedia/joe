@@ -291,6 +291,8 @@ button:hover { border-color: rgba(255, 255, 255, 0.7); }
 
 .results-header {
   display: flex;
+  flex-wrap: wrap;   /* the actions go beneath the heading rather than squeeze it */
+  gap: 8px;
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
