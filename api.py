@@ -27,6 +27,7 @@ capability in brackets, and answers 403 while it is off; a fresh joe has only
     POST /api/voice/unwatch         Closes a watch that will not be listened to  [microphone]
     GET  /api/voice/vocabulary      joe's own spoken words, and what each does
     GET  /api/voice/history         The whole transcript: every take heard and every sentence said  [transcripts]
+    GET  /api/voice/takes/{take}/audio  One take's recording, for the visualiser  [transcripts]
     POST /api/voice/strike          Strike or restore a word of the take being transcribed  [microphone]
     GET  /api/voice/transcript      The take being transcribed, or the last one, once  [transcripts]
     GET  /api/media/capabilities    What the media API takes and does (docs/media.md)  [media]
@@ -156,7 +157,7 @@ MAX_OPTIONS = 9
 ANSWER_CHARS = 100
 
 
-# ─── Existing endpoints ───────────────────────────────────────────────────────
+# ─── Health and results ───────────────────────────────────────────────────────
 
 @app.get("/api/health")
 def health():
@@ -322,10 +323,8 @@ def _is_bare_filename(filename: str) -> bool:
     trailing dot or space (Windows strips those when opening, so `x.wav.`
     and `"x.wav "` open the file they alias under a name no listing shows).
 
-    Shared by every route that takes a name, because the two that existed
-    did not agree: `/api/audio/{filename}` refused all of this and
-    `/api/voice/transcribe` refused none of it, so one name was 404 on the
-    first and 200 on the second.
+    Shared by every route that takes a name, so one name gets the same
+    answer from each.
     """
     return not (
         not filename
@@ -471,7 +470,7 @@ def voice_listen(
     This is the human-facing seam, so the polite default lives here:
     `duration` is the cap, and the recording ends `silence_ms` after the
     speaker stops — a fixed window truncates a slow answer and keeps
-    recording after a quick one. `until_silence=false` restores the
+    recording after a quick one. `until_silence=false` records the
     exact-length window.
 
     `device` is an index or a name fragment; omitted, the server's default
@@ -701,6 +700,30 @@ def voice_history(limit: int = 200):
     from Modules import History
 
     return {"entries": History.read(datapoints.manifest, limit), "kept": datapoints.enabled}
+
+
+@app.get("/api/voice/takes/{take}/audio", dependencies=TRANSCRIPTS)
+def voice_take_audio(take: str):
+    """One take's recording, as joe wrote it, for the visualiser to play with
+    the take's words on its timeline. Only a recording under joe's own voice
+    folder is served, whatever the record names."""
+    import re
+
+    from Modules import History
+    from Modules.Voice import Voice
+
+    if not re.fullmatch(r"[0-9a-f]{6,32}", take):
+        raise HTTPException(status_code=400, detail="a take is named by its hex id")
+    entry = History.take(datapoints.manifest, take)
+    if entry is None or not entry.get("audio"):
+        raise HTTPException(status_code=404, detail=f"no recording kept for take {take}")
+    path = Path(entry["audio"])
+    path = path if path.is_absolute() else datapoints.root / path
+    path = path.resolve()
+    roots = {datapoints.root.resolve(), Path(Voice().capture_dir).resolve()}
+    if not any(path.is_relative_to(root) for root in roots) or not path.is_file():
+        raise HTTPException(status_code=404, detail=f"no recording kept for take {take}")
+    return FileResponse(str(path), media_type="audio/wav")
 
 
 @app.get("/api/voice/vocabulary")
