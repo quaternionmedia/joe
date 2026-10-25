@@ -54,6 +54,12 @@ const voiceInstruct = new VoiceInstruct(
   voicePanel,
 );
 voiceInstruct.mount();
+// While qmcp cannot be reached, Instruct by voice says so quietly rather than the page failing loudly.
+document.addEventListener('joe:qmcp', e => {
+  const button = document.getElementById('voice-instruct');
+  button.classList.toggle('is-unreachable', !e.detail.reachable);
+  button.title = e.detail.reachable ? '' : 'qmcp is not reachable: start `qmcp serve`; QMCP_URL moves where the dev server looks';
+});
 const voiceKeys = new VoiceKeys(document.querySelector('#voice-panel .voice-controls'), voicePanel);
 voiceKeys.mount();
 const voiceTranscript = new VoiceTranscript(document.querySelector('#voice-panel .voice-transcript'), voicePanel);
