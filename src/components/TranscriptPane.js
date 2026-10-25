@@ -51,6 +51,20 @@ function heardNothing(entry) {
     && !(entry.segments || []).some(segment => (segment.words || []).length);
 }
 
+/**
+ * How the transcript names the day `date` falls on, seen from `now`: "Today",
+ * "Yesterday", and before that the date, with its year when it is not this one.
+ */
+export function dayLabel(date, now) {
+  const start = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const days = Math.round((start(now) - start(date)) / 86400000);
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  const parts = { weekday: 'short', day: 'numeric', month: 'short' };
+  if (date.getFullYear() !== now.getFullYear()) parts.year = 'numeric';
+  return date.toLocaleDateString([], parts);
+}
+
 function remembered(storage) {
   try { return storage?.getItem(OPEN_KEY) === '1'; } catch { return false; }
 }
@@ -174,10 +188,22 @@ export class TranscriptPane {
 
   // ─── the lines, and the takes that heard nothing ──────────────────────────
 
-  /** One line an entry, except that takes in a row that heard nothing share one, folded. */
+  /**
+   * One line an entry, except that takes in a row that heard nothing share one,
+   * folded; and a line naming the day wherever the day changes.
+   */
   _lines(entries) {
     const lines = [];
+    let day = null;
+    const dayOf = at => {
+      if (!at) return;
+      const date = new Date(at * 1000);
+      if (date.toDateString() === day) return;
+      day = date.toDateString();
+      lines.push(this._day(date));
+    };
     for (let i = 0; i < entries.length;) {
+      dayOf(entries[i].at);
       if (!heardNothing(entries[i])) {
         lines.push(this._line(entries[i++]));
         continue;
@@ -187,6 +213,14 @@ export class TranscriptPane {
       lines.push(this._fold(run));
     }
     return lines;
+  }
+
+  _day(date) {
+    const li = this._doc.createElement('li');
+    li.className = 'tp-day';
+    li.dataset.testid = 'transcript-day';
+    li.textContent = dayLabel(date, new Date());
+    return li;
   }
 
   _fold(run) {
