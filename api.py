@@ -340,7 +340,11 @@ async def run_on_file(filename: str):
 
 
 def _resolve_audio_path(filename: str) -> Path:
-    """Resolve `filename` to a real file under Data/Audio/ or Data/Voice/.
+    """Resolve `filename` to a real file under Data/Voice/ or Data/Audio/.
+
+    Data/Voice/ is looked in first: it is where voice tools write the files they
+    ask about (`vox loop` writes `said.wav` and `echo.wav` there), so a name in
+    both is the voice folder's, never a library recording of the same name.
 
     Holds the name to the same rule as `/api/audio/{filename}`: a bare
     filename, resolving inside one of the two directories. This is reachable
@@ -353,7 +357,7 @@ def _resolve_audio_path(filename: str) -> Path:
     )
     if not _is_bare_filename(filename):
         raise not_found
-    for base in (Path("Data/Audio"), Path("Data/Voice")):
+    for base in (Path("Data/Voice"), Path("Data/Audio")):
         try:
             candidate = (base / filename).resolve()
         except (OSError, RuntimeError):
