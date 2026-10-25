@@ -14,6 +14,7 @@ import { VoiceTranscript } from './components/VoiceTranscript.js';
 import { TranscriptPane } from './components/TranscriptPane.js';
 import { takeWords }      from './components/takeWords.js';
 import { Capabilities, adaptHint, markOff } from './components/Capabilities.js';
+import { PanelKeys }    from './components/PanelKeys.js';
 import { setlist }      from './config/setlists.js';
 
 // Must match MainCanvas.js LABEL_W — used for p5 playhead pixel calculation.
@@ -274,6 +275,8 @@ document.getElementById('capture-toggle')
   .addEventListener('click', () => capturePanel.toggle());
 document.getElementById('results-toggle')
   .addEventListener('click', () => resultsPanel.toggle());
+// L the Library, A the Results, Esc closes them and the transcript (T is the pane's own).
+new PanelKeys({ library: capturePanel, results: resultsPanel, transcript: transcriptPane }).mount();
 
 // ─── What this joe serves ─────────────────────────────────────────────────────
 // Read once from /api/health. A control whose capability is off is greyed, its
