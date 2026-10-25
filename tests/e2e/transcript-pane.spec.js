@@ -270,3 +270,20 @@ test('a day this year is named without its year, and one in another year with it
 
   expect(said).toEqual(['Today', 'Yesterday', true, false]);
 });
+
+test('the first-run hint sits below the pane, not over its last lines', async ({ page }) => {
+  await script(page);
+  await page.goto('/');
+  await page.keyboard.press('t');
+  const pane = page.getByTestId('transcript-pane');
+  const hint = page.locator('#first-run-hint');
+  await expect(hint).toBeVisible();
+
+  const paneBottom = async () => (await pane.boundingBox()).y + (await pane.boundingBox()).height;
+  expect(await paneBottom()).toBeLessThanOrEqual((await hint.boundingBox()).y + 0.5);
+
+  await page.locator('#hint-dismiss').click();
+  await expect(hint).toBeHidden();
+  const viewport = page.viewportSize();
+  expect(await paneBottom()).toBeCloseTo(viewport.height - 48, 0);
+});

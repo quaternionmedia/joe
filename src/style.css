@@ -663,6 +663,8 @@ button:hover { border-color: rgba(255, 255, 255, 0.7); }
   font-size: 0.8rem;
 }
 #transcript-pane[hidden] { display: none; }
+/* The first-run hint, 28 px above the transport, is not drawn over the pane's last lines. */
+body:has(#first-run-hint:not(.hidden)) #transcript-pane { bottom: 76px; }
 body.transcript-open #voice-panel { right: calc(var(--pane-w) + 12px); }
 .tp-head {
   display: flex;
