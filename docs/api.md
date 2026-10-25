@@ -342,9 +342,10 @@ curl http://localhost:8000/api/voice/devices
 
 **Capability:** `library`.
 
-Transcribes an audio file already present under `Data/Audio/` or `Data/Voice/` using
+Transcribes an audio file already present under `Data/Voice/` or `Data/Audio/` using
 whisper. `filename` is a name relative to one of those two directories — paths that
-resolve outside them are rejected.
+resolve outside them are rejected. `Data/Voice/` is looked in first, so a name in both
+is the voice folder's file: the one a voice tool such as `vox loop` wrote.
 
 **Query params**
 
