@@ -153,6 +153,21 @@ test('a history that arrives after the stream keeps what streamed in', async ({ 
   await expect(entries).toHaveCount(5);
 });
 
+// The stream's second connection, held until `release()`, carries a note, so the
+// pane is drawn again after whatever the test opened.
+async function noteLater(page) {
+  let connections = 0;
+  let release;
+  const released = new Promise(done => { release = done; });
+  await page.route('**/api/voice/conversation', async route => {
+    connections += 1;
+    if (connections > 1) await released;
+    const events = connections > 1 ? [{ state: 'note', text: 'Loud enough.', at: 3000 }] : [];
+    await route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: sse(events) });
+  });
+  return release;
+}
+
 // A take that heard nothing: no words in its segments, no text.
 const QUIET = { kind: 'take', source: 'voice', text: '', segments: [{ index: 0, words: [], struck: [], start: 0, end: 1 }] };
 
@@ -166,17 +181,7 @@ test('takes in a row that heard nothing fold into one line, which opens and stay
     { ...QUIET, take: 'q4', at: 1005 },
   ] };
   await script(page, { history });
-  // The stream's second connection carries a note, so the pane is drawn again
-  // after the run is opened.
-  let connections = 0;
-  let release;
-  const released = new Promise(done => { release = done; });
-  await page.route('**/api/voice/conversation', async route => {
-    connections += 1;
-    if (connections > 1) await released;
-    const events = connections > 1 ? [{ state: 'note', text: 'Loud enough.', at: 3000 }] : [];
-    await route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: sse(events) });
-  });
+  const release = await noteLater(page);
   await page.goto('/');
   await page.keyboard.press('t');
 
@@ -199,4 +204,36 @@ test('takes in a row that heard nothing fold into one line, which opens and stay
 
   await folds.first().click();
   await expect(page.locator('.tp-fold-items').first()).toBeHidden();
+});
+
+test('a long question shows three lines until opened, and stays open', async ({ page }) => {
+  const long = 'Run in qmcp: cross-check whether the local model tool and the files agree. '.repeat(8).trim();
+  const history = { kept: true, entries: [
+    { kind: 'said', text: long, at: 1000 },
+    { kind: 'said', text: 'Approve or hold?', at: 1001 },
+  ] };
+  await script(page, { history });
+  const release = await noteLater(page);
+  await page.goto('/');
+  await page.keyboard.press('t');
+
+  const asks = page.getByTestId('transcript-entries').locator('.tp-said');
+  const text = asks.first().locator('.tp-text');
+  const more = page.getByTestId('transcript-more');
+  await expect(more).toHaveCount(1);  // the short question has none
+  await expect(more).toHaveText('more');
+  await expect(text).toHaveText(long);  // all of it is there, for a reader of the text
+  const clipped = el => el.scrollHeight > el.clientHeight + 1;
+  expect(await text.evaluate(clipped)).toBe(true);
+  expect(await text.evaluate(el => el.clientHeight / parseFloat(getComputedStyle(el).lineHeight))).toBeLessThan(3.5);
+
+  await more.click();
+  await expect(more).toHaveText('less');
+  await expect(more).toHaveAttribute('aria-expanded', 'true');
+  expect(await text.evaluate(clipped)).toBe(false);
+
+  release();
+  await expect(page.locator('.tp-note')).toHaveCount(1, { timeout: 10_000 });
+  await expect(page.getByTestId('transcript-more')).toHaveText('less');
+  expect(await asks.first().locator('.tp-text').evaluate(clipped)).toBe(false);
 });
