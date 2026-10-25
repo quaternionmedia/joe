@@ -2,8 +2,8 @@
 
 Practical user stories for common workflows. Each recipe assumes both servers are running
 and the browser is open at `http://localhost:3000/joe`. joe has no authentication, so a
-fresh joe serves only the media API; each recipe names what it needs turned on, and
-`uv run joe dev` turns every one on ([security.md](security.md)).
+fresh joe serves only the media API, and `uv run joe dev` turns on everything the
+recipes need ([security.md](security.md)).
 
 ---
 
@@ -55,8 +55,8 @@ The recording is saved automatically to `Data/Audio/`. Open **Library** to see i
 
 **Goal:** Record at higher quality via `sounddevice` (no browser compression).
 
-**Needs:** the microphone to record through the API, the library to play and
-process what it saved -- both on under `uv run joe dev`.
+**Needs:** the microphone to record through the API, and the library to play and
+process what it saved; `uv run joe dev` turns both on.
 
 1. Select **Backend** in the capture mode selector in the transport bar.
 2. Click **Joe, go!** then **Live** — this triggers `POST /api/capture/start`.
@@ -174,24 +174,24 @@ with the piano roll aligned to the audio.
 
 **Goal:** Give a video editor (alfred) what joe hears in a clip: the words with
 their times, for captions, and its beats, loudness, silences and waveform, for
-cutting. No browser here — this is joe as an engine, over HTTP.
+cutting. No browser: this is joe as an engine, over HTTP.
 
-1. Put ffmpeg where joe finds it: on PATH, or name it.
+1. Put ffmpeg on PATH, or name it:
 
    ```powershell
    $env:JOE_FFMPEG = "C:\Program Files\kdenlive\bin\ffmpeg.exe"
    ```
 
 2. Start the API alone on a port alfred does not use (alfred has 8000), and
-   check that it is joe answering there. The media API needs no setting: it is
-   the one thing a fresh joe serves.
+   check that joe is answering there. The media API needs no setting: it is
+   all a fresh joe serves.
 
    ```powershell
    uv run uvicorn api:app --port 8010
    curl http://localhost:8010/openapi.json   # "title": "Joe API"
    ```
 
-3. Upload the clip. The answer's `media_id` is how you ask about it from here:
+3. Upload the clip. Ask about it from here on by the answer's `media_id`:
 
    ```bash
    curl -X POST http://localhost:8010/api/media \
@@ -200,23 +200,23 @@ cutting. No browser here — this is joe as an engine, over HTTP.
    #  "sample_rate": 48000, "channels": 1, "has_audio": true}
    ```
 
-4. Ask for the words, each with its time, and for what the sound does:
+4. Ask for the words with their times, and for what the sound does:
 
    ```bash
    curl -X POST "http://localhost:8010/api/media/323be26e5105eb0a57ca72d44566409b/transcribe"
    curl -X POST "http://localhost:8010/api/media/323be26e5105eb0a57ca72d44566409b/analyze?features=beats,loudness,silence"
    ```
 
-5. Delete it when you are done, or leave it: an upload goes an hour after its
-   last use (`JOE_MEDIA_TTL`).
+5. Delete it when done, or leave it: an upload goes an hour after its last use
+   (`JOE_MEDIA_TTL`).
 
    ```bash
    curl -X DELETE http://localhost:8010/api/media/323be26e5105eb0a57ca72d44566409b
    ```
 
 Every time in the answers is a time in the clip. A clip with no sound track is
-refused with a 422 rather than kept. [media.md](media.md) has every field, the
-settings and the errors.
+refused with a 422, not kept. [media.md](media.md) has every field, the settings
+and the errors.
 
 ---
 

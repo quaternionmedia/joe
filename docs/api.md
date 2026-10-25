@@ -1,8 +1,8 @@
 # Joe API Reference
 
 The Joe FastAPI server (`api.py`) provides endpoints for pipeline results, audio capture,
-the audio library, and speech analysis -- and, under `/api/media`, the media API a video
-editor uses for captions and analysis, documented in [media.md](media.md).
+the audio library, and speech analysis. The media API a video editor uses for captions and
+analysis, under `/api/media`, has its own page: [media.md](media.md).
 
 **Base URL (local dev):** `http://localhost:8000`
 
@@ -10,15 +10,14 @@ The Vite dev server proxies `/api/*` to this address, so the browser can call al
 directly when both servers are running via `joe dev`.
 
 > **joe has no authentication.** Whatever reaches its port can use every route that is
-> on, so run it on loopback, on one machine you trust. [security.md](security.md) is the
+> on: run it on loopback, on one machine you trust. [security.md](security.md) is the
 > threat model.
 
 ## Capabilities
 
-Each route but the health check and the vocabulary belongs to a **capability**, named
-under its heading below. A capability that is off answers every one of its routes with
-`403` and a `detail` naming the setting that turns it on, before anything the route was
-asked is judged:
+Every route but the health check and the vocabulary belongs to a **capability**, named
+under its heading below. A route whose capability is off answers `403`, with a `detail`
+naming the setting that turns it on, before judging anything it was asked:
 
 ```json
 {"detail": "the audio library is off on this joe: JOE_ALLOW_LIBRARY=1 turns it on, for whatever can reach this port -- joe has no authentication (docs/security.md)"}
@@ -33,7 +32,7 @@ asked is judged:
 
 Set them in the API's environment, or start it with `uv run joe backend --allow
 microphone` (`--allow all` for every one); `uv run joe dev` turns every one on unless
-`--allow` names fewer. The server lists what is on as it starts, with a warning for each.
+`--allow` names fewer. The server lists what is on as it starts, warning for each.
 
 ## Refused before routing
 
@@ -223,11 +222,11 @@ curl -X POST http://localhost:8000/api/capture/stop
 Accept a raw audio blob from the browser (recorded via `MediaRecorder`) and save it to
 `Data/Audio/`. Content-Type determines the file extension (`.wav` or `.webm`).
 
-The headers are judged before the body is read: `415` for a `Content-Type` that is not
+The headers are judged before the body is read: `415` for a `Content-Type` other than
 `audio/wav`, `audio/wave`, `audio/webm`, `audio/mpeg`, `audio/ogg` or `audio/flac`, then
-`413` for a declared `Content-Length` over 100 MB. The body is written as it arrives,
-under `Data/Audio/.incoming/` where no route reaches it, refused (`413`) the moment it
-passes 100 MB, and moved into the library only when whole.
+`413` for a declared `Content-Length` over 100 MB. The body is written as it arrives under
+`Data/Audio/.incoming/`, which no route reaches; it is refused (`413`) the moment it passes
+100 MB, and moved into the library only when whole.
 
 **Request body** — raw audio bytes
 
@@ -689,9 +688,9 @@ different outputs is refused.
 
 ### Media for the video pipeline
 
-Audio or video uploaded once, then transcribed and analysed by id -- a video
-editor's captions, beats and waveforms. Its own page, [media.md](media.md), is
-the reference; in short:
+Audio or video uploaded once, then transcribed and analysed by id: a video
+editor's captions, beats and waveforms. [media.md](media.md) is the reference;
+in short:
 
 | Route | Answers |
 | --- | --- |
@@ -702,10 +701,8 @@ the reference; in short:
 | `DELETE /api/media/{media_id}` | `204`; `404` for one that is not here |
 
 Its capability is `media`, on in a fresh joe. Every failure there is `{"detail": str}`.
-Uploads are kept privately under
-`Data/Media/` and removed `JOE_MEDIA_TTL` seconds (an hour) after their last
-use. ffmpeg is required (`JOE_FFMPEG`, or on PATH). Beside alfred, which has
-port 8000, run the API alone: `uv run uvicorn api:app --port 8010`.
+It needs ffmpeg; [media.md](media.md#running-it-beside-alfred) has the settings and how
+to run it beside alfred.
 
 ---
 
@@ -713,7 +710,7 @@ port 8000, run the API alone: `uv run uvicorn api:app --port 8010`.
 
 FastAPI auto-generates an interactive API explorer at the addresses below. Both load
 their scripts from a CDN into joe's own origin, so opening them trusts that CDN with
-whatever is on ([security.md](security.md), F13):
+whatever is on ([security.md](security.md#findings), F13):
 
 - Swagger UI: <http://localhost:8000/docs>
 - ReDoc:      <http://localhost:8000/redoc>
