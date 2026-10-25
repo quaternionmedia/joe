@@ -224,6 +224,23 @@ def test_a_take_with_speech_is_recorded_with_its_text(monkeypatch):
     assert record["hint"] == "approve, hold" and api.last_take == "tk"
 
 
+def test_a_take_s_recording_is_kept_relative_to_the_voice_folder():
+    """So the folder can be moved or copied whole. Mutation: keep the path as given -- red."""
+    inside = api.datapoints.root / "capture_k.wav"
+    with patch("api.Voice") as voice:
+        voice.return_value.listen.return_value = {"text": "approve", "take": "tk", "audio_path": str(inside)}
+        api.voice_listen(duration=4.0)
+
+    record = json.loads(api.datapoints.manifest.read_text().splitlines()[0])
+    assert record["audio"] == "capture_k.wav"
+
+
+def test_a_path_outside_the_voice_folder_is_kept_as_it_is(tmp_path):
+    outside = tmp_path / "elsewhere" / "c.wav"
+    assert api.datapoints.kept_as(str(outside)) == str(outside)
+    assert api.datapoints.kept_as(None) is None
+
+
 # --- the tones' output --------------------------------------------------------------
 
 
