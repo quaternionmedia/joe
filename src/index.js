@@ -12,6 +12,7 @@ import { VoiceInstruct } from './components/VoiceInstruct.js';
 import { VoiceKeys }    from './components/VoiceKeys.js';
 import { VoiceTranscript } from './components/VoiceTranscript.js';
 import { TranscriptPane } from './components/TranscriptPane.js';
+import { PanelKeys }    from './components/PanelKeys.js';
 import { setlist }      from './config/setlists.js';
 
 // Must match MainCanvas.js LABEL_W — used for p5 playhead pixel calculation.
@@ -251,6 +252,8 @@ document.getElementById('capture-toggle')
   .addEventListener('click', () => capturePanel.toggle());
 document.getElementById('results-toggle')
   .addEventListener('click', () => resultsPanel.toggle());
+// L the Library, A the Results, Esc closes them and the transcript (T is the pane's own).
+new PanelKeys({ library: capturePanel, results: resultsPanel, transcript: transcriptPane }).mount();
 
 // ─── Frame pump — feeds sketch output into live analysis ─────────────────────
 sketchInstance.onFrame = (energies) => {

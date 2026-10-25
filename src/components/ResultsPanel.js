@@ -29,6 +29,8 @@ export class ResultsPanel {
 
   toggle() { this._isOpen ? this.close() : this.open(); }
 
+  get isOpen() { return this._isOpen; }
+
   /** Animation A — slide in */
   open() {
     this._isOpen = true;
