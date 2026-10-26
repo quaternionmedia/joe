@@ -23,7 +23,7 @@ test('the Results window is closed on load', { tag: '@music-page' }, async ({ pa
   await expect(page.locator('#paneltab-results')).toHaveCount(0);
 });
 
-test('results toggle button opens the results panel', { tag: '@music-page' }, async ({ page }) => {
+test('the Results button opens the Results window', { tag: '@music-page' }, async ({ page }) => {
   const errors = [];
   page.on('pageerror', (err) => errors.push(err.message));
 
@@ -35,12 +35,12 @@ test('results toggle button opens the results panel', { tag: '@music-page' }, as
   expect(errors).toHaveLength(0);
 });
 
-test('file input is present inside the open results panel', { tag: '@music-page' }, async ({ page }) => {
+test('the file input is inside the open Results window', { tag: '@music-page' }, async ({ page }) => {
   await page.goto('/');
   await page.waitForSelector('canvas');
   await openResultsPanel(page);
 
-  await expect(page.getByTestId('file-input')).toBeAttached();
+  await expect(page.locator('#panelbody-results [data-testid="file-input"]')).toBeAttached();
 });
 
 // ─── JSON loading + piano roll ────────────────────────────────────────────────
@@ -166,7 +166,7 @@ test('era panel clamps at index 0 on repeated ArrowLeft', { tag: '@music-page' }
 
 // ─── Panel close ─────────────────────────────────────────────────────────────
 
-test('results panel closes on second toggle click', { tag: '@music-page' }, async ({ page }) => {
+test('the Results window closes on a second press of its button', { tag: '@music-page' }, async ({ page }) => {
   await page.goto('/');
   await page.waitForSelector('canvas');
 

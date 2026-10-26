@@ -36,13 +36,15 @@ async function script(page, { post = STARTED, runs = [], latest = [ROTATE], pend
   return calls;
 }
 
-test('the button is at hand while the panel is out of the way', { tag: '@voice-loop' }, async ({ page }) => {
+test('the button is at hand while the Voice window is closed', { tag: '@voice-loop' }, async ({ page }) => {
   await script(page, {});
+  const asked = page.waitForRequest(req => new URL(req.url()).pathname === '/v1/human/requests');
   await page.goto('/');
+  await asked;
   await page.waitForSelector('canvas');
 
   await expect(page.getByTestId('voice-instruct')).toBeEnabled();
-  await expect(page.getByTestId('voice-panel')).toBeHidden();
+  await expect(page.locator('#paneltab-voice')).toHaveCount(0);
 });
 
 // Seen to fail: with the POST sent to `/instructions/voic`, the mock never saw

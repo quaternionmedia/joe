@@ -1,7 +1,7 @@
 import { offNote } from './Capabilities.js';
 
 /**
- * ResultsPanel — slide-in right panel for backend JSON output.
+ * ResultsPanel — the Results window: the pipeline's JSON output.
  *
  * Parsing and note rendering are delegated to MainCanvas.
  * This panel handles only metadata display and file/fetch controls.

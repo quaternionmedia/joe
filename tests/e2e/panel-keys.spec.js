@@ -28,8 +28,8 @@ test('Esc closes whatever is open, and opens nothing that was closed', { tag: '@
 
   await page.keyboard.press('Escape');
 
-  await expect(page.getByTestId('capture-panel')).toBeHidden();
-  await expect(page.getByTestId('transcript-pane')).toBeHidden();
+  await expect(page.locator('#paneltab-library')).toHaveCount(0);
+  await expect(page.locator('#paneltab-transcript')).toHaveCount(0);
   // The Results were never open, and closing what was does not open them.
   for (let i = 0; i < 6; i++) {
     await expect(page.locator('#paneltab-results')).toHaveCount(0);
@@ -37,7 +37,7 @@ test('Esc closes whatever is open, and opens nothing that was closed', { tag: '@
   }
 });
 
-test('R still asks the voice loop to say it again, and opens nothing', { tag: '@voice-loop' }, async ({ page }) => {
+test('R still asks the voice loop to say it again, and opens neither the Library nor the Results', { tag: '@voice-loop' }, async ({ page }) => {
   const answers = [];
   await page.route(url => url.pathname === '/api/voice/answer', route => {
     answers.push(route.request().postDataJSON());
@@ -49,8 +49,8 @@ test('R still asks the voice loop to say it again, and opens nothing', { tag: '@
   await page.keyboard.press('r');
 
   await expect.poll(() => answers).toEqual([{ text: 'repeat' }]);
-  await expect(page.getByTestId('results-panel')).toBeHidden();
-  await expect(page.getByTestId('capture-panel')).toBeHidden();
+  await expect(page.locator('#paneltab-results')).toHaveCount(0);
+  await expect(page.locator('#paneltab-library')).toHaveCount(0);
 });
 
 test('keys typed into a field open nothing', { tag: '@music-page' }, async ({ page }) => {

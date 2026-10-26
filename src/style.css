@@ -80,6 +80,8 @@ button {
   flex-shrink: 0;
 }
 button:hover { border-color: rgba(255, 255, 255, 0.7); }
+/* A window's button in the transport: its glyph, its name in its tooltip and accessible name. */
+button.tb-icon { font-size: 0.9rem; letter-spacing: 0; padding: 2px 8px; line-height: 1.2; }
 
 /* ─── Single bottom control bar ──────────────────────────────────────────── */
 #transport {
@@ -154,7 +156,10 @@ button:hover { border-color: rgba(255, 255, 255, 0.7); }
   font-size: 0.66rem;
   color: #f5a623;
   white-space: nowrap;
-  flex-shrink: 0;
+  /* Shortened before it runs under the window buttons; whole in its tooltip. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   margin-left: 4px;
 }
 

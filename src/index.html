@@ -214,14 +214,14 @@
 
       <!-- 4. Windows: each panel's, and the Panels menu -->
       <div class="tg">
-        <button id="capture-toggle" data-testid="capture-toggle" type="button"
-                title="Recordings, and the pipeline (L)">Library</button>
-        <button id="results-toggle" data-testid="results-toggle" type="button"
-                title="The analysis results (A)">Results</button>
-        <button id="transcript-toggle" data-testid="transcript-toggle" type="button"
-                title="The whole spoken exchange (T)">Transcript</button>
+        <button id="capture-toggle" data-testid="capture-toggle" type="button" class="tb-icon"
+                aria-label="Library" title="Library: recordings, and the pipeline (L)">♫</button>
+        <button id="results-toggle" data-testid="results-toggle" type="button" class="tb-icon"
+                aria-label="Results" title="Results: what the pipeline found (A)">▤</button>
+        <button id="transcript-toggle" data-testid="transcript-toggle" type="button" class="tb-icon"
+                aria-label="Transcript" title="Transcript: the whole spoken exchange (T)">¶</button>
         <span class="panels-menu">
-          <button id="panels-button" data-testid="panels-button" type="button"
+          <button id="panels-button" data-testid="panels-button" type="button" class="tb-icon"
                   aria-haspopup="menu" aria-expanded="false" aria-controls="panels-menu" aria-label="Panels"
                   title="Panels: show a window, bring back a closed one, or reset the layout">▦</button>
           <ul id="panels-menu" role="menu" aria-label="Windows" hidden></ul>

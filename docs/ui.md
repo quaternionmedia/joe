@@ -14,23 +14,29 @@ Library, Results and Transcript as tabs of one stack, in a column to the right
 of the visualiser; Voice in a stack of its own above them, so a conversation and
 its transcript are both on screen.
 
-**Opening and closing.** The transport's **Library**, **Results** and
-**Transcript**, or `L`, `A` and `T`, each open their window, bring it to the
-front when another tab is over it, and close it when it is in front. `Esc`
-closes the Library, the Results and the Transcript. The **Panels** menu (▦, at
-the end of those buttons) lists every window, marks the closed ones, opens the
-one chosen, and resets the layout.
+**Opening and closing.** The transport's window buttons -- ♫ **Library**, ▤
+**Results** and ¶ **Transcript**, each named in its tooltip -- or `L`, `A` and
+`T`, each open their window, bring it to the front when another tab is over it,
+and close it when it is in front. `Esc` closes the Library, the Results and the
+Transcript. The **Panels** menu (▦, after those buttons) lists every window,
+marks the closed ones, opens the one chosen, and resets the layout.
 
 **Windows that come forward.** Results opens when the pipeline finishes
 (**Library → Process**). Voice opens when a conversation starts, unless it is
-open already: a tab put in front of it stays in front. It closes once the
-exchange is over and nothing in it is waiting.
+open already: a tab put in front of it stays in front. A Voice window the
+conversation opened closes once the exchange is over and nothing in it is
+waiting; one opened from the Panels menu stays.
 
 **Arranging.** A tab dragged to another stack joins it, and dragged to an edge
 splits it; a splitter between windows resizes them; **Maximise** gives a stack
-the dock. A tab's ✕, or `Delete` on a focused tab, closes its window. With a tab
+the dock. A tab's ✕, or `Delete` on a focused tab, closes its window; so do the
+Library's and the Transcript's own × in their headers. With a tab
 focused, `Enter` or `Space` shows it, and the arrow keys, `Home` and `End` move
 along its stack's tabs. The visualiser cannot be closed.
+
+**The first-run hint** above the transport names the first steps; its ×
+dismisses it for good in this browser (`joe-hint-dismissed`), and the dock takes
+its room.
 
 **The saved arrangement** is kept in this browser's localStorage under
 `joe.layout.v1`, a quarter of a second after a change and as the page goes. It
@@ -72,8 +78,9 @@ listen for.
 ### Voice
 
 Id `voice`. The conversation as it goes: whose turn it is, the microphone's
-level, the take being written, the question's options as buttons, qmcp's queue,
-and what **Instruct by voice** recorded.
+level, the take being written, the question's options as buttons, **Repeat**
+(`R`), **Stop** (`Shift`+`Esc`) and the held `~` that keeps the turn open,
+qmcp's queue, and what **Instruct by voice** recorded.
 
 ## The transport
 

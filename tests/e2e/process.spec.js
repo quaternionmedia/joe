@@ -103,7 +103,7 @@ test('Library Process triggers pipeline and loads correct results', { tag: '@mus
   expect(errors).toHaveLength(0);
 });
 
-test('Pipeline failure does not open results panel or activate audio', { tag: '@music-page' }, async ({ page }) => {
+test('a pipeline failure opens no Results window and loads no recording', { tag: '@music-page' }, async ({ page }) => {
   const errors = [];
   page.on('pageerror', err => errors.push(err.message));
 
@@ -133,7 +133,7 @@ test('Pipeline failure does not open results panel or activate audio', { tag: '@
   expect(errors).toHaveLength(0);
 });
 
-test('Unsupported format shows error and keeps results panel closed', { tag: '@music-page' }, async ({ page }) => {
+test('Unsupported format shows error and keeps the Results window closed', { tag: '@music-page' }, async ({ page }) => {
   const errors = [];
   page.on('pageerror', err => errors.push(err.message));
 
@@ -244,7 +244,7 @@ test('Eject clears transport name, hides button, and removes library highlight',
 
 // ─── Library panel open/close ─────────────────────────────────────────────────
 
-test('Library panel closes on second toggle click', { tag: '@music-page' }, async ({ page }) => {
+test('the Library window closes on a second press of its button', { tag: '@music-page' }, async ({ page }) => {
   await mockApi(page, { filename: 'test.wav' });
   await page.goto('/');
   await page.waitForSelector('canvas');

@@ -28,11 +28,13 @@ async function script(page, { lists, post = { status: 202, body: { request_id: '
   return calls;
 }
 
-test('nothing waiting leaves the panel out of the way', { tag: '@voice-loop' }, async ({ page }) => {
-  await script(page, { lists: [[]] });
+test('nothing waiting leaves the Voice window closed', { tag: '@voice-loop' }, async ({ page }) => {
+  const calls = await script(page, { lists: [[]] });
   await page.goto('/');
   await page.waitForSelector('canvas');
+  await expect.poll(() => calls.lists).toBeGreaterThan(0);
 
+  await expect(page.locator('#paneltab-voice')).toHaveCount(0);
   await expect(page.getByTestId('voice-panel')).toBeHidden();
 });
 
