@@ -27,7 +27,7 @@ naming the setting that turns it on, before judging anything it was asked:
 | --- | --- | --- | --- |
 | `media` | `JOE_ALLOW_MEDIA` | on | `/api/media/*` ([media.md](media.md)) |
 | `microphone` | `JOE_ALLOW_MICROPHONE` | off | `/api/capture/*`, `/api/voice/devices`, `listen`, `watch`, `unwatch`, `level`, `answer`, `hold`, `strike`, `control`, and `POST /api/voice/conversation` |
-| `transcripts` | `JOE_ALLOW_TRANSCRIPTS` | off | `GET /api/voice/conversation`, `/conversation/state`, `/history`, `/transcript` |
+| `transcripts` | `JOE_ALLOW_TRANSCRIPTS` | off | `GET /api/voice/conversation`, `/conversation/state`, `/history`, `/transcript`, `/takes/{take}/audio` |
 | `library` | `JOE_ALLOW_LIBRARY` | off | `/api/audio/*`, `/api/voice/transcribe`, `/api/run`, `/api/run/{filename}`, `/api/results/latest` |
 
 Set them in the API's environment, or start it with `uv run joe backend --allow
@@ -635,6 +635,8 @@ closed before anyone spoke -- is no entry, and a line cut short is skipped.
 under `JOE_DATAPOINTS=0`, when nothing is written to read back.
 
 ### `GET /api/voice/takes/{take}/audio`
+
+**Capability:** `transcripts`.
 
 One take's recording, `audio/wav`, by the take's hex id, for the visualiser to
 play with the take's words on its timeline. Only a recording under joe's own
