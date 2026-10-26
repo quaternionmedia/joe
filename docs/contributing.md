@@ -53,7 +53,7 @@ For practical end-to-end workflows, see [cookbook.md](cookbook.md).
 
 ## UI Control Groups
 
-The bottom transport bar has four groups, left to right:
+The bottom transport bar has five groups, left to right:
 
 | Group | Controls | Purpose |
 | --- | --- | --- |
@@ -61,6 +61,7 @@ The bottom transport bar has four groups, left to right:
 | **2. Live capture** | `Browser mic\|joe's mic` select + `Live` button + red dot | Sets where Live records from; `Live` starts/stops recording. Disabled until **Joe, go!** is clicked. |
 | **3. Transport** | `LIVE\|RESULTS` badge + `Play` + `Stop` + scrub + time + filename + `×` | Plays back a loaded audio file; badge shows canvas mode. Play/Stop disabled while recording. `×` ejects the current source. |
 | **4. Windows** | `♫` Library + `▤` Results + `¶` Transcript + `▦` Panels | Each opens its window beside the visualiser, or closes it when it is in front; `▦`, the Panels menu, lists every window and resets the layout. [ui.md](ui.md) describes the dock. |
+| **5. Voice** | `Instruct by voice` | One spoken instruction into qmcp's inbox; the outcome shows in the voice panel. |
 
 **Dependency chain:**
 
@@ -85,7 +86,6 @@ Joe, go!  ->  enables Live  ->  recording  ->  stop  ->  Library: Process  ->  R
 | `Live` starts but no notes appear | Mic permission denied or wrong source | Check browser mic permissions; try **joe's mic** |
 | `Play` button is greyed out | Live recording is active | Click **Stop** to end recording first |
 | **Fetch Latest** returns 404 | No pipeline output yet | Run `uv run joe run` (or process a file via Library) |
-| Red dot pulses but canvas is blank | `Joe, go!` not clicked | Click **Joe, go!** — Web Audio must be started before FFT is active |
 | Backend capture fails silently | `sounddevice` not installed or no device | Check `uv sync` completed; verify audio input device |
 
 ---
@@ -141,7 +141,13 @@ reuses one already on port 3000.
 npm run test:e2e
 ```
 
-Reports are written to `playwright-report/` (git-ignored). To open the HTML report after a run:
+`playwright.config.js` starts the specs' own servers and never reuses one: the
+page on port 3100, and on 3199 a stand-in for joe's API and qmcp's queue
+(`tests/e2e/no-backend.mjs`) that answers every request a spec has not
+scripted with a 503. A joe, a qmcp or a dev page running on this machine never
+answers a spec, and the specs run beside them.
+
+Outside CI an HTML report is written to `playwright-report/` (git-ignored). To open it after a run:
 
 ```powershell
 npx playwright show-report

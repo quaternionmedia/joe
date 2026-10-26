@@ -6,7 +6,7 @@ capability in brackets, and answers 403 while it is off; a fresh joe has only
 [media] on (Modules/Access.py, docs/security.md):
     GET  /api/health                Health check, and which capabilities are on
     GET  /api/results/latest        Returns the most-recent Process_Data JSON  [library]
-    POST /api/run                   Runs the pipeline on Data/Audio/ (all files)  [library]
+    POST /api/run                   Runs the pipeline on Data/Audio/: the newest, ?files=, or ?all=true  [library]
     POST /api/capture/start         Start backend sounddevice recording  [microphone]
     POST /api/capture/stop          Stop recording, flush WAV, return filename  [microphone]
     POST /api/audio/upload          Receive audio blob from browser, save to Data/Audio/  [library]
@@ -192,20 +192,13 @@ def get_latest():
     return json.loads(files[0].read_text(encoding="utf-8"))
 
 
-@app.post("/api/run", dependencies=LIBRARY)
-async def run_pipeline():
-    """
-    Runs the pipeline on all files in Data/Audio/ and returns stdout/stderr.
-    Blocks until the pipeline completes.
-    """
-    # Strip any inherited JOE_AUDIO_FILE so the all-files route is never
-    # accidentally scoped to a single file from a previous request.
-    env = {k: v for k, v in os.environ.items() if k != "JOE_AUDIO_FILE"}
+async def _run_main(*args: str) -> dict:
+    """Run the pipeline, `main.py` with `args`, waiting for it, and say how it went."""
     try:
         proc = await asyncio.create_subprocess_exec(
             sys.executable,
             str(_MAIN_PY),
-            env=env,
+            *args,
             cwd=str(_PROJECT_ROOT),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -221,6 +214,24 @@ async def run_pipeline():
         "stdout": stdout.decode("utf-8", errors="replace"),
         "stderr": stderr.decode("utf-8", errors="replace"),
     }
+
+
+@app.post("/api/run", dependencies=LIBRARY)
+async def run_pipeline(files: list[str] = Query(default=[]), every: bool = Query(False, alias="all")):
+    """
+    Runs the pipeline on recordings in Data/Audio/ and returns stdout/stderr:
+    those named in `files`, every one with `all=true`, or else the newest.
+    Blocks until the pipeline completes.
+    """
+    if files and every:
+        raise HTTPException(status_code=400, detail="name files or ask for all, not both")
+    names = []
+    for name in files:
+        path = _audio_file(name)
+        if path.suffix.lower() not in PIPELINE_EXTENSIONS:
+            raise HTTPException(status_code=404, detail=f"No recording in Data/Audio/: {name}")
+        names.append(path.name)
+    return await _run_main(*(["--all"] if every else names))
 
 
 # ─── Backend capture ──────────────────────────────────────────────────────────
@@ -373,8 +384,7 @@ PIPELINE_EXTENSIONS = {".wav", ".webm", ".mp3", ".ogg", ".flac"}
 @app.post("/api/run/{filename}", dependencies=LIBRARY)
 async def run_on_file(filename: str):
     """
-    Run the pipeline on a specific file in Data/Audio/.
-    Sets JOE_AUDIO_FILE env var so main.py processes only that file.
+    Run the pipeline on a specific file in Data/Audio/, named to main.py.
     """
     path = _audio_file(filename)
     if path.suffix.lower() not in PIPELINE_EXTENSIONS:
@@ -387,27 +397,7 @@ async def run_on_file(filename: str):
                 f"(WebM requires ffmpeg on PATH)"
             ),
         }
-    env = {**os.environ, "JOE_AUDIO_FILE": str(path)}
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            sys.executable,
-            str(_MAIN_PY),
-            env=env,
-            cwd=str(_PROJECT_ROOT),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
-    except asyncio.TimeoutError:
-        proc.kill()
-        return {"returncode": -1, "stdout": "", "stderr": "Pipeline timeout (120 s)"}
-    except Exception as exc:
-        return {"returncode": -1, "stdout": "", "stderr": f"Pipeline error: {exc}"}
-    return {
-        "returncode": proc.returncode,
-        "stdout": stdout.decode("utf-8", errors="replace"),
-        "stderr": stderr.decode("utf-8", errors="replace"),
-    }
+    return await _run_main(path.name)
 
 
 def _resolve_audio_path(filename: str) -> Path:
