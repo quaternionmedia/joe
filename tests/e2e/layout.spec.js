@@ -30,7 +30,7 @@ async function open(page) {
 const stackOf = (page, id) => tab(page, id).evaluate(el =>
   [...document.querySelectorAll('.lm_stack')].indexOf(el.closest('.lm_stack')));
 
-test('joe opens with the visualiser alone, the first-run hint and the transport below it', async ({ page }) => {
+test('joe opens with the visualiser alone, the first-run hint and the transport below it', { tag: '@music-page' }, async ({ page }) => {
   await open(page);
 
   await expect(page.locator('.lm_tab')).toHaveCount(1);
@@ -47,7 +47,7 @@ test('joe opens with the visualiser alone, the first-run hint and the transport 
   expect(drawn.height).toBeCloseTo(inside.height, 0);
 });
 
-test('a panel opens as a window beside the visualiser, and the piano roll narrows to make room', async ({ page }) => {
+test('a panel opens as a window beside the visualiser, and the piano roll narrows to make room', { tag: '@music-page' }, async ({ page }) => {
   await open(page);
   const full = (await roll(page).boundingBox()).width;
 
@@ -64,7 +64,7 @@ test('a panel opens as a window beside the visualiser, and the piano roll narrow
   expect(library.width / dock.width).toBeCloseTo(0.32, 1);
 });
 
-test('a second panel joins the first one as a tab of its stack, in front', async ({ page }) => {
+test('a second panel joins the first one as a tab of its stack, in front', { tag: '@music-page' }, async ({ page }) => {
   await open(page);
   await page.getByTestId('capture-toggle').click();
   await page.getByTestId('results-toggle').click();
@@ -75,7 +75,7 @@ test('a second panel joins the first one as a tab of its stack, in front', async
   await expect(page.getByTestId('capture-panel')).toBeHidden();
 });
 
-test("a window's button or key closes it when it is in front, and the visualiser fills the dock again", async ({ page }) => {
+test("a window's button or key closes it when it is in front, and the visualiser fills the dock again", { tag: '@music-page' }, async ({ page }) => {
   await open(page);
   const full = (await roll(page).boundingBox()).width;
 
@@ -91,7 +91,7 @@ test("a window's button or key closes it when it is in front, and the visualiser
   await expect.poll(async () => (await roll(page).boundingBox()).width).toBeCloseTo(full, 0);
 });
 
-test('a button brings its window to the front when another tab is over it, rather than closing it', async ({ page }) => {
+test('a button brings its window to the front when another tab is over it, rather than closing it', { tag: '@music-page' }, async ({ page }) => {
   await open(page);
   await page.getByTestId('capture-toggle').click();
   await page.getByTestId('results-toggle').click();
@@ -102,7 +102,7 @@ test('a button brings its window to the front when another tab is over it, rathe
   await expect(page.getByTestId('capture-panel')).toBeVisible();
 });
 
-test("a tab's ✕ closes its window, and what the window held is there when it opens again", async ({ page }) => {
+test("a tab's ✕ closes its window, and what the window held is there when it opens again", { tag: '@music-page' }, async ({ page }) => {
   await open(page);
   await page.getByTestId('results-toggle').click();
   await page.getByTestId('results-panel').evaluate(el => { el.dataset.kept = 'yes'; });
@@ -116,7 +116,7 @@ test("a tab's ✕ closes its window, and what the window held is there when it o
   await expect(page.getByTestId('results-panel')).toHaveAttribute('data-kept', 'yes');
 });
 
-test("a closed window's panel waits in the page, hidden, so what reaches for it still finds it", async ({ page }) => {
+test("a closed window's panel waits in the page, hidden, so what reaches for it still finds it", { tag: '@music-page' }, async ({ page }) => {
   await open(page);
   await page.getByTestId('results-toggle').click();
   await tab(page, 'results').locator('.lm_close_tab').click();
@@ -129,7 +129,7 @@ test("a closed window's panel waits in the page, hidden, so what reaches for it 
   await expect(page.getByTestId('fetch-latest')).toBeHidden();
 });
 
-test('the visualiser cannot be closed: its tab has no ✕, and Delete on it leaves it', async ({ page }) => {
+test('the visualiser cannot be closed: its tab has no ✕, and Delete on it leaves it', { tag: '@music-page' }, async ({ page }) => {
   await open(page);
 
   await expect(tab(page, 'visualiser').locator('.lm_close_tab')).toBeHidden();
@@ -138,7 +138,7 @@ test('the visualiser cannot be closed: its tab has no ✕, and Delete on it leav
   await expect(tab(page, 'visualiser')).toBeVisible();
 });
 
-test('a window that can be closed closes by Delete on its tab', async ({ page }) => {
+test('a window that can be closed closes by Delete on its tab', { tag: '@music-page' }, async ({ page }) => {
   await open(page);
   await page.getByTestId('transcript-toggle').click();
 
@@ -148,7 +148,7 @@ test('a window that can be closed closes by Delete on its tab', async ({ page })
   await expect(tab(page, 'transcript')).toHaveCount(0);
 });
 
-test('every window carries its id, its tab names it, and none of them pops out', async ({ page }) => {
+test('every window carries its id, its tab names it, and none of them pops out', { tag: '@music-page' }, async ({ page }) => {
   await open(page);
   for (const button of ['capture-toggle', 'results-toggle', 'transcript-toggle']) {
     await page.getByTestId(button).click();
@@ -164,7 +164,7 @@ test('every window carries its id, its tab names it, and none of them pops out',
   await expect(page.locator('.lm_popout:visible')).toHaveCount(0);
 });
 
-test('the arrangement is kept across a reload, and Reset layout puts back the visualiser alone', async ({ page }) => {
+test('the arrangement is kept across a reload, and Reset layout puts back the visualiser alone', { tag: '@music-page' }, async ({ page }) => {
   await open(page);
   await page.getByTestId('transcript-toggle').click();
   await page.getByTestId('capture-toggle').click();
@@ -201,7 +201,7 @@ const UNUSABLE = [
 ];
 
 for (const [what, raw, why] of UNUSABLE) {
-  test(`a saved arrangement that ${what} is dropped for the default, and the page says why`, async ({ page }) => {
+  test(`a saved arrangement that ${what} is dropped for the default, and the page says why`, { tag: '@music-page' }, async ({ page }) => {
     const errors = [];
     page.on('pageerror', err => errors.push(err.message));
     await seed(page, raw);
@@ -215,7 +215,7 @@ for (const [what, raw, why] of UNUSABLE) {
   });
 }
 
-test('the Panels menu lists every window, says which are closed, and opens one', async ({ page }) => {
+test('the Panels menu lists every window, says which are closed, and opens one', { tag: '@music-page' }, async ({ page }) => {
   await open(page);
   await page.getByTestId('capture-toggle').click();
 
@@ -230,7 +230,7 @@ test('the Panels menu lists every window, says which are closed, and opens one',
   await expect(tab(page, 'transcript')).toHaveAttribute('aria-selected', 'true');
 });
 
-test('the Panels menu by keyboard: arrows move, and Escape closes the menu and leaves the windows', async ({ page }) => {
+test('the Panels menu by keyboard: arrows move, and Escape closes the menu and leaves the windows', { tag: '@music-page' }, async ({ page }) => {
   await open(page);
   await page.getByTestId('capture-toggle').click();
   const items = page.locator('#panels-menu [role="menuitem"]');
@@ -249,7 +249,7 @@ test('the Panels menu by keyboard: arrows move, and Escape closes the menu and l
   await expect(tab(page, 'library')).toBeVisible();
 });
 
-test("a click outside the Panels menu closes it, and the click that opened it does not", async ({ page }) => {
+test("a click outside the Panels menu closes it, and the click that opened it does not", { tag: '@music-page' }, async ({ page }) => {
   await open(page);
 
   await page.getByTestId('panels-button').click();
@@ -259,7 +259,7 @@ test("a click outside the Panels menu closes it, and the click that opened it do
   await expect(page.locator('#panels-menu')).toBeHidden();
 });
 
-test('dismissing the first-run hint gives the dock its room at once', async ({ page }) => {
+test('dismissing the first-run hint gives the dock its room at once', { tag: '@music-page' }, async ({ page }) => {
   await open(page);
   const before = await body(page, 'visualiser').evaluate(el => el.clientHeight);
   const hint = (await page.locator('#first-run-hint').boundingBox()).height;
@@ -270,7 +270,7 @@ test('dismissing the first-run hint gives the dock its room at once', async ({ p
     .toBeCloseTo(before + hint, 0);
 });
 
-test("the dock follows the window's size at once", async ({ page }) => {
+test("the dock follows the window's size at once", { tag: '@music-page' }, async ({ page }) => {
   await open(page);
 
   await page.setViewportSize({ width: 900, height: 700 });
@@ -280,7 +280,7 @@ test("the dock follows the window's size at once", async ({ page }) => {
   await expect.poll(async () => (await roll(page).boundingBox()).width, { timeout: 500 }).toBeCloseTo(await inside(), 0);
 });
 
-test('readSavedLayout: nothing saved, a layout to load, or why it cannot be', async ({ page }) => {
+test('readSavedLayout: nothing saved, a layout to load, or why it cannot be', { tag: '@music-page' }, async ({ page }) => {
   await page.goto('/');
   const read = await page.evaluate(async () => {
     const { readSavedLayout } = await import('/joe/layout/saved_layout.js');

@@ -36,7 +36,7 @@ async function script(page, { post = STARTED, runs = [], latest = [ROTATE], pend
   return calls;
 }
 
-test('the button is at hand while the panel is out of the way', async ({ page }) => {
+test('the button is at hand while the panel is out of the way', { tag: '@voice-loop' }, async ({ page }) => {
   await script(page, {});
   await page.goto('/');
   await page.waitForSelector('canvas');
@@ -50,7 +50,7 @@ test('the button is at hand while the panel is out of the way', async ({ page })
 // below but the first went red the same way); with `_follow()` skipped, no run
 // was ever read as 'ended' and the timing assertion threw; with `row.status`
 // replaced by `row.source`, the status read 'voice'.
-test('instructing posts once, waits for the run, then shows what was recorded', async ({ page }) => {
+test('instructing posts once, waits for the run, then shows what was recorded', { tag: '@voice-loop' }, async ({ page }) => {
   const calls = await script(page, {
     runs: [{ running: true, kind: 'instruction' }, { running: false, kind: 'instruction', exit_code: 0, output: ['  r1  rad  recorded'] }],
   });
@@ -78,7 +78,7 @@ test('instructing posts once, waits for the run, then shows what was recorded', 
 
 // Seen to fail: with `row.project || 'no project'` reduced to `row.project`,
 // the project read as empty text.
-test('an instruction that named no project is shown as such, unresolved', async ({ page }) => {
+test('an instruction that named no project is shown as such, unresolved', { tag: '@voice-loop' }, async ({ page }) => {
   await script(page, {
     runs: [{ running: false, kind: 'instruction', exit_code: 0, output: [] }],
     latest: [VAGUE],
@@ -93,7 +93,7 @@ test('an instruction that named no project is shown as such, unresolved', async 
 
 // Seen to fail: with the `if (!row)` branch removed, `row.text` threw and the
 // note read 'qmcp could not be reached: Cannot read properties of undefined'.
-test('a run that ends with the inbox empty says so', async ({ page }) => {
+test('a run that ends with the inbox empty says so', { tag: '@voice-loop' }, async ({ page }) => {
   await script(page, {
     runs: [{ running: false, kind: 'instruction', exit_code: 0, output: [] }],
     latest: [],
@@ -110,7 +110,7 @@ test('a run that ends with the inbox empty says so', async ({ page }) => {
 // Seen to fail: with `this._latest.hidden = true` dropped from the start of
 // instruct(), the first conversation's row stayed on screen beside the second
 // one's failure, as if that run had recorded it.
-test('a second conversation that fails does not show the first one\'s row', async ({ page }) => {
+test('a second conversation that fails does not show the first one\'s row', { tag: '@voice-loop' }, async ({ page }) => {
   const words = "No usable instruction after 3 attempts; last heard ''";
   await script(page, {
     runs: [
@@ -137,7 +137,7 @@ test('a second conversation that fails does not show the first one\'s row', asyn
 // because a retrying assertion that the panel is visible also passes under
 // that mutation: the queue's next poll reveals the panel again within seconds,
 // after the user has watched it vanish.
-test('the outcome stepping aside leaves the panel to the queue', async ({ page }) => {
+test('the outcome stepping aside leaves the panel to the queue', { tag: '@voice-loop' }, async ({ page }) => {
   await script(page, {
     pending: [LAUNCH],
     runs: [{ running: false, kind: 'instruction', exit_code: 0, output: [] }],
@@ -160,7 +160,7 @@ test('the outcome stepping aside leaves the panel to the queue', async ({ page }
 
 // Seen to fail: with the `exit_code !== 0` branch removed, the newest row was
 // shown as if the failed run had recorded it and the note stayed empty.
-test('a run that fails shows the command\'s own last words, not the inbox', async ({ page }) => {
+test('a run that fails shows the command\'s own last words, not the inbox', { tag: '@voice-loop' }, async ({ page }) => {
   const words = "No usable instruction after 3 attempts; last heard ''";
   await script(page, {
     runs: [{ running: false, kind: 'instruction', exit_code: 1, output: ['Checking...', words] }],
@@ -174,7 +174,7 @@ test('a run that fails shows the command\'s own last words, not the inbox', asyn
 });
 
 // Seen to fail: with `body.detail ||` removed, the note read 'qmcp answered 409'.
-test('a refusal shows qmcp\'s reason', async ({ page }) => {
+test('a refusal of the instruction shows qmcp\'s reason', { tag: '@voice-loop' }, async ({ page }) => {
   const detail = "A conversation is already running, for 'demo'. One at a time: there is one microphone.";
   await script(page, { post: { status: 409, body: { detail } } });
   await page.goto('/');
@@ -186,7 +186,7 @@ test('a refusal shows qmcp\'s reason', async ({ page }) => {
 
 // Seen to fail: with the 404 branch removed, the note read the server's own
 // 'Not Found', which says nothing about an inbox.
-test('a qmcp without the inbox gets a note, and the page goes on', async ({ page }) => {
+test('a qmcp without the inbox gets a note, and the page goes on', { tag: '@voice-loop' }, async ({ page }) => {
   await script(page, { post: { status: 404, body: { detail: 'Not Found' } } });
   await page.goto('/');
   await page.getByTestId('voice-instruct').click();
@@ -197,7 +197,7 @@ test('a qmcp without the inbox gets a note, and the page goes on', async ({ page
 
 // Seen to fail: with the catch replaced by one that cleared the note, nothing
 // was shown and the test timed out waiting for it.
-test('a qmcp that cannot be reached is said so', async ({ page }) => {
+test('a qmcp that cannot be reached is said so', { tag: '@voice-loop' }, async ({ page }) => {
   await script(page, { unreachable: true });
   await page.goto('/');
   await page.getByTestId('voice-instruct').click();

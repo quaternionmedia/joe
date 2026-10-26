@@ -29,7 +29,7 @@ const ASKED = [
   { state: 'listening' },
 ];
 
-test('a question offers its options as numbered buttons, and a click answers', async ({ page }) => {
+test('a question offers its options as numbered buttons, and a click answers', { tag: '@voice-loop' }, async ({ page }) => {
   const sent = await script(page, ASKED);
   await page.goto('/');
 
@@ -40,7 +40,7 @@ test('a question offers its options as numbered buttons, and a click answers', a
   await expect.poll(() => sent.answers).toEqual(['hold']);
 });
 
-test('the number keys answer by position, R repeats and Shift+Esc stops', async ({ page }) => {
+test('the number keys answer by position, R repeats and Shift+Esc stops', { tag: '@voice-loop' }, async ({ page }) => {
   const sent = await script(page, ASKED);
   await page.goto('/');
   await expect(page.getByTestId('voice-options').locator('button')).toHaveCount(2);
@@ -53,7 +53,7 @@ test('the number keys answer by position, R repeats and Shift+Esc stops', async 
   await expect.poll(() => sent.answers).toEqual(['approve', 'repeat', 'stop listening']);
 });
 
-test('holding the tilde key holds the turn open until it is released', async ({ page }) => {
+test('holding the tilde key holds the turn open until it is released', { tag: '@voice-loop' }, async ({ page }) => {
   const sent = await script(page, ASKED);
   await page.goto('/');
   await expect(page.getByTestId('voice-panel')).toBeVisible();
@@ -66,7 +66,7 @@ test('holding the tilde key holds the turn open until it is released', async ({ 
   await expect(page.getByTestId('voice-hold')).not.toHaveClass(/is-held/);
 });
 
-test('keys typed into a field are not answers', async ({ page }) => {
+test('keys typed into a field are not answers', { tag: '@voice-loop' }, async ({ page }) => {
   const sent = await script(page, ASKED);
   await page.goto('/');
   await expect(page.getByTestId('voice-options').locator('button')).toHaveCount(2);
@@ -82,7 +82,7 @@ test('keys typed into a field are not answers', async ({ page }) => {
   expect(sent.answers).toEqual([]);
 });
 
-test('the options go once the exchange has an outcome, and an answer by key is marked', async ({ page }) => {
+test('the options go once the exchange has an outcome, and an answer by key is marked', { tag: '@voice-loop' }, async ({ page }) => {
   await script(page, [...ASKED, { state: 'heard', text: 'approve', source: 'key' },
                       { state: 'recorded', text: 'approve' }]);
   await page.goto('/');
@@ -91,7 +91,7 @@ test('the options go once the exchange has an outcome, and an answer by key is m
   await expect(page.getByTestId('voice-options')).toBeHidden();
 });
 
-test('a window losing focus releases a held key, once, and sends nothing when none is held', async ({ page }) => {
+test('a window losing focus releases a held key, once, and sends nothing when none is held', { tag: '@voice-loop' }, async ({ page }) => {
   const sent = await script(page, ASKED);
   await page.goto('/');
   await expect(page.getByTestId('voice-panel')).toBeVisible();
@@ -104,7 +104,7 @@ test('a window losing focus releases a held key, once, and sends nothing when no
   expect(sent.holds).toEqual([true, false]);
 });
 
-test('a question said again on request says so', async ({ page }) => {
+test('a question said again on request says so', { tag: '@voice-loop' }, async ({ page }) => {
   await script(page, [{ state: 'speaking', text: 'Say approve or hold.', options: ['approve', 'hold'], reason: 'repeat' }]);
   await page.goto('/');
 

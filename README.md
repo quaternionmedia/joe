@@ -258,7 +258,7 @@ visualiser and every panel as windows of one GoldenLayout, described in
 | What is off | any of the above | The page reads `/api/health`: a control whose capability is off is greyed, its tooltip naming the setting, and its panel says so with a link to [docs/security.md](docs/security.md) |
 | Voice | `Instruct by voice` | One spoken instruction into qmcp's inbox; the outcome shows in the voice panel |
 
-See [docs/cookbook.md](docs/cookbook.md) for step-by-step recipes.
+Each user path, step by step, is a page in [docs/paths/](docs/paths/README.md).
 
 > **Note:** `npm run build` warns that `outDir` is outside the project root — expected (Vite root is `src/`).
 
@@ -266,9 +266,9 @@ See [docs/cookbook.md](docs/cookbook.md) for step-by-step recipes.
 
 | Document | Contents |
 | --- | --- |
+| [docs/paths/](docs/paths/README.md) | Each user path, step by step, with the spec or test that checks each step: the music page, the voice loop, and joe as a server |
 | [docs/ui.md](docs/ui.md) | The page: its dock of windows, how they open, close and are kept, and what each holds |
 | [docs/contributing.md](docs/contributing.md) | Local setup, UI control groups, troubleshooting, branch naming, pre-PR checks, what CI runs |
-| [docs/cookbook.md](docs/cookbook.md) | Step-by-step recipes for common workflows |
 | [docs/api.md](docs/api.md) | FastAPI endpoint reference with `curl` examples |
 | [docs/media.md](docs/media.md) | The media API a video editor uses: uploads, transcripts with word times, analysis |
 | [docs/security.md](docs/security.md) | The threat model: what joe serves without authentication, the setting for each part, which each program using joe needs, and the review's findings |

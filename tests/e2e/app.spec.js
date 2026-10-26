@@ -8,7 +8,7 @@ const fixtureJson = JSON.parse(
 
 // ─── Page load ───────────────────────────────────────────────────────────────
 
-test('page loads and canvas is visible', async ({ page }) => {
+test('page loads and canvas is visible', { tag: '@music-page' }, async ({ page }) => {
   const errors = [];
   page.on('pageerror', (err) => errors.push(err.message));
 
@@ -21,7 +21,7 @@ test('page loads and canvas is visible', async ({ page }) => {
 
 // ─── "Joe, go!" button ───────────────────────────────────────────────────────
 
-test('"Joe, go!" button is present and clickable', async ({ page }) => {
+test('"Joe, go!" button is present and clickable', { tag: '@music-page' }, async ({ page }) => {
   const errors = [];
   page.on('pageerror', (err) => errors.push(err.message));
 
@@ -42,7 +42,7 @@ test('"Joe, go!" button is present and clickable', async ({ page }) => {
 
 // ─── Keyboard navigation ─────────────────────────────────────────────────────
 
-test('arrow key navigation updates era panel and does not crash', async ({ page }) => {
+test('arrow key navigation updates era panel and does not crash', { tag: '@music-page' }, async ({ page }) => {
   const errors = [];
   page.on('pageerror', (err) => errors.push(err.message));
 
@@ -76,7 +76,7 @@ test('arrow key navigation updates era panel and does not crash', async ({ page 
 
 // ─── Pipeline JSON smoke test ────────────────────────────────────────────────
 
-test('Process_Data fixture has required backend contract keys', async ({ page }) => {
+test('Process_Data fixture has required backend contract keys', { tag: '@music-page' }, async ({ page }) => {
   await page.route('**/Process_Data_fixture.json', (route) => {
     route.fulfill({
       status: 200,
@@ -115,7 +115,7 @@ test('Process_Data fixture has required backend contract keys', async ({ page })
 
 // ─── Transport initial state ──────────────────────────────────────────────────
 
-test('Live button is disabled until Joe, go! is clicked', async ({ page }) => {
+test('Live button is disabled until Joe, go! is clicked', { tag: '@music-page' }, async ({ page }) => {
   const errors = [];
   page.on('pageerror', err => errors.push(err.message));
 
@@ -133,7 +133,7 @@ test('Live button is disabled until Joe, go! is clicked', async ({ page }) => {
   expect(errors).toHaveLength(0);
 });
 
-test('Canvas mode badge is empty on initial load', async ({ page }) => {
+test('Canvas mode badge is empty on initial load', { tag: '@music-page' }, async ({ page }) => {
   await page.goto('/');
   await page.waitForSelector('canvas');
 
@@ -148,7 +148,7 @@ const CDN_SCRIPTS = {
   'https://cdn.jsdelivr.net/npm/p5@1.11.2/lib/addons/p5.sound.js': 'node_modules/p5/lib/addons/p5.sound.js',
 };
 
-test('each CDN script is held to the bytes of the p5 the lockfile installs', async () => {
+test('each CDN script is held to the bytes of the p5 the lockfile installs', { tag: '@music-page' }, async () => {
   const { createHash } = require('crypto');
   const root = join(__dirname, '..', '..');
   const html = readFileSync(join(root, 'src', 'index.html'), 'utf-8');
@@ -162,7 +162,7 @@ test('each CDN script is held to the bytes of the p5 the lockfile installs', asy
   expect(html.match(/<script src="https:/g)).toHaveLength(tags.length);
 });
 
-test('p5 and p5.sound load from the CDN past their integrity check', async ({ page }) => {
+test('p5 and p5.sound load from the CDN past their integrity check', { tag: '@music-page' }, async ({ page }) => {
   const errors = [];
   page.on('pageerror', (err) => errors.push(err.message));
 
@@ -177,7 +177,7 @@ test('p5 and p5.sound load from the CDN past their integrity check', async ({ pa
 // ─── The transport's scrubber ────────────────────────────────────────────────
 
 for (const width of [1024, 1280]) {
-  test(`the scrubber's knob clears the time readout at ${width} px`, async ({ page }) => {
+  test(`the scrubber's knob clears the time readout at ${width} px`, { tag: '@music-page' }, async ({ page }) => {
     await page.setViewportSize({ width, height: 768 });
     await page.goto('/');
     const scrub = await page.getByTestId('transport-scrub').boundingBox();
@@ -194,7 +194,7 @@ for (const width of [1024, 1280]) {
   });
 }
 
-test('with a take loaded and its note showing, Eject stays clear of the window buttons at 1280 px', async ({ page }) => {
+test('with a take loaded and its note showing, Eject stays clear of the window buttons at 1280 px', { tag: '@music-page' }, async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto('/');
   await page.evaluate(() => {
@@ -213,7 +213,7 @@ test('with a take loaded and its note showing, Eject stays clear of the window b
 
 // ─── Where Live records from ─────────────────────────────────────────────────
 
-test('the capture select says where Live records from, and what each choice is', async ({ page }) => {
+test('the capture select says where Live records from, and what each choice is', { tag: '@music-page' }, async ({ page }) => {
   await page.goto('/');
   const select = page.getByRole('combobox', { name: 'Live records from' });
   await expect(select).toHaveAttribute('title', 'Where Live records from');

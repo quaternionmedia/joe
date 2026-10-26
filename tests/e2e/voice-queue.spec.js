@@ -28,7 +28,7 @@ async function script(page, { lists, post = { status: 202, body: { request_id: '
   return calls;
 }
 
-test('nothing waiting leaves the panel out of the way', async ({ page }) => {
+test('nothing waiting leaves the panel out of the way', { tag: '@voice-loop' }, async ({ page }) => {
   await script(page, { lists: [[]] });
   await page.goto('/');
   await page.waitForSelector('canvas');
@@ -36,7 +36,7 @@ test('nothing waiting leaves the panel out of the way', async ({ page }) => {
   await expect(page.getByTestId('voice-panel')).toBeHidden();
 });
 
-test('the oldest waiting request is offered with its options', async ({ page }) => {
+test('the oldest waiting request is offered with its options', { tag: '@voice-loop' }, async ({ page }) => {
   const calls = await script(page, { lists: [[LAUNCH, DEPLOY]] });
   await page.goto('/');
 
@@ -49,7 +49,7 @@ test('the oldest waiting request is offered with its options', async ({ page }) 
   expect(calls.listQueries[0].get('oldest_first')).toBe('true');
 });
 
-test('answering asks qmcp once, waits for the run, then reads the queue again', async ({ page }) => {
+test('answering asks qmcp once, waits for the run, then reads the queue again', { tag: '@voice-loop' }, async ({ page }) => {
   const calls = await script(page, {
     lists: [[LAUNCH], []],
     runs: [{ running: true }, { running: false, exit_code: 0, output: ["  demo answered 'approve' (by voice)."] }],
@@ -73,7 +73,7 @@ test('answering asks qmcp once, waits for the run, then reads the queue again', 
   expect(next[1] - calls.log[ended][1]).toBeLessThan(1500);
 });
 
-test('a run that fails shows the command\'s own last words', async ({ page }) => {
+test('a run that fails shows the command\'s own last words', { tag: '@voice-loop' }, async ({ page }) => {
   const words = "No speech engine answers at http://127.0.0.1:8000. Start it in the engine's checkout: uv run joe backend";
   await script(page, {
     lists: [[LAUNCH]],
@@ -86,7 +86,7 @@ test('a run that fails shows the command\'s own last words', async ({ page }) =>
   await expect(page.getByTestId('voice-answer')).toBeEnabled();
 });
 
-test('a refusal shows qmcp\'s reason', async ({ page }) => {
+test('a refusal of the answer shows qmcp\'s reason', { tag: '@voice-loop' }, async ({ page }) => {
   const detail = "A conversation is already running, for 'other'. One at a time: there is one microphone.";
   await script(page, { lists: [[LAUNCH]], post: { status: 409, body: { detail } } });
   await page.goto('/');
@@ -101,7 +101,7 @@ const showPage = (page, state) => page.evaluate(state => {
   document.dispatchEvent(new Event('visibilitychange'));
 }, state);
 
-test('while qmcp cannot be reached, Instruct by voice says so, and a hidden page asks nothing', async ({ page }) => {
+test('while qmcp cannot be reached, Instruct by voice says so, and a hidden page asks nothing', { tag: '@voice-loop' }, async ({ page }) => {
   let asked = 0;
   await page.clock.install();
   await page.route('**/api/voice/conversation', route =>
@@ -127,7 +127,7 @@ test('while qmcp cannot be reached, Instruct by voice says so, and a hidden page
   await expect.poll(() => asked).toBe(2);
 });
 
-test('once qmcp answers, Instruct by voice is itself again', async ({ page }) => {
+test('once qmcp answers, Instruct by voice is itself again', { tag: '@voice-loop' }, async ({ page }) => {
   let reachable = false;
   await page.clock.install();
   await page.route('**/api/voice/conversation', route =>

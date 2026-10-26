@@ -3,7 +3,7 @@ const { test, expect } = require('@playwright/test');
 // The windows by key: L the Library, A the Results, Esc closes them; T is the
 // transcript pane's own (transcript-pane.spec.js).
 
-test('L opens and closes the Library, and A the analysis Results', async ({ page }) => {
+test('L opens and closes the Library, and A the analysis Results', { tag: '@music-page' }, async ({ page }) => {
   await page.goto('/');
   await page.waitForSelector('canvas');
   const library = page.getByTestId('capture-panel');
@@ -19,7 +19,7 @@ test('L opens and closes the Library, and A the analysis Results', async ({ page
   await expect(page.getByTestId('results-panel')).toBeHidden();
 });
 
-test('Esc closes whatever is open, and opens nothing that was closed', async ({ page }) => {
+test('Esc closes whatever is open, and opens nothing that was closed', { tag: '@music-page' }, async ({ page }) => {
   await page.goto('/');
   await page.waitForSelector('canvas');
   await page.keyboard.press('l');
@@ -37,7 +37,7 @@ test('Esc closes whatever is open, and opens nothing that was closed', async ({ 
   }
 });
 
-test('R still asks the voice loop to say it again, and opens nothing', async ({ page }) => {
+test('R still asks the voice loop to say it again, and opens nothing', { tag: '@voice-loop' }, async ({ page }) => {
   const answers = [];
   await page.route(url => url.pathname === '/api/voice/answer', route => {
     answers.push(route.request().postDataJSON());
@@ -53,7 +53,7 @@ test('R still asks the voice loop to say it again, and opens nothing', async ({ 
   await expect(page.getByTestId('capture-panel')).toBeHidden();
 });
 
-test('keys typed into a field open nothing', async ({ page }) => {
+test('keys typed into a field open nothing', { tag: '@music-page' }, async ({ page }) => {
   await page.goto('/');
   await page.waitForSelector('canvas');
   await page.evaluate(() => {

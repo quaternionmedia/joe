@@ -54,7 +54,7 @@ async function scrubTo(page, t) {
 
 const litWord = page => page.getByTestId('piano-roll-canvas').getAttribute('data-current-word');
 
-test('Show puts the take on the transport and its standing words on the timeline', async ({ page }) => {
+test('Show puts the take on the transport and its standing words on the timeline', { tag: '@voice-loop' }, async ({ page }) => {
   const fetched = await script(page);
   await page.goto('/');
   await page.keyboard.press('t');
@@ -71,7 +71,7 @@ test('Show puts the take on the transport and its standing words on the timeline
   await expect(page.getByTestId('transport-note')).toBeHidden();
 });
 
-test('ejecting the recording takes its words off the timeline', async ({ page }) => {
+test('ejecting the recording takes its words off the timeline', { tag: '@voice-loop' }, async ({ page }) => {
   await script(page);
   await page.goto('/');
   await page.keyboard.press('t');
@@ -83,7 +83,7 @@ test('ejecting the recording takes its words off the timeline', async ({ page })
   await expect(page.getByTestId('piano-roll-canvas')).not.toHaveAttribute('aria-label', /.+/);
 });
 
-test('words share their segment evenly and a struck one keeps its place', async ({ page }) => {
+test('words share their segment evenly and a struck one keeps its place', { tag: '@voice-loop' }, async ({ page }) => {
   await page.goto('/');
   const placed = await page.evaluate(async () => {
     const { takeWords } = await import('/joe/components/takeWords.js');
@@ -103,7 +103,7 @@ test('words share their segment evenly and a struck one keeps its place', async 
 // The take in HISTORY places deploy 0.2–0.4, vox 0.4–0.6 (struck), to 0.6–0.8,
 // the 0.8–1.0 and pi 1.0–1.2, in a recording two seconds long.
 
-test('the lit word is the one under the playhead, and a struck word is never lit', async ({ page }) => {
+test('the lit word is the one under the playhead, and a struck word is never lit', { tag: '@voice-loop' }, async ({ page }) => {
   await script(page);
   await page.goto('/');
   await page.keyboard.press('t');
@@ -118,7 +118,7 @@ test('the lit word is the one under the playhead, and a struck word is never lit
   }
 });
 
-test('while the take plays, the lit word follows it word by word', async ({ page }) => {
+test('while the take plays, the lit word follows it word by word', { tag: '@voice-loop' }, async ({ page }) => {
   await script(page);
   await page.goto('/');
   await page.keyboard.press('t');
@@ -137,7 +137,7 @@ test('while the take plays, the lit word follows it word by word', async ({ page
   expect(seen.at(-1)).toBeNull();
 });
 
-test('a standing word is lit from its start up to its end', async ({ page }) => {
+test('a standing word is lit from its start up to its end', { tag: '@voice-loop' }, async ({ page }) => {
   await page.goto('/');
   const lit = await page.evaluate(async () => {
     const { litWord } = await import('/joe/components/takeWords.js');
@@ -149,7 +149,7 @@ test('a standing word is lit from its start up to its end', async ({ page }) => 
   expect(lit).toEqual([-1, 0, 0, -1, -1, 2, -1]);
 });
 
-test('a word too long for its place is cut and ends in an ellipsis', async ({ page }) => {
+test('a word too long for its place is cut and ends in an ellipsis', { tag: '@voice-loop' }, async ({ page }) => {
   await page.goto('/');
   const fitted = await page.evaluate(async () => {
     const { fitText } = await import('/joe/components/MainCanvas.js');
@@ -161,7 +161,7 @@ test('a word too long for its place is cut and ends in an ellipsis', async ({ pa
   expect(fitted).toEqual(['to', 'whe…', '…', '']);
 });
 
-test('a clipped word is shown whole under the pointer, and a word that fits is not', async ({ page }) => {
+test('a clipped word is shown whole under the pointer, and a word that fits is not', { tag: '@voice-loop' }, async ({ page }) => {
   const history = { kept: true, entries: [
     { kind: 'take', take: 'a1b2c3', text: 'extraordinarily ok', source: 'voice', at: 1002, audio: 'capture_1.wav',
       segments: [
@@ -195,7 +195,7 @@ test('a clipped word is shown whole under the pointer, and a word that fits is n
   await expect(tip).toBeHidden();
 });
 
-test('a take whose recording is not kept is laid out, and the transport stays stopped and says so', async ({ page }) => {
+test('a take whose recording is not kept is laid out, and the transport stays stopped and says so', { tag: '@voice-loop' }, async ({ page }) => {
   const fetched = await script(page, { kept: false });
   await page.goto('/');
   await page.keyboard.press('t');
