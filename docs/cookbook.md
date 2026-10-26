@@ -29,7 +29,7 @@ To play the audio alongside the roll, open **Library** and click **Play** next t
 
 1. Make sure your browser mic is accessible (HTTPS or localhost).
 2. Click **Joe, go!** — the button turns green and **Live** becomes enabled.
-3. Select **Browser** in the capture mode selector (default).
+3. Select **Browser mic** where Live records from (the default).
 4. Click **Live** — the red dot pulses and the canvas shows `LIVE`.
 5. Play your instrument; onset detections scroll across the canvas in real time.
 6. Click **Stop** when done.
@@ -53,7 +53,7 @@ The recording is saved automatically to `Data/Audio/`. Open **Library** to see i
 
 **Goal:** Record at higher quality via `sounddevice` (no browser compression).
 
-1. Select **Backend** in the capture mode selector in the transport bar.
+1. Select **joe's mic** where Live records from, in the transport bar.
 2. Click **Joe, go!** then **Live** — this triggers `POST /api/capture/start`.
 3. Play or route audio through your system device.
 4. Click **Stop** — this flushes a WAV file to `Data/Audio/`.
@@ -166,7 +166,7 @@ with the piano roll aligned to the audio.
 ## How the bottom bar controls relate
 
 ```text
-[Joe, go!] [Browser|Backend] [Live] [●]   [LIVE|RESULTS] [Play] [Stop] [━━] 0:00/0:00 filename ×   [Library] [Results]
+[Joe, go!] [Browser mic|joe's mic] [Live] [●]   [LIVE|RESULTS] [Play] [Stop] [━━] 0:00/0:00 filename ×   [Library] [Results]
     │              │            │                │             │                        │
     │         Sets capture      │           Canvas mode        │                  Eject (×) clears
     │         mode for Live     │           badge              │                  the active source
@@ -178,7 +178,7 @@ with the piano roll aligned to the audio.
 ```
 
 - **Joe, go!** resumes the Web Audio context — required once per page load before Live works.
-- **Browser / Backend** selector sets where the captured audio comes from.
+- **Browser mic / joe's mic** sets where Live records from: this browser's microphone, or the microphone of the machine joe runs on.
 - **Live** starts/stops real-time recording. Disables Play/Stop while active.
 - **Play / Stop** controls recorded-file playback. Disabled while Live is recording.
 - **×** (eject) clears the active audio source. Appears only when a file is loaded.
