@@ -25,6 +25,12 @@ npx playwright test --grep @music-page
    - test: tests/test_cli_access.py::test_the_api_listens_on_loopback_alone
    - test: tests/test_access.py::test_the_health_check_says_which_capabilities_are_on
 
+   The specs run the page against servers of their own, which answer whatever a
+   spec has not scripted with a 503, so no joe or qmcp running beside them
+   answers a spec.
+
+   - spec: a spec's page reaches no backend the spec has not scripted
+
 2. The page opens on the visualiser alone, with the first-run hint and the
    transport below it, and the canvas names no mode yet. p5 and p5.sound come
    from the CDN, and run only if they are the bytes the lockfile installs.
@@ -81,7 +87,7 @@ npx playwright test --grep @music-page
 3. A file the pipeline cannot read says why in the Library. A pipeline that
    fails leaves the Results closed and loads no recording.
 
-   - spec: Unsupported format shows error and keeps the Results window closed
+   - test: tests/test_api.py::test_run_on_file_refuses_a_format_the_pipeline_cannot_read
    - spec: a pipeline failure opens no Results window and loads no recording
 
 4. **Play** on a file loads it on the transport and plays it, its row
@@ -107,12 +113,10 @@ npx playwright test --grep @music-page
 6. Or an earlier result, with no server needed: **Results** → **Load JSON** and
    a `Process_Data_*.json` from `Data/Output/`. A file that is not one says so,
    and a track named with markup is shown as text. The specs load a fixture of
-   one, which carries the keys the page reads.
+   one, of the shape the pipeline writes.
 
-   - spec: Process_Data fixture has required backend contract keys
    - spec: the file input is inside the open Results window
-   - spec: loading a valid JSON file renders the piano roll canvas
-   - spec: piano roll canvas has non-zero dimensions after JSON load
+   - test: tests/test_process_data_contract.py::test_the_specs_fixture_has_the_shape_the_pipeline_writes
    - spec: results meta shows note count after load
    - spec: Canvas mode badge shows RESULTS after loading notes from file input
    - spec: malformed JSON shows load-error element and does not crash

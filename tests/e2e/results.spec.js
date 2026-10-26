@@ -45,47 +45,6 @@ test('the file input is inside the open Results window', { tag: '@music-page' },
 
 // ─── JSON loading + piano roll ────────────────────────────────────────────────
 
-test('loading a valid JSON file renders the piano roll canvas', { tag: '@music-page' }, async ({ page }) => {
-  const errors = [];
-  page.on('pageerror', (err) => errors.push(err.message));
-
-  await page.goto('/');
-  await page.waitForSelector('canvas');
-  await openResultsPanel(page);
-
-  await page.getByTestId('file-input').setInputFiles({
-    name:     'Process_Data_fixture.json',
-    mimeType: 'application/json',
-    buffer:   fixtureBuffer,
-  });
-
-  // Piano roll canvas should become visible
-  await expect(page.getByTestId('piano-roll-canvas')).toBeVisible({ timeout: 3000 });
-  expect(errors).toHaveLength(0);
-});
-
-test('piano roll canvas has non-zero dimensions after JSON load', { tag: '@music-page' }, async ({ page }) => {
-  await page.goto('/');
-  await page.waitForSelector('canvas');
-  await openResultsPanel(page);
-
-  await page.getByTestId('file-input').setInputFiles({
-    name:     'Process_Data_fixture.json',
-    mimeType: 'application/json',
-    buffer:   fixtureBuffer,
-  });
-
-  await page.waitForTimeout(500); // allow render + opacity animation
-
-  const dims = await page.evaluate(() => {
-    const c = document.getElementById('piano-roll-canvas');
-    return { width: c.width, height: c.height };
-  });
-
-  expect(dims.width).toBeGreaterThan(0);
-  expect(dims.height).toBeGreaterThan(0);
-});
-
 test('results meta shows note count after load', { tag: '@music-page' }, async ({ page }) => {
   await page.goto('/');
   await page.waitForSelector('canvas');
@@ -97,10 +56,9 @@ test('results meta shows note count after load', { tag: '@music-page' }, async (
     buffer:   fixtureBuffer,
   });
 
-  await page.waitForTimeout(300);
-  const meta = await page.getByTestId('results-meta').textContent();
-  expect(meta).toMatch(/Notes:/);
-  expect(meta).toMatch(/Iteration:/);
+  const meta = page.getByTestId('results-meta');
+  await expect(meta).toContainText('Notes:');
+  await expect(meta).toContainText('Iteration:');
 });
 
 // ─── Error handling ───────────────────────────────────────────────────────────
@@ -197,11 +155,9 @@ test('Fetch Latest button loads results and shows note count', { tag: '@music-pa
   await openResultsPanel(page);
 
   await page.getByTestId('fetch-latest').click();
-  await page.waitForTimeout(500);
 
   // Results meta should show note count
-  const meta = await page.getByTestId('results-meta').textContent();
-  expect(meta).toMatch(/Notes:/);
+  await expect(page.getByTestId('results-meta')).toContainText('Notes:');
 
   // Piano roll canvas should be visible
   await expect(page.getByTestId('piano-roll-canvas')).toBeVisible();

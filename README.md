@@ -32,7 +32,7 @@ The repo has two primary parts:
 
 - Python `3.11.x` (required by `pyproject.toml`)
 - Node.js + npm
-- [`uv`](https://docs.astral.sh/uv/) (recommended) **or** `pdm` / `venv+pip`
+- [`uv`](https://docs.astral.sh/uv/): `uv.lock` is the one description of joe's Python dependencies
 
 ### Recommended: uv
 
@@ -47,7 +47,7 @@ uv run joe dev   # Vite :3000 + API on loopback :8000, every capability on
 Then in a second terminal, run the pipeline:
 
 ```powershell
-uv run joe run       # processes Data/Audio/ -> Data/Output/
+uv run joe run       # the newest recording in Data/Audio/ -> Data/Output/
 ```
 
 Open `http://localhost:3000/joe`, click **Results → Fetch Latest**.
@@ -59,7 +59,7 @@ Open `http://localhost:3000/joe`, click **Results → Fetch Latest**.
 | `uv run joe frontend` | Vite dev server only (`localhost:3000`) |
 | `uv run joe backend [--allow CAPABILITY]` | FastAPI API server only (`127.0.0.1:8000`); the media API alone unless `--allow` turns on `microphone`, `transcripts`, `library` or `all` |
 | `uv run joe dev [--allow CAPABILITY]` | Both servers (Ctrl+C to stop); the API on loopback with every capability on, or, given `--allow`, as `backend` starts it |
-| `uv run joe run` | Run the pipeline once |
+| `uv run joe run [NAME...] [--all]` | Run the pipeline once: on the newest recording in `Data/Audio/`, those named, or every one |
 | `uv run joe voice setup` | **Start here for voice.** Find your microphone while you talk, save it, and prove it with a transcribed sentence |
 | `uv run joe voice listen [--device N] [--fixed]` | Record until you stop talking, then transcribe (`--fixed` records the whole `--duration`) |
 | `uv run joe voice transcribe <path>` | Transcribe an audio file to text |
@@ -195,7 +195,7 @@ npm run test:e2e
 Run Python tests:
 
 ```powershell
-python -m pytest -q
+uv run --frozen pytest tests/ -q
 ```
 
 The media tests need ffmpeg and skip without it; name one with `JOE_FFMPEG`.
@@ -211,7 +211,7 @@ npm run test:e2e
 Run backend pipeline:
 
 ```powershell
-python main.py
+uv run python main.py
 ```
 
 Expected artifacts are created under `Data/Output/<timestamp>/`:
@@ -239,7 +239,7 @@ The Vite frontend (`src/`) is a dock of windows -- `src/layout/`, the
 visualiser and every panel as windows of one GoldenLayout, described in
 [docs/ui.md](docs/ui.md) -- and the visualiser has three layers:
 
-- **FFT canvas** — `src/sketch.js` runs a live mic FFT visualiser via `p5.AudioIn` + `p5.FFT`. p5 and p5.sound are loaded as CDN globals (not bundled via Vite) because p5.sound must patch `window.p5` at script-evaluation time. Dot size scales on a dB curve (`20·log₁₀(v/255)`) to match human loudness perception.
+- **FFT canvas** — `src/sketch.js` runs a live mic FFT visualiser via `p5.AudioIn` + `p5.FFT`. p5 and p5.sound are loaded as CDN globals (not bundled via Vite) because p5.sound must patch `window.p5` at script-evaluation time. Dot size scales on a dB curve (`20·log₁₀(v/255)`) to match human loudness perception: nothing at or below a noise floor of 20, up to 10 px at full scale, 255.
 - **Piano roll canvas** — `src/components/MainCanvas.js` draws over the FFT canvas, filling the visualiser's window, in two modes: **LIVE** (real-time scrolling note detections from mic onset detection) and **RESULTS** (static pitch × time piano roll from pipeline JSON, coloured by transform type: Raw white, Harmonic cyan, Percussive orange).
 - **Era panel** — `src/components/EraPanel.js` shows setlist metadata with arrow-key navigation and anime.js cross-fades.
 
@@ -251,9 +251,9 @@ visualiser and every panel as windows of one GoldenLayout, described in
 
 | Group | Controls | Notes |
 | --- | --- | --- |
-| Audio context | `Joe, go!` | One-time click — resumes Web Audio, enables Live |
+| Audio context | `Joe, go!` | Starts Web Audio and enables Live; it then reads **Joe, stop!**, and a second press stops audio, unless a recording is running |
 | Live capture | where Live records from + `Live` + indicator | **Browser mic** = this browser's microphone (MediaRecorder); **joe's mic** = the microphone of the machine joe runs on (sounddevice WAV) |
-| Transport | mode badge + `Play/Stop` + scrub + `×` eject | Disabled while recording; badge shows `LIVE` or `RESULTS`; `×` clears active source |
+| Transport | mode badge + `Play/Stop` + scrub + `×` eject | `Play` and `Stop` are disabled while recording; badge shows `LIVE` or `RESULTS`; `×` clears active source |
 | Windows | `♫` Library + `▤` Results + `¶` Transcript + `▦` Panels | Each opens its window beside the visualiser, or closes it when it is in front; `▦`, the Panels menu, lists every window and resets the layout ([docs/ui.md](docs/ui.md)) |
 | What is off | any of the above | The page reads `/api/health`: a control whose capability is off is greyed, its tooltip naming the setting, and its panel says so with a link to [docs/security.md](docs/security.md) |
 | Voice | `Instruct by voice` | One spoken instruction into qmcp's inbox; the outcome shows in the voice panel |

@@ -4,7 +4,9 @@
 
 `main.py` -> `Audio` -> `Chroma` -> `MIDI` -> `utilities.save_json()`
 
-- `main.py` discovers audio in `Data/Audio/` and creates timestamped output folders.
+- `main.py` analyses recordings in `Data/Audio/` -- the newest, those named on its command
+  line, or every one with `--all` (`Modules.utilities.audio_files`) -- into a timestamped
+  output folder.
 - `Audio` loads audio and orchestrates transform-specific chroma processing.
 - `Chroma` computes and post-processes chromagrams, then emits image outputs.
 - `MIDI` converts processed chroma data into MIDI note events and `.mid` files.
@@ -22,14 +24,17 @@ It creates multiple `Chroma` instances for different transform types and handles
 
 ## Chroma
 
-`Chroma` takes audio data and transform type, computes a chromagram, performs post-processing, and writes images to:
-- `Data/Output/<timestamp>/Chroma/`
+`Audio` does the analysis: the STFT of the recording, its split into harmonic and
+percussive parts (HPSS), and a band-pass filter over each, giving three transform types
+(Raw, Harmonic, Percussive). For each it builds a `Chroma` and a `MIDI`.
 
-It then creates a `MIDI` object using the resulting chroma representation.
+`Chroma` holds a transform's unfiltered and filtered spectra and plots its spectrogram,
+writing the image to:
+- `Data/Output/<timestamp>/Chroma/`
 
 ## MIDI
 
-`MIDI` takes a `Chroma` object, generates note events, and writes `.mid` output to:
+`MIDI` takes the same spectra, generates note events, and writes `.mid` output to:
 - `Data/Output/<timestamp>/MIDI/`
 
 It stores a series of `Note` objects for downstream save/export operations.

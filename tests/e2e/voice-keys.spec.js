@@ -100,6 +100,8 @@ test('a window losing focus releases a held key, once, and sends nothing when no
   await page.keyboard.down('Backquote');
   await page.evaluate(() => window.dispatchEvent(new Event('blur')));
   await page.keyboard.up('Backquote');   // already released by the blur
+  await expect.poll(() => sent.holds).toEqual([true, false]);
+  // ...and nothing more: the key's own release, after the blur, sends none.
   await page.waitForTimeout(300);
   expect(sent.holds).toEqual([true, false]);
 });

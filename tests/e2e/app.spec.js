@@ -76,43 +76,6 @@ test('arrow key navigation updates era panel and does not crash', { tag: '@music
 
 // ─── Pipeline JSON smoke test ────────────────────────────────────────────────
 
-test('Process_Data fixture has required backend contract keys', { tag: '@music-page' }, async ({ page }) => {
-  await page.route('**/Process_Data_fixture.json', (route) => {
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify(fixtureJson),
-    });
-  });
-
-  await page.goto('/');
-
-  const response = await page.evaluate(async () => {
-    const res = await fetch('/Process_Data_fixture.json');
-    return res.json();
-  });
-
-  expect(response).toHaveProperty('iteration');
-  expect(response).toHaveProperty('audio');
-  expect(response).toHaveProperty('min_duration');
-  expect(response).toHaveProperty('fft_sizes');
-  expect(response).toHaveProperty('chroma_threshold');
-  expect(response).toHaveProperty('harmonic_threshold');
-  expect(response).toHaveProperty('overtone_weights');
-
-  const audioEntries = Object.values(response.audio);
-  expect(audioEntries.length).toBeGreaterThan(0);
-  const firstAudio = audioEntries[0];
-  expect(firstAudio).toHaveProperty('name');
-  expect(firstAudio).toHaveProperty('sr');
-  expect(firstAudio).toHaveProperty('chroma');
-
-  // All three transform types present in extended fixture
-  expect(firstAudio.chroma).toHaveProperty('Raw');
-  expect(firstAudio.chroma).toHaveProperty('Harmonic');
-  expect(firstAudio.chroma).toHaveProperty('Percussive');
-});
-
 // ─── Transport initial state ──────────────────────────────────────────────────
 
 test('Live button is disabled until Joe, go! is clicked', { tag: '@music-page' }, async ({ page }) => {
@@ -228,4 +191,21 @@ test('the capture select says where Live records from, and what each choice is',
   await expect(select.locator('option[value="browser"]')).toHaveAttribute('title', /This browser's microphone/);
   await expect(select.locator('option[value="backend"]')).toHaveAttribute('title', /machine joe runs on/);
   await expect(page.locator('#first-run-hint')).toContainText("Browser mic or joe's mic + Live — record");
+});
+
+// ─── The specs' own servers ──────────────────────────────────────────────────
+
+test("a spec's page reaches no backend the spec has not scripted", { tag: '@music-page' }, async ({ page }) => {
+  await page.goto('/');
+
+  // joe's API and qmcp's queue, through the page's own proxy: neither is a joe
+  // or a qmcp that happens to be running on this machine.
+  const answers = await page.evaluate(() => Promise.all(['/api/health', '/v1/human/requests'].map(async path => {
+    const res = await fetch(path);
+    return { path, status: res.status, text: await res.text() };
+  })));
+  for (const { path, status, text } of answers) {
+    expect(status, path).toBe(503);
+    expect(text, path).toContain('no backend in the specs');
+  }
 });

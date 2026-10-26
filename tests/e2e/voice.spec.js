@@ -143,6 +143,13 @@ test('the microphone level shows only while the microphone is open', { tag: '@vo
   await expect(page.locator('.voice-level')).toBeVisible();
   // At the threshold's double the bar is full; at the threshold it is half.
   await expect(page.locator('.voice-level-fill')).toHaveAttribute('style', /width: 100%/);
+
+  // A question being asked has the microphone closed: the same level shows nothing.
+  await page.unroute('**/api/voice/conversation');
+  await serve(page, [{ state: 'speaking', text: 'Anything else?' }], [{ rms: 0.008, threshold: 0.004 }]);
+  await page.goto('/');
+  await expect(page.getByTestId('voice-panel')).toHaveAttribute('data-state', 'speaking');
+  await expect(page.locator('.voice-level')).toBeHidden();
 });
 
 test("a conversation's first state shows in its own colour at once, not faded in from another", { tag: '@voice-loop' }, async ({ page }) => {
