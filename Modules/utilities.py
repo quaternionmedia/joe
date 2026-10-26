@@ -41,28 +41,33 @@ def make_directories(current_path: str) -> dict[str, str]:
     }
 
 
-def get_audio_files(audio_path: str, just_one_file: bool = False) -> list[str]:
-    """Get the audio files.
+# What the pipeline reads; api.py's PIPELINE_EXTENSIONS is the same set.
+PIPELINE_EXTENSIONS = (".wav", ".webm", ".mp3", ".ogg", ".flac")
 
-    Args:
-        audio_path (str): the Data/Audio directory.
-        just_one_file (bool): If true, only get the first audio file.
+
+def audio_files(audio_dir: str, names: list[str] = (), every: bool = False) -> list[str]:
+    """The recordings a run of the pipeline analyses, as paths in `audio_dir`:
+    those `names`, in the order named; with `every`, each one, by name; or else
+    the newest, the one just recorded. A name that is no recording in the
+    folder -- absent, not audio, or not a bare file name -- is refused with a
+    ValueError, before anything is analysed.
     """
-    audio_dir = Path(audio_path)
-    if not audio_dir.exists():
-        print("Audio directory does not exist, check directory.")
-        sys.exit(0)
-    audio_files: list[str] = []
-    for item in os.listdir(audio_dir):
-        candidate = audio_dir / item
-        if candidate.is_file():
-            audio_files.append(str(candidate))
-            if just_one_file:
-                break
-    if not audio_files:
-        print("No audio files found, check directory.")
-        sys.exit(0)
-    return audio_files
+    folder = Path(audio_dir)
+
+    def recording(path: Path) -> bool:
+        return path.is_file() and path.suffix.lower() in PIPELINE_EXTENSIONS
+
+    if names:
+        chosen = []
+        for name in names:
+            if Path(name).name != name or not recording(folder / name):
+                raise ValueError(f"no recording named {name!r} in {folder}")
+            chosen.append(str(folder / name))
+        return chosen
+    found = sorted((p for p in folder.iterdir() if recording(p)), key=lambda p: p.name) if folder.is_dir() else []
+    if every:
+        return [str(p) for p in found]
+    return [str(max(found, key=lambda p: (p.stat().st_mtime, p.name)))] if found else []
 
 
 def save_json(
