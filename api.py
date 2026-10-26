@@ -483,7 +483,7 @@ def _listen_once(duration: float, device: str | None, until_silence: bool, silen
             Cue.play("heard")
         if result.get("take") or result.get("source") == "key":
             last_take = result.get("take") or live.take
-            datapoints.write("take", take=last_take, audio=result.get("audio_path") or None,
+            datapoints.write("take", take=last_take, audio=datapoints.kept_as(result.get("audio_path")),
                              source=result.get("source", "voice"), hint=hint,
                              text=result.get("text", ""), confidence=result.get("confidence"),
                              segments=len(live.segments),
@@ -636,7 +636,9 @@ def voice_history(limit: int = 200):
 def voice_take_audio(take: str):
     """One take's recording, as joe wrote it, for the visualiser to play with
     the take's words on its timeline. Only a recording under joe's own voice
-    folder is served, whatever the record names."""
+    folder is served, whatever the record names. A record kept before that
+    folder was moved or copied names where it was, and its recording is
+    found there by its file name."""
     import re
 
     from Modules import History
@@ -647,11 +649,19 @@ def voice_take_audio(take: str):
     entry = History.take(datapoints.manifest, take)
     if entry is None or not entry.get("audio"):
         raise HTTPException(status_code=404, detail=f"no recording kept for take {take}")
-    path = Path(entry["audio"])
-    path = path if path.is_absolute() else datapoints.root / path
-    path = path.resolve()
-    roots = {datapoints.root.resolve(), Path(Voice().capture_dir).resolve()}
-    if not any(path.is_relative_to(root) for root in roots) or not path.is_file():
+    roots = [datapoints.root.resolve(), Path(Voice().capture_dir).resolve()]
+
+    def served(candidate: Path) -> bool:
+        return candidate.is_file() and any(candidate.is_relative_to(root) for root in roots)
+
+    kept = entry["audio"]
+    path = Path(kept)
+    path = (path if path.is_absolute() else datapoints.root / path).resolve()
+    if not served(path):
+        # Either OS's separators: the record may have been written on another machine.
+        name = re.split(r"[\\/]", kept)[-1]
+        path = next((p for p in ((root / name).resolve() for root in roots) if served(p)), None)
+    if path is None:
         raise HTTPException(status_code=404, detail=f"no recording kept for take {take}")
     return FileResponse(str(path), media_type="audio/wav")
 
