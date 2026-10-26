@@ -107,8 +107,20 @@ curl http://localhost:8000/api/results/latest
 
 **Capability:** `library`.
 
-Runs `python main.py` on all files in `Data/Audio/` and returns its output. Blocks until
-the pipeline completes (can take tens of seconds for large audio files).
+Runs the pipeline, `python main.py`, on recordings in `Data/Audio/` and returns its
+output: the newest, unless `files` names others or `all` asks for every one. Blocks
+until the pipeline completes (can take tens of seconds for large audio files).
+
+**Query params**
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `files` | str, repeated | — | recordings in `Data/Audio/`, by file name, analysed in the order named |
+| `all` | bool | `false` | every recording in `Data/Audio/`, by name |
+
+A name that is not a recording in `Data/Audio/` -- absent, not audio, or not a bare
+file name -- is a `404`, and naming `files` with `all=true` a `400`, before anything
+runs.
 
 **Response** — `200 OK`
 
@@ -125,7 +137,9 @@ A non-zero `returncode` means the pipeline failed. Check `stderr` for the Python
 **curl**
 
 ```bash
-curl -X POST http://localhost:8000/api/run
+curl -X POST http://localhost:8000/api/run                                  # the newest
+curl -X POST "http://localhost:8000/api/run?files=a.wav&files=b.wav"        # those two
+curl -X POST "http://localhost:8000/api/run?all=true"                       # every one
 ```
 
 ---
@@ -134,8 +148,7 @@ curl -X POST http://localhost:8000/api/run
 
 **Capability:** `library`.
 
-Run the pipeline on a specific file in `Data/Audio/`. Sets the `JOE_AUDIO_FILE` env var so
-`main.py` processes only that file.
+Run the pipeline on one file in `Data/Audio/`, named to `main.py`.
 
 **Path parameter**
 
@@ -746,6 +759,6 @@ curl -X POST http://localhost:8000/api/run/capture_20240101_120000.wav
 # 4. View results — "Results" -> "Fetch Latest"
 #    (auto-opens after clicking "Process" in the Library panel)
 
-# 5. Drop audio into Data/Audio/ and run the full pipeline
-curl -X POST http://localhost:8000/api/run
+# 5. Drop audio into Data/Audio/ and run the pipeline on every recording there
+curl -X POST "http://localhost:8000/api/run?all=true"
 ```

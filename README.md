@@ -47,7 +47,7 @@ uv run joe dev   # Vite :3000 + API on loopback :8000, every capability on
 Then in a second terminal, run the pipeline:
 
 ```powershell
-uv run joe run       # processes Data/Audio/ -> Data/Output/
+uv run joe run       # the newest recording in Data/Audio/ -> Data/Output/
 ```
 
 Open `http://localhost:3000/joe`, click **Results → Fetch Latest**.
@@ -59,7 +59,7 @@ Open `http://localhost:3000/joe`, click **Results → Fetch Latest**.
 | `uv run joe frontend` | Vite dev server only (`localhost:3000`) |
 | `uv run joe backend [--allow CAPABILITY]` | FastAPI API server only (`127.0.0.1:8000`); the media API alone unless `--allow` turns on `microphone`, `transcripts`, `library` or `all` |
 | `uv run joe dev [--allow CAPABILITY]` | Both servers (Ctrl+C to stop); the API on loopback with every capability on, or, given `--allow`, as `backend` starts it |
-| `uv run joe run` | Run the pipeline once |
+| `uv run joe run [NAME...] [--all]` | Run the pipeline once: on the newest recording in `Data/Audio/`, those named, or every one |
 | `uv run joe voice setup` | **Start here for voice.** Find your microphone while you talk, save it, and prove it with a transcribed sentence |
 | `uv run joe voice listen [--device N] [--fixed]` | Record until you stop talking, then transcribe (`--fixed` records the whole `--duration`) |
 | `uv run joe voice transcribe <path>` | Transcribe an audio file to text |

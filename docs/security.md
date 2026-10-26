@@ -198,7 +198,7 @@ apart: the binding and the capabilities are its whole access control.
 | `GET /api/audio/{filename}` | `library` | One recording, whole |
 | `POST /api/audio/upload` | `library` | Writes up to 100 MB into `Data/Audio/` |
 | `POST /api/voice/transcribe?filename=` | `library` | Transcribes a file in `Data/Audio/` or `Data/Voice/` by name |
-| `POST /api/run`, `/api/run/{filename}` | `library` | Runs the pipeline (`main.py`, up to 120 s) on every file, or one; answers its output |
+| `POST /api/run`, `/api/run/{filename}` | `library` | Runs the pipeline (`main.py`, up to 120 s) on the newest recording, those named, every one, or the one in the path; answers its output |
 | `GET /api/results/latest` | `library` | The latest pipeline output: every note found |
 
 `tests/test_access.py` holds every route to this table: a route added
