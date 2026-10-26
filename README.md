@@ -246,7 +246,7 @@ visualiser and every panel as windows of one GoldenLayout, described in
 ### Bottom bar control groups
 
 ```text
-[Joe, go!] | [Browser mic|joe's mic] [Live] [dot] | [LIVE|RESULTS] [Play] [Stop] [scrub] | [Library] [Results] [Transcript] [▦] | [Instruct by voice]
+[Joe, go!] | [Browser mic|joe's mic] [Live] [dot] | [LIVE|RESULTS] [Play] [Stop] [scrub] | [♫] [▤] [¶] [▦] | [Instruct by voice]
 ```
 
 | Group | Controls | Notes |
@@ -254,7 +254,7 @@ visualiser and every panel as windows of one GoldenLayout, described in
 | Audio context | `Joe, go!` | One-time click — resumes Web Audio, enables Live |
 | Live capture | where Live records from + `Live` + indicator | **Browser mic** = this browser's microphone (MediaRecorder); **joe's mic** = the microphone of the machine joe runs on (sounddevice WAV) |
 | Transport | mode badge + `Play/Stop` + scrub + `×` eject | Disabled while recording; badge shows `LIVE` or `RESULTS`; `×` clears active source |
-| Windows | `Library` + `Results` + `Transcript` + `▦` | Each opens its window beside the visualiser, or closes it when it is in front; `▦`, the Panels menu, lists every window and resets the layout ([docs/ui.md](docs/ui.md)) |
+| Windows | `♫` Library + `▤` Results + `¶` Transcript + `▦` Panels | Each opens its window beside the visualiser, or closes it when it is in front; `▦`, the Panels menu, lists every window and resets the layout ([docs/ui.md](docs/ui.md)) |
 | What is off | any of the above | The page reads `/api/health`: a control whose capability is off is greyed, its tooltip naming the setting, and its panel says so with a link to [docs/security.md](docs/security.md) |
 | Voice | `Instruct by voice` | One spoken instruction into qmcp's inbox; the outcome shows in the voice panel |
 

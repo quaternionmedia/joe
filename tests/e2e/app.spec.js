@@ -194,22 +194,29 @@ for (const width of [1024, 1280]) {
   });
 }
 
-test('with a take loaded and its note showing, Eject stays clear of the window buttons at 1280 px', async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 720 });
-  await page.goto('/');
-  await page.evaluate(() => {
-    document.querySelector('[data-testid="transport-name"]').textContent = 'take a1b2c3';
-    const note = document.querySelector('[data-testid="transport-note"]');
-    note.textContent = 'recording not kept';
-    note.hidden = false;
-    document.getElementById('transport-eject').hidden = false;
-  });
+for (const width of [1024, 1280]) {
+  test(`the transport's groups lie side by side at ${width} px, with a take and its note showing`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 720 });
+    await page.goto('/');
+    await page.evaluate(() => {
+      document.querySelector('[data-testid="transport-name"]').textContent = 'take a1b2c3';
+      const note = document.querySelector('[data-testid="transport-note"]');
+      note.textContent = 'recording not kept';
+      note.hidden = false;
+      document.getElementById('transport-eject').hidden = false;
+    });
 
-  const eject = await page.getByTestId('transport-eject').boundingBox();
-  const library = await page.getByTestId('capture-toggle').boundingBox();
-  expect(eject.x + eject.width).toBeLessThanOrEqual(library.x);
-  await page.getByTestId('transport-eject').click({ trial: true });
-});
+    // Each group's content ends before the next group begins: nothing runs under another.
+    const groups = await page.locator('#transport > .tg').evaluateAll(all => all.map(g => {
+      const box = g.getBoundingClientRect();
+      return { left: box.left, end: box.left + g.scrollWidth };
+    }));
+    for (let i = 0; i + 1 < groups.length; i++) {
+      expect(groups[i].end, `group ${i + 1}`).toBeLessThanOrEqual(groups[i + 1].left + 0.5);
+    }
+    await page.getByTestId('transport-eject').click({ trial: true });
+  });
+}
 
 // ─── Where Live records from ─────────────────────────────────────────────────
 

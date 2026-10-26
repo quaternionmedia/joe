@@ -200,6 +200,7 @@ export class Transport {
     const note = this._el.querySelector('[data-testid="transport-note"]');
     if (!note) return;
     note.textContent = text;
+    note.title = text;
     note.hidden = !text;
   }
 

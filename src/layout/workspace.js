@@ -142,9 +142,12 @@ export class Workspace {
     container.setTitle(w.title);
     const element = this._elements.get(w.id);
     container.element.append(element);
-    container.on('show', () => this._say(w.id, true));
+    // Said on the next frame, once GoldenLayout has given the window its size:
+    // what a panel does on being shown -- scroll to its end -- needs it.
+    const shown = () => requestAnimationFrame(() => this._say(w.id, true));
+    container.on('show', shown);
     container.on('beforeComponentRelease', () => this._park(w.id));
-    this._say(w.id, true);
+    shown();
     return undefined;
   }
 

@@ -51,7 +51,7 @@ test('a joe serving everything greys nothing, and Live opens once audio starts',
   await page.goto('/');
   await expect.poll(() => page.evaluate(() => document.querySelectorAll('[data-off]').length)).toBe(0);
 
-  await expect(page.getByTestId('transcript-toggle')).toHaveAttribute('title', 'The whole spoken exchange (T)');
+  await expect(page.getByTestId('transcript-toggle')).toHaveAttribute('title', 'Transcript: the whole spoken exchange (T)');
   await expect(page.getByTestId('capture-toggle')).not.toHaveClass(/is-off/);
   await expect(page.getByTestId('live-toggle')).toBeDisabled();  // until Joe, go!
   await page.getByTestId('start-button').click();

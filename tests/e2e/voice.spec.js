@@ -27,12 +27,35 @@ const EXCHANGE = [
   { state: 'recorded', text: 'approve' },
 ];
 
-test('the panel stays out of the way until a conversation starts', async ({ page }) => {
+test('the Voice window stays closed until a conversation starts', async ({ page }) => {
   await serve(page, []);
+  const connected = page.waitForRequest('**/api/voice/conversation');
   await page.goto('/');
+  await connected;
   await page.waitForSelector('canvas');
 
+  await expect(page.locator('#paneltab-voice')).toHaveCount(0);
   await expect(page.getByTestId('voice-panel')).toBeHidden();
+});
+
+test('a Voice window opened from the Panels menu stays open while no conversation runs', async ({ page }) => {
+  await page.clock.install();
+  await serve(page, []);
+  let polls = 0;
+  await page.route(url => url.pathname === '/v1/human/requests', route => {
+    polls += 1;
+    route.fulfill({ json: { requests: [], count: 0 } });
+  });
+  await page.goto('/');
+  await page.getByTestId('panels-button').click();
+  await page.locator('#panels-menu [data-panel="voice"]').click();
+  await expect(page.locator('#paneltab-voice')).toBeVisible();
+
+  const before = polls;
+  await page.clock.fastForward(60_000);   // the queue's polls, each finding nothing
+
+  await expect.poll(() => polls).toBeGreaterThan(before);
+  await expect(page.locator('#paneltab-voice')).toBeVisible();
 });
 
 test('a conversation opens the Voice window above the transcript, so both can be read', async ({ page }) => {

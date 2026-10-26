@@ -23,7 +23,7 @@ test('the Results window is closed on load', async ({ page }) => {
   await expect(page.locator('#paneltab-results')).toHaveCount(0);
 });
 
-test('results toggle button opens the results panel', async ({ page }) => {
+test('the Results button opens the Results window', async ({ page }) => {
   const errors = [];
   page.on('pageerror', (err) => errors.push(err.message));
 
@@ -35,12 +35,12 @@ test('results toggle button opens the results panel', async ({ page }) => {
   expect(errors).toHaveLength(0);
 });
 
-test('file input is present inside the open results panel', async ({ page }) => {
+test('the file input is inside the open Results window', async ({ page }) => {
   await page.goto('/');
   await page.waitForSelector('canvas');
   await openResultsPanel(page);
 
-  await expect(page.getByTestId('file-input')).toBeAttached();
+  await expect(page.locator('#panelbody-results [data-testid="file-input"]')).toBeAttached();
 });
 
 // ─── JSON loading + piano roll ────────────────────────────────────────────────
@@ -166,7 +166,7 @@ test('era panel clamps at index 0 on repeated ArrowLeft', async ({ page }) => {
 
 // ─── Panel close ─────────────────────────────────────────────────────────────
 
-test('results panel closes on second toggle click', async ({ page }) => {
+test('the Results window closes on a second press of its button', async ({ page }) => {
   await page.goto('/');
   await page.waitForSelector('canvas');
 

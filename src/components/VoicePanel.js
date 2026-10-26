@@ -51,6 +51,13 @@ export class VoicePanel {
     this._el      = el;
     this._url     = url;
     this._window  = window;
+    // Whether the panel opened its window itself: a window the person opened
+    // stays open when the exchange is over.
+    this._opened  = false;
+    el.addEventListener('joe:window', e => {
+      // Parked: closed, or the layout being built again around it.
+      if (!e.detail.shown) queueMicrotask(() => { if (!this._window.isOpen) this._opened = false; });
+    });
     this._label   = el.querySelector('[data-testid="voice-label"]');
     this._hint    = el.querySelector('[data-testid="voice-hint"]');
     this._log     = el.querySelector('[data-testid="voice-log"]');
@@ -75,13 +82,20 @@ export class VoicePanel {
   // The window opened if it is closed: one the person has put behind another
   // tab is left there, so a conversation does not take the front from them.
   _open() {
-    if (!this._window.isOpen) this._window.show({ focus: false });
+    if (this._window.isOpen) return;
+    this._window.show({ focus: false });
+    this._opened = true;
+  }
+
+  // Closed only if the panel opened it.
+  _close() {
+    if (this._opened) this._window.close();
   }
 
   /** Step aside if nothing is happening and nothing needs the panel. */
   settle() {
     const finished = FINISHED.includes(this._el.dataset.state);
-    if (finished && this._linger === null && !this.keepOpen()) this._window.close();
+    if (finished && this._linger === null && !this.keepOpen()) this._close();
   }
 
   mount() {
@@ -137,7 +151,7 @@ export class VoicePanel {
     if (FINISHED.includes(event.state)) {
       this._linger = setTimeout(() => {
         this._linger = null;
-        if (!this.keepOpen()) this._window.close();
+        if (!this.keepOpen()) this._close();
       }, LINGER_MS);
     }
   }
