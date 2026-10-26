@@ -30,8 +30,10 @@ uv run pytest tests/
 
 2. `GET /api/health` says which capabilities are on. A route whose capability
    is off answers `403`, naming the setting that turns it on, before it does
-   anything it was asked. The media API and the vocabulary are always served.
+   anything it was asked. The vocabulary is always served, and the media API
+   unless `JOE_ALLOW_MEDIA=0` turns it off.
 
+   - test: tests/test_access.py::test_the_health_check_says_which_capabilities_are_on
    - test: tests/test_access.py::test_a_fresh_joe_serves_the_media_api_and_nothing_else
    - test: tests/test_access.py::test_a_capability_that_is_off_answers_403_naming_its_setting
    - test: tests/test_access.py::test_a_refusal_comes_before_anything_the_route_was_asked
@@ -63,7 +65,8 @@ and its beats, loudness, silences and waveform, for cutting.
    #  "sample_rate": 48000, "channels": 1, "has_audio": true}
    ```
 
-   A clip with no sound track is refused with a `422`, not kept.
+   A clip with no sound track is refused with a `422`, not kept, and one over the
+   size cap (`JOE_MEDIA_MAX_BYTES`) with a `413` as it arrives.
 
    - test: tests/test_media_api.py::test_every_audio_and_video_type_is_taken_and_its_sound_kept_three_ways
    - test: tests/test_media_api.py::test_a_video_with_no_sound_track_is_422
@@ -99,10 +102,15 @@ Needs `--allow library` (`JOE_ALLOW_LIBRARY=1`).
 ```bash
 curl -X POST http://localhost:8000/api/audio/upload \
   -H "Content-Type: audio/wav" --data-binary @my_recording.wav
-# {"filename": "capture_20240101_120000.wav"}
-curl -X POST http://localhost:8000/api/run/capture_20240101_120000.wav
+# {"filename": "capture_20240101_120000_000000.wav"}
+curl -X POST http://localhost:8000/api/run/capture_20240101_120000_000000.wav
 curl http://localhost:8000/api/results/latest
 ```
+
+No test reads `GET /api/results/latest`.
+
+- test: tests/test_audio_upload.py::test_an_upload_enters_the_library_whole
+- test: tests/test_api.py::test_run_on_file_runs_pipeline_for_file_inside_audio_dir
 
 - test: tests/test_audio_upload.py::test_a_type_joe_does_not_take_is_refused_before_its_length
 - test: tests/test_audio_upload.py::test_a_declared_length_over_the_cap_is_refused_before_a_byte_is_read
@@ -113,9 +121,10 @@ curl http://localhost:8000/api/results/latest
 
 1. `POST /api/voice/listen` records a take from joe's microphone and answers
    what was heard (`microphone`). With no microphone it answers `503`. A hint
-   is handed to the transcriber, within its bound.
+   is handed to the transcriber, within its bound, and what the microphone
+   reports is published to the conversation stream.
 
-   - test: tests/test_api_voice.py::test_voice_listen_endpoints_by_default
+   - test: tests/test_api_voice.py::test_voice_listen_refuses_a_hint_longer_than_its_bound
    - test: tests/test_api_voice.py::test_voice_listen_returns_503_when_no_microphone
    - test: tests/test_api_voice.py::test_voice_listen_hands_the_hint_to_the_transcriber
    - test: tests/test_conversation.py::test_the_listen_route_publishes_what_the_microphone_reports
@@ -123,7 +132,8 @@ curl http://localhost:8000/api/results/latest
 2. `POST /api/voice/transcribe?filename=` transcribes a file already in joe's
    folders by its name (`library`), looking in `Data/Voice/` before
    `Data/Audio/`: `vox loop` writes `said.wav` and `echo.wav` to `Data/Voice/`
-   and asks for them by name.
+   and asks for them by name. No test calls the route itself; these check the
+   look-up it makes.
 
    - test: tests/test_api.py::test_a_name_in_both_folders_is_the_voice_folders
    - test: tests/test_api.py::test_resolve_audio_path_rejects_non_bare_names

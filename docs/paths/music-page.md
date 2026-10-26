@@ -32,8 +32,9 @@ npx playwright test --grep @music-page
    - spec: page loads and canvas is visible
    - spec: joe opens with the visualiser alone, the first-run hint and the transport below it
    - spec: Canvas mode badge is empty on initial load
-   - spec: the dock follows the window's size at once
-   - spec: dismissing the first-run hint gives the dock its room at once
+   - spec: the Results window is closed on load
+   - spec: the dock follows the window's size
+   - spec: dismissing the first-run hint gives the dock its room
    - spec: each CDN script is held to the bytes of the p5 the lockfile installs
    - spec: p5 and p5.sound load from the CDN past their integrity check
 
@@ -43,8 +44,8 @@ npx playwright test --grep @music-page
    - spec: Live button is disabled until Joe, go! is clicked
    - spec: a joe serving everything greys nothing, and Live opens once audio starts
 
-4. A joe started with less shows it. Started as `uv run joe backend`, which
-   serves the media API alone, the page greys **Library**, **Transcript** and
+4. A joe started with less shows it. Started as `uv run joe dev --allow media`,
+   which serves the media API alone, the page greys **Library**, **Transcript** and
    **Live**, each tooltip naming the setting that turns it on. The Library and
    the transcript say what is off in a sentence with a link to
    [security.md](../security.md). The first-run hint keeps the steps that work,
@@ -59,15 +60,14 @@ npx playwright test --grep @music-page
    - spec: the first-run hint keeps the steps that work and says what --allow turns on
    - spec: on a joe serving everything the first-run hint keeps all four steps
    - spec: the hint numbers the steps it keeps again, and names each flag once
-   - test: tests/test_cli_access.py::test_the_backend_says_it_has_no_authentication_and_serves_the_media_api_alone
+   - test: tests/test_cli_access.py::test_dev_allow_media_serves_the_media_api_alone
 
-## 2. Analyse a recording you already have
+## 2. Analyse a recording
 
 1. Put a WAV or MP3 in `Data/Audio/` and open the **Library** (`L`). It lists
    the file, its name shown as text whatever it is called.
 
-   - spec: L opens and closes the Library, and A the analysis Results
-   - spec: Library panel closes on second toggle click
+   - spec: the Library window closes on a second press of its button
    - spec: A file name is shown as text, never as markup
 
 2. **Process** runs the pipeline on it. When the pipeline finishes, the
@@ -76,14 +76,13 @@ npx playwright test --grep @music-page
    reads RESULTS, and the transport loads the recording.
 
    - spec: Library Process triggers pipeline and loads correct results
-   - spec: Process_Data fixture has required backend contract keys
    - test: tests/test_api.py::test_run_on_file_runs_pipeline_for_file_inside_audio_dir
 
 3. A file the pipeline cannot read says why in the Library. A pipeline that
    fails leaves the Results closed and loads no recording.
 
-   - spec: Unsupported format shows error and keeps results panel closed
-   - spec: Pipeline failure does not open results panel or activate audio
+   - spec: Unsupported format shows error and keeps the Results window closed
+   - spec: a pipeline failure opens no Results window and loads no recording
 
 4. **Play** on a file loads it on the transport and plays it, its row
    highlighted, and the piano roll's playhead follows the scrubber. **×** beside
@@ -94,22 +93,24 @@ npx playwright test --grep @music-page
    - spec: Eject clears transport name, hides button, and removes library highlight
    - spec: the scrubber's knob clears the time readout at 1024 px
    - spec: the scrubber's knob clears the time readout at 1280 px
-   - spec: with a take loaded and its note showing, Eject stays clear of the window buttons at 1280 px
+   - spec: the transport's groups lie side by side at 1024 px, with a take and its note showing
+   - spec: the transport's groups lie side by side at 1280 px, with a take and its note showing
 
 5. Or from a terminal, `uv run joe run` analyses every file in `Data/Audio/`;
    then **Results** (`A`) → **Fetch Latest** draws the newest result.
 
-   - spec: the Results window is closed on load
-   - spec: results toggle button opens the results panel
+   - spec: the Results button opens the Results window
    - spec: Fetch Latest button loads results and shows note count
-   - spec: results panel closes on second toggle click
+   - spec: the Results window closes on a second press of its button
    - spec: the panel's heading reads on one line, clear of its buttons
 
 6. Or an earlier result, with no server needed: **Results** → **Load JSON** and
    a `Process_Data_*.json` from `Data/Output/`. A file that is not one says so,
-   and a track named with markup is shown as text.
+   and a track named with markup is shown as text. The specs load a fixture of
+   one, which carries the keys the page reads.
 
-   - spec: file input is present inside the open results panel
+   - spec: Process_Data fixture has required backend contract keys
+   - spec: the file input is inside the open Results window
    - spec: loading a valid JSON file renders the piano roll canvas
    - spec: piano roll canvas has non-zero dimensions after JSON load
    - spec: results meta shows note count after load
@@ -135,23 +136,30 @@ npx playwright test --grep @music-page
    - spec: the capture select says where Live records from, and what each choice is
    - test: tests/test_audio_upload.py::test_an_upload_enters_the_library_whole
 
+   No test drives joe's mic: `POST /api/capture/start` and `/stop` have none.
+
 2. **Joe, go!**, then **Live**. The dot pulses, the canvas reads LIVE, and
-   onsets scroll across the piano roll as you play. **Stop** keeps the take in
+   onsets scroll across the piano roll as the instrument plays. **Stop** keeps the take in
    `Data/Audio/` and loads it on the transport, where the scrubber steps
    through the notes the live layer froze.
 
 3. **Library → Process** on the new file analyses it as in 2.2, and Play
    replays it with its notes.
 
+   No spec or test drives steps 2 and 3: a live recording needs a microphone,
+   and none is scripted.
+
 ## 4. Arrange the windows
 
-1. **Library**, **Results** and **Transcript**, or `L`, `A` and `T`, open a
+1. ♫ **Library**, ▤ **Results** and ¶ **Transcript**, or `L`, `A` and `T`, open a
    window beside the visualiser, and the piano roll narrows to make room. A
    second joins the first as a tab of its stack. A window's button or key brings
    it to the front when another tab is over it, and closes it when it is in
    front. `Esc` closes the Library, the Results and the Transcript. Keys typed
    into a field open nothing.
 
+   - spec: the window buttons are icons, each named for its window and its key
+   - spec: L opens and closes the Library, and A the analysis Results
    - spec: a panel opens as a window beside the visualiser, and the piano roll narrows to make room
    - spec: a second panel joins the first one as a tab of its stack, in front
    - spec: a button brings its window to the front when another tab is over it, rather than closing it
@@ -175,7 +183,7 @@ npx playwright test --grep @music-page
 
    - spec: the Panels menu lists every window, says which are closed, and opens one
    - spec: the Panels menu by keyboard: arrows move, and Escape closes the menu and leaves the windows
-   - spec: a click outside the Panels menu closes it, and the click that opened it does not
+   - spec: a click outside the Panels menu closes it
 
 4. The arrangement is kept across a reload. **Panels → Reset layout** puts back
    the visualiser alone. A kept arrangement this page cannot use is dropped for

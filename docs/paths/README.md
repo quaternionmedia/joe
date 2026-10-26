@@ -1,7 +1,7 @@
 # User paths
 
 Each page here is a lane: one kind of person, or program, using joe, step by
-step from the start. A step says what to do and what you should see, and names
+step from the start. A step says what to do and what is seen, and names
 what checks it, on lines of its own:
 
 ```text

@@ -87,7 +87,8 @@ qmcp's queue, and what **Instruct by voice** recorded.
 The bar along the bottom, left to right:
 
 - **Joe, go!** starts the browser's audio, once a page load, before **Live**
-  can record; a second press stops it, unless a recording is running.
+  can record; it then reads **Joe, stop!**, and a second press stops it, unless
+  a recording is running.
 - **Browser mic** or **joe's mic** sets where **Live** records from, and
   **Live** starts and stops a recording, its dot pulsing while it runs. Play and
   Stop are greyed while it does.
@@ -96,7 +97,7 @@ The bar along the bottom, left to right:
   and **×** to eject it. joe plays one recording at a time: Library → Play, a
   recording stopping, and the pipeline finishing each load theirs, and the
   Library highlights it.
-- **Library**, **Results**, **Transcript** and **▦**, the windows.
+- ♫ **Library**, ▤ **Results**, ¶ **Transcript** and ▦ **Panels**, the windows.
 - **Instruct by voice**, one spoken instruction into qmcp's inbox.
 
 ## What the window does not have

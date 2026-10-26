@@ -20,8 +20,8 @@ npx playwright test --grep @voice-loop
    saved microphone that is not connected is named when the default input
    stands in for it, and in a failure on that default.
 
-   - test: tests/test_cli_voice_setup.py::test_setup_saves_the_loudest_input_that_heard_you
-   - test: tests/test_cli_voice_setup.py::test_setup_proves_the_choice_with_a_transcribed_sentence
+   - test: tests/test_cli_voice_setup.py::test_setup_falls_through_to_the_next_entry_when_the_proof_cannot_record
+   - test: tests/test_cli_voice_setup.py::test_recording_uses_the_saved_device_unless_the_environment_names_one
    - test: tests/test_cli_voice_setup.py::test_recording_on_the_default_in_place_of_a_gone_microphone_says_so
    - test: tests/test_cli_voice_setup.py::test_a_failure_on_the_default_names_the_saved_microphone_it_stood_in_for
 
@@ -35,10 +35,12 @@ npx playwright test --grep @voice-loop
    stack of its own above the transcript when the transcript is open. Until a
    conversation starts the Voice window stays closed, and **Instruct by voice**
    is at hand in the transport. A tab put in front of the Voice window stays in
-   front.
+   front. A Voice window opened from the Panels menu stays open; one the
+   conversation opened closes once the exchange is over and nothing in it waits.
 
-   - spec: the panel stays out of the way until a conversation starts
-   - spec: the button is at hand while the panel is out of the way
+   - spec: the Voice window stays closed until a conversation starts
+   - spec: a Voice window opened from the Panels menu stays open while no conversation runs
+   - spec: the button is at hand while the Voice window is closed
    - spec: a conversation opens the Voice window above the transcript, so both can be read
    - spec: a conversation leaves a tab the person put in front of the Voice window where it is
 
@@ -62,7 +64,7 @@ npx playwright test --grep @voice-loop
    otherwise say "agree", or "again" to say it once more. Then "approve" to the
    consent.
 
-3. The take is written as you speak, a struck word crossed out and a segment
+3. The take is written as it is spoken, a struck word crossed out and a segment
    still being read marked. Clicking a word strikes it, and `Backspace` strikes
    the last word standing, unless the focus is in a field.
 
@@ -77,7 +79,7 @@ npx playwright test --grep @voice-loop
 
    - spec: a question offers its options as numbered buttons, and a click answers
    - spec: the number keys answer by position, R repeats and Shift+Esc stops
-   - spec: R still asks the voice loop to say it again, and opens nothing
+   - spec: R still asks the voice loop to say it again, and opens neither the Library nor the Results
    - spec: holding the tilde key holds the turn open until it is released
    - spec: keys typed into a field are not answers
    - spec: the options go once the exchange has an outcome, and an answer by key is marked
@@ -126,7 +128,8 @@ npx playwright test --grep @voice-loop
    word under the playhead is lit, and follows the recording as it plays or is
    scrubbed. A word too long for its place ends in an ellipsis and shows whole
    under the pointer. A take whose recording was not kept is laid out, and the
-   transport stays stopped and says "recording not kept".
+   transport stays stopped and says "recording not kept". A take kept before
+   joe's voice folder moved is found by its recording's file name.
 
    - spec: Show puts the take on the transport and its standing words on the timeline
    - spec: words share their segment evenly and a struck one keeps its place
@@ -160,7 +163,7 @@ npx playwright test --grep @voice-loop
    options, and **Answer by voice** answers it aloud, follows the run, and reads
    the queue again.
 
-   - spec: nothing waiting leaves the panel out of the way
+   - spec: nothing waiting leaves the Voice window closed
    - spec: the oldest waiting request is offered with its options
    - spec: answering asks qmcp once, waits for the run, then reads the queue again
    - spec: a run that fails shows the command's own last words
