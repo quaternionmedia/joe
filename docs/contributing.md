@@ -132,7 +132,13 @@ E2E tests live in `tests/e2e/` and use [Playwright](https://playwright.dev/).
 npm run test:e2e
 ```
 
-Reports are written to `playwright-report/` (git-ignored). To open the HTML report after a run:
+`playwright.config.js` starts the specs' own servers and never reuses one: the
+page on port 3100, and on 3199 a stand-in for joe's API and qmcp's queue
+(`tests/e2e/no-backend.mjs`) that answers every request a spec has not
+scripted with a 503. A joe, a qmcp or a dev page running on this machine never
+answers a spec, and the specs run beside them.
+
+Outside CI an HTML report is written to `playwright-report/` (git-ignored). To open it after a run:
 
 ```powershell
 npx playwright show-report
