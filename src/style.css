@@ -642,6 +642,7 @@ button:hover { border-color: rgba(255, 255, 255, 0.7); }
 .voice-instruct-sep { margin: 0 4px; }
 #voice-instruct { border-color: #f5a623; color: #f5a623; }
 #voice-instruct:disabled { opacity: 0.4; cursor: default; }
+#voice-instruct.is-unreachable { opacity: 0.45; border-style: dashed; }
 
 /* ─── Transcript pane — the whole spoken exchange, docked right ────────────── */
 :root { --pane-w: min(380px, calc(100vw - 24px)); }
