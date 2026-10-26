@@ -191,6 +191,14 @@ def test_resolve_audio_path_finds_a_file_under_data_voice(voice_dirs):
     assert api._resolve_audio_path("spoken.wav").name == "spoken.wav"
 
 
+def test_a_name_in_both_folders_is_the_voice_folders(voice_dirs):
+    """vox writes `said.wav` to Data/Voice/; a library recording of that name is not it."""
+    (voice_dirs / "Data" / "Voice" / GOOD).write_bytes(b"RIFF voice")
+    resolved = api._resolve_audio_path(GOOD)
+    assert resolved == (voice_dirs / "Data" / "Voice" / GOOD).resolve()
+    assert resolved.read_bytes() == b"RIFF voice"
+
+
 @pytest.mark.parametrize("name", BAD_HANDLER_NAMES)
 def test_resolve_audio_path_rejects_non_bare_names(voice_dirs, name):
     """The same list the audio route is held to — including the aliases.
