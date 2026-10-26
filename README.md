@@ -13,7 +13,7 @@ The repo has two primary parts:
 
 - Python `3.11.x` (required by `pyproject.toml`)
 - Node.js + npm
-- [`uv`](https://docs.astral.sh/uv/) (recommended) **or** `pdm` / `venv+pip`
+- [`uv`](https://docs.astral.sh/uv/): `uv.lock` is the one description of joe's Python dependencies
 
 ### Recommended: uv
 
@@ -151,7 +151,7 @@ npm run test:e2e
 Run Python tests:
 
 ```powershell
-python -m pytest -q
+uv run --frozen pytest tests/ -q
 ```
 
 Run frontend E2E tests:
@@ -163,7 +163,7 @@ npm run test:e2e
 Run backend pipeline:
 
 ```powershell
-python main.py
+uv run python main.py
 ```
 
 Expected artifacts are created under `Data/Output/<timestamp>/`:
@@ -189,7 +189,7 @@ Input audio is read from `Data/Audio/`.
 
 The Vite frontend (`src/`) has three layers:
 
-- **FFT canvas** — `src/sketch.js` runs a live mic FFT visualiser via `p5.AudioIn` + `p5.FFT`. p5 and p5.sound are loaded as CDN globals (not bundled via Vite) because p5.sound must patch `window.p5` at script-evaluation time. Dot size scales on a dB curve (`20·log₁₀(v/255)`) to match human loudness perception.
+- **FFT canvas** — `src/sketch.js` runs a live mic FFT visualiser via `p5.AudioIn` + `p5.FFT`. p5 and p5.sound are loaded as CDN globals (not bundled via Vite) because p5.sound must patch `window.p5` at script-evaluation time. Dot size scales on a dB curve (`20·log₁₀(v/255)`) to match human loudness perception: nothing at or below a noise floor of 20, up to 10 px at full scale, 255.
 - **Piano roll canvas** — `src/components/MainCanvas.js` overlays a full-screen canvas that runs in two modes: **LIVE** (real-time scrolling note detections from mic onset detection) and **RESULTS** (static pitch × time piano roll from pipeline JSON, coloured by transform type: Raw white, Harmonic cyan, Percussive orange).
 - **Era panel** — `src/components/EraPanel.js` shows setlist metadata with arrow-key navigation and anime.js cross-fades.
 
@@ -201,9 +201,9 @@ The Vite frontend (`src/`) has three layers:
 
 | Group | Controls | Notes |
 | --- | --- | --- |
-| Audio context | `Joe, go!` | One-time click — resumes Web Audio, enables Live |
+| Audio context | `Joe, go!` | Starts Web Audio and enables Live; it then reads **Joe, stop!**, and a second press stops audio, unless a recording is running |
 | Live capture | mode select + `Live` + indicator | Browser = MediaRecorder mic; Backend = sounddevice WAV |
-| Transport | mode badge + `Play/Stop` + scrub + `×` eject | Disabled while recording; badge shows `LIVE` or `RESULTS`; `×` clears active source |
+| Transport | mode badge + `Play/Stop` + scrub + `×` eject | `Play` and `Stop` are disabled while recording; badge shows `LIVE` or `RESULTS`; `×` clears active source |
 | Panels | `Library` + `Results` | Slide-in panels for file management and analysis output |
 | Voice | `Instruct by voice` | One spoken instruction into qmcp's inbox; the outcome shows in the voice panel |
 
