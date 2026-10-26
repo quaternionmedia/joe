@@ -25,6 +25,7 @@ Endpoints:
     POST /api/voice/unwatch         Closes a watch that will not be listened to
     GET  /api/voice/vocabulary      joe's own spoken words, and what each does
     GET  /api/voice/history         The whole transcript: every take heard and every sentence said
+    GET  /api/voice/takes/{take}/audio  One take's recording, for the visualiser
     POST /api/voice/strike          Strike or restore a word of the take being transcribed
     GET  /api/voice/transcript      The take being transcribed, or the last one, once
 
@@ -629,6 +630,30 @@ def voice_history(limit: int = 200):
     from Modules import History
 
     return {"entries": History.read(datapoints.manifest, limit), "kept": datapoints.enabled}
+
+
+@app.get("/api/voice/takes/{take}/audio")
+def voice_take_audio(take: str):
+    """One take's recording, as joe wrote it, for the visualiser to play with
+    the take's words on its timeline. Only a recording under joe's own voice
+    folder is served, whatever the record names."""
+    import re
+
+    from Modules import History
+    from Modules.Voice import Voice
+
+    if not re.fullmatch(r"[0-9a-f]{6,32}", take):
+        raise HTTPException(status_code=400, detail="a take is named by its hex id")
+    entry = History.take(datapoints.manifest, take)
+    if entry is None or not entry.get("audio"):
+        raise HTTPException(status_code=404, detail=f"no recording kept for take {take}")
+    path = Path(entry["audio"])
+    path = path if path.is_absolute() else datapoints.root / path
+    path = path.resolve()
+    roots = {datapoints.root.resolve(), Path(Voice().capture_dir).resolve()}
+    if not any(path.is_relative_to(root) for root in roots) or not path.is_file():
+        raise HTTPException(status_code=404, detail=f"no recording kept for take {take}")
+    return FileResponse(str(path), media_type="audio/wav")
 
 
 @app.get("/api/voice/vocabulary")
