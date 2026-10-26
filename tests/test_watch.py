@@ -304,7 +304,7 @@ def test_a_take_begun_over_the_question_is_the_listen_s(fresh, voice):
 
     assert client.post("/api/voice/watch", params={"duration": 4, "hint": "approve, hold"}).json() == {
         "watching": True, "voice": True}
-    api.watching.finished.wait(2)
+    assert api.watching.finished.wait(2), "the watch never finished"
     assert client.get("/api/voice/control").json()["interrupted"] is True
 
     heard = client.post("/api/voice/listen", params={"duration": 4}).json()
@@ -362,7 +362,7 @@ def test_a_microphone_that_fails_under_a_begun_watch_fails_the_listen(fresh, voi
     client = TestClient(api.app)
 
     client.post("/api/voice/watch")
-    api.watching.finished.wait(2)
+    assert api.watching.finished.wait(2), "the watch never finished"
 
     assert client.post("/api/voice/listen").status_code == 503
 

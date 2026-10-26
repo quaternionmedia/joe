@@ -46,7 +46,7 @@ def test_voice_listen_returns_503_when_no_microphone(monkeypatch):
     assert exc_info.value.status_code == 503
 
 
-def test_voice_listen_endpoints_by_default():
+def test_voice_listen_ends_on_silence_by_default():
     """The HTTP route is the human-facing seam, so the polite default lives
     here: duration is the cap, and the recording ends when the speaker
     does. `until_silence=false` restores the fixed window."""

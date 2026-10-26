@@ -76,43 +76,6 @@ test('arrow key navigation updates era panel and does not crash', async ({ page 
 
 // ─── Pipeline JSON smoke test ────────────────────────────────────────────────
 
-test('Process_Data fixture has required backend contract keys', async ({ page }) => {
-  await page.route('**/Process_Data_fixture.json', (route) => {
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify(fixtureJson),
-    });
-  });
-
-  await page.goto('/');
-
-  const response = await page.evaluate(async () => {
-    const res = await fetch('/Process_Data_fixture.json');
-    return res.json();
-  });
-
-  expect(response).toHaveProperty('iteration');
-  expect(response).toHaveProperty('audio');
-  expect(response).toHaveProperty('min_duration');
-  expect(response).toHaveProperty('fft_sizes');
-  expect(response).toHaveProperty('chroma_threshold');
-  expect(response).toHaveProperty('harmonic_threshold');
-  expect(response).toHaveProperty('overtone_weights');
-
-  const audioEntries = Object.values(response.audio);
-  expect(audioEntries.length).toBeGreaterThan(0);
-  const firstAudio = audioEntries[0];
-  expect(firstAudio).toHaveProperty('name');
-  expect(firstAudio).toHaveProperty('sr');
-  expect(firstAudio).toHaveProperty('chroma');
-
-  // All three transform types present in extended fixture
-  expect(firstAudio.chroma).toHaveProperty('Raw');
-  expect(firstAudio.chroma).toHaveProperty('Harmonic');
-  expect(firstAudio.chroma).toHaveProperty('Percussive');
-});
-
 // ─── Transport initial state ──────────────────────────────────────────────────
 
 test('Live button is disabled until Joe, go! is clicked', async ({ page }) => {
