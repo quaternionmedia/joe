@@ -87,6 +87,8 @@ the same without looking:
 | `Shift`+`Esc` | stops listening |
 | `~`, held | keeps the turn open through pauses; releasing it ends the turn |
 | `T` | opens or closes the transcript pane |
+| `L`, `A` | open or close the Library and the analysis Results |
+| `Esc` | closes the Library, the Results and the transcript pane |
 
 A key or button counts as having said the word: the turn in progress ends at
 once. **A question can be answered before it ends:** a key, the held `~`, or
