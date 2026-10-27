@@ -2,6 +2,22 @@
 
 import pytest
 
+# joe's settings, as a person's shell or a launcher may hold them. Every test
+# starts without them; a test of one sets it itself.
+MACHINE_SETTINGS = ("JOE_AUDIO_FILE", "JOE_BARGE_FACTOR", "JOE_BARGE_IN", "JOE_DATAPOINTS",
+                    "JOE_INPUT_DEVICE", "JOE_LANGUAGE", "JOE_OUTPUT_DEVICE", "VOX_OUTPUT_DEVICE")
+
+
+@pytest.fixture(autouse=True)
+def _none_of_the_machine_s_settings(monkeypatch, tmp_path):
+    """No setting of the machine's reaches a test, nor the microphone saved in
+    the checkout's `Data/voice-device.json`: the suite is the same everywhere."""
+    from Modules import Voice
+
+    for name in MACHINE_SETTINGS:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(Voice, "SAVED_DEVICE", tmp_path / "voice-device.json")
+
 
 @pytest.fixture(autouse=True)
 def _no_cues(monkeypatch):
