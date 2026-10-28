@@ -354,3 +354,40 @@ test('readSavedLayout: nothing saved, a layout to load, or why it cannot be', { 
     stackOfRows: 'it has a stack holding something other than windows',
   });
 });
+
+test('withoutWindows: the windows named go, and what held them gives up their room', { tag: '@music-page' }, async ({ page }) => {
+  await page.goto('/');
+  const left = await page.evaluate(async () => {
+    const { withoutWindows } = await import('/joe/layout/saved_layout.js');
+    const panel = id => ({ type: 'component', componentType: id, id });
+    const stack = (size, ids, active = 0) => ({ type: 'stack', size, activeItemIndex: active, content: ids.map(panel) });
+    const shape = item => item.type === 'component' ? item.id
+      : { [item.type]: item.content.map(shape), ...(item.size ? { size: item.size } : {}),
+          ...(item.type === 'stack' ? { front: item.activeItemIndex } : {}) };
+    const without = (root, ...ids) => shape(withoutWindows({ root }, ids).root);
+    const row = { type: 'row', content: [stack('68%', ['visualiser']), stack('32%', ['voice'])] };
+    return {
+      none: withoutWindows({ root: row }, []).root === row,
+      lastInItsRow: without(row, 'voice'),
+      firstInItsRow: without({ type: 'row', content: [stack('30%', ['voice']), stack('70%', ['visualiser'])] }, 'voice'),
+      betweenTwo: without({ type: 'row', content: [stack('50%', ['visualiser']), stack('20%', ['voice']), stack('30%', ['library'])] }, 'voice'),
+      aboveInAColumn: without({ type: 'row', content: [stack('60%', ['visualiser']), { type: 'column', size: '40%', content: [
+        stack('40%', ['voice']), stack('60%', ['transcript', 'library'], 1)] }] }, 'voice'),
+      tabBeforeTheFront: without({ type: 'row', content: [stack('70%', ['visualiser']), stack('30%', ['library', 'voice', 'results'], 2)] }, 'voice'),
+      tabInFront: without({ type: 'row', content: [stack('70%', ['visualiser']), stack('30%', ['library', 'voice'], 1)] }, 'voice'),
+      absent: without(row, 'library'),
+    };
+  });
+
+  expect(left).toEqual({
+    none: true,
+    lastInItsRow: { row: [{ stack: ['visualiser'], size: '100%', front: 0 }] },
+    firstInItsRow: { row: [{ stack: ['visualiser'], size: '100%', front: 0 }] },
+    betweenTwo: { row: [{ stack: ['visualiser'], size: '70%', front: 0 }, { stack: ['library'], size: '30%', front: 0 }] },
+    aboveInAColumn: { row: [{ stack: ['visualiser'], size: '60%', front: 0 },
+                            { column: [{ stack: ['transcript', 'library'], size: '100%', front: 1 }], size: '40%' }] },
+    tabBeforeTheFront: { row: [{ stack: ['visualiser'], size: '70%', front: 0 }, { stack: ['library', 'results'], size: '30%', front: 1 }] },
+    tabInFront: { row: [{ stack: ['visualiser'], size: '70%', front: 0 }, { stack: ['library'], size: '30%', front: 0 }] },
+    absent: { row: [{ stack: ['visualiser'], size: '68%', front: 0 }, { stack: ['voice'], size: '32%', front: 0 }] },
+  });
+});

@@ -81,9 +81,10 @@ export class VoicePanel {
 
   // The window opened if it is closed: one the person has put behind another
   // tab is left there, so a conversation does not take the front from them.
+  // Opened for the exchange, it is left out of the arrangement the dock keeps.
   _open() {
     if (this._window.isOpen) return;
-    this._window.show({ focus: false });
+    this._window.show({ focus: false, passing: true });
     this._opened = true;
   }
 

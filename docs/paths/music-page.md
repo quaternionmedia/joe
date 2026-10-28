@@ -200,3 +200,4 @@ npx playwright test --grep @music-page
    - spec: a saved arrangement that shows a window twice is dropped for the default, and the page says why
    - spec: a saved arrangement that GoldenLayout refuses is dropped for the default, and the page says why
    - spec: readSavedLayout: nothing saved, a layout to load, or why it cannot be
+   - spec: withoutWindows: the windows named go, and what held them gives up their room

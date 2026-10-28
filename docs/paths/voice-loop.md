@@ -35,14 +35,18 @@ npx playwright test --grep @voice-loop
    stack of its own above the transcript when the transcript is open. Until a
    conversation starts the Voice window stays closed, and **Instruct by voice**
    is at hand in the transport. A tab put in front of the Voice window stays in
-   front. A Voice window opened from the Panels menu stays open; one the
-   conversation opened closes once the exchange is over and nothing in it waits.
+   front. A Voice window opened from the Panels menu stays open, and a reload
+   brings it back; one the conversation opened closes once the exchange is over
+   and nothing in it waits, and a reload does not bring it back.
 
    - spec: the Voice window stays closed until a conversation starts
    - spec: a Voice window opened from the Panels menu stays open while no conversation runs
    - spec: the button is at hand while the Voice window is closed
    - spec: a conversation opens the Voice window above the transcript, so both can be read
    - spec: a conversation leaves a tab the person put in front of the Voice window where it is
+   - spec: a Voice window opened from the Panels menu is brought back by a reload
+   - spec: a Voice window the conversation opened is not brought back by a reload, and opens again in its own colour
+   - spec: a Voice window the conversation opened is the person's once they open it themselves
 
 ## 3. Take a turn
 
