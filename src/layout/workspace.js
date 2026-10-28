@@ -1,14 +1,17 @@
 import { GoldenLayout, LayoutConfig } from 'golden-layout';
 import { WindowRegistry } from './registry.js';
 import { DEFAULT_LAYOUT, REOPEN, SIDE_SIZE, windowConfig } from './default_layout.js';
-import { forgetLayout, keepLayout, readSavedLayout, savedLayoutText } from './saved_layout.js';
+import { forgetLayout, keepLayout, readSavedLayout, savedLayoutText, withoutWindows } from './saved_layout.js';
 
 /**
  * joe's dock: the visualiser and every panel as windows of one GoldenLayout,
  * built in the element the page gives it. What the rest of the page asks of it:
  *
  *   showWindow(id)   bring a window to the front of its stack -- reopening it,
- *                    in its place, if it was closed; never a second copy
+ *                    in its place, if it was closed; never a second copy.
+ *                    `{ passing: true }` opens a closed one for what a panel
+ *                    is doing: the arrangement kept leaves it out until the
+ *                    person opens it themselves
  *   closeWindow(id)  close a window that can be closed
  *   toggle(id)       close a window in front, else bring it to the front
  *   isOpen(id)       whether a window is in the layout
@@ -39,6 +42,9 @@ export class Workspace {
     this._gl = null;
     this._saveTimer = null;
     this._decorating = false;
+    // Windows a panel opened, rather than the person: a reload does not bring
+    // them back with nothing in them.
+    this._passing = new Set();
     // Each window's element, found once: a window binds its panel from here,
     // wherever the panel was left.
     this._elements = new Map(WindowRegistry.all().map(w => [w.id, document.getElementById(w.element)]));
@@ -70,8 +76,10 @@ export class Workspace {
   }
 
   /** Bring window `id` to the front of its stack, reopening it if it was closed. */
-  showWindow(id, { focus = true } = {}) {
+  showWindow(id, { focus = true, passing = false } = {}) {
     if (!this._gl || !WindowRegistry.get(id)) return;
+    if (passing) this._passing.add(id);
+    else this._passing.delete(id);
     const item = this._find(id) || this._reopen(id);
     if (!item) return;
     const stack = item.parent;
@@ -199,7 +207,7 @@ export class Workspace {
     this._saveTimer = null;
     if (!this._gl?.isInitialised) return;
     try {
-      keepLayout(LayoutConfig.fromResolved(this._gl.saveLayout()));
+      keepLayout(withoutWindows(LayoutConfig.fromResolved(this._gl.saveLayout()), this._passing));
     } catch {
       // Caught mid-change; the next change saves it.
     }

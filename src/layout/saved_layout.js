@@ -94,6 +94,41 @@ function check(item, known, seen) {
   return null;
 }
 
+/**
+ * `config` without the windows in `ids`. A stack or a row left with nothing
+ * goes too; a removed item's share of its row or column goes to the item
+ * before it, else the one after; a stack shows the window it showed, or the
+ * one beside it.
+ *
+ * @param {object} config  a layout as `LayoutConfig.fromResolved` gives it
+ * @param {Iterable<string>} ids
+ * @returns {object}
+ */
+export function withoutWindows(config, ids) {
+  const leave = new Set(ids);
+  if (!leave.size) return config;
+  return { ...config, root: prune(config.root, leave) };
+}
+
+function prune(item, leave) {
+  if (item.type === 'component') return leave.has(item.componentType) ? null : item;
+  const left = item.content.map(child => prune(child, leave));
+  const kept = left.filter(Boolean);
+  if (!kept.length) return null;
+  if (item.type === 'stack') {
+    const active = item.activeItemIndex ?? 0;
+    const before = left.slice(0, active).filter(Boolean).length;
+    return { ...item, content: kept, activeItemIndex: Math.min(before, kept.length - 1) };
+  }
+  const content = left.map(child => child && { ...child });
+  item.content.forEach((child, i) => {
+    if (left[i] || !/%$/.test(child.size ?? '')) return;
+    const to = content.slice(0, i).reverse().find(Boolean) ?? content.slice(i + 1).find(Boolean);
+    if (/%$/.test(to.size ?? '')) to.size = `${parseFloat(to.size) + parseFloat(child.size)}%`;
+  });
+  return { ...item, content: content.filter(Boolean) };
+}
+
 /** The saved text, or null when there is none or storage is refused. */
 export function savedLayoutText() {
   try {

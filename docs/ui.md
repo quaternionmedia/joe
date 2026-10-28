@@ -43,7 +43,9 @@ its room.
 is read before the dock is built: one that is not JSON, names a window this
 version does not have, shows a window twice or not under its id, has windows
 popped out, or has no visualiser is dropped for the default, and a note at the
-top of the page says why. **Reset layout** forgets it.
+top of the page says why. **Reset layout** forgets it. A Voice window the
+conversation opened is left out of it, so a reload does not bring it back
+empty; one the person opened from the Panels menu is kept.
 
 ## Windows
 

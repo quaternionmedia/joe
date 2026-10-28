@@ -167,6 +167,63 @@ test("a conversation's first state shows in its own colour at once, not faded in
   expect(await page.evaluate(() => window.__faded)).toEqual([]);
 });
 
+test('a Voice window the conversation opened is not brought back by a reload, and opens again in its own colour', async ({ page }) => {
+  await serve(page, [{ state: 'speaking', text: 'Anything else?' }]);
+  await page.goto('/');
+  await expect(page.locator('#paneltab-voice')).toHaveCount(1);
+
+  // The next page's conversation speaks only once the dock is laid out.
+  await page.unroute('**/api/voice/conversation');
+  await page.route('**/api/voice/conversation', async route => {
+    await new Promise(resolve => setTimeout(resolve, 600));
+    await route.fulfill({
+      status: 200,
+      headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' },
+      body: sse([{ state: 'listening' }]),
+    });
+  });
+  await page.addInitScript(() => {
+    window.__faded = [];
+    document.addEventListener('transitionrun', e => {
+      if (e.target.id === 'voice-panel') window.__faded.push(e.propertyName);
+    }, true);
+  });
+  await page.reload();
+  await page.waitForSelector('canvas');
+  await expect(page.locator('#paneltab-voice')).toHaveCount(0);
+
+  await expect(page.getByTestId('voice-panel')).toHaveAttribute('data-state', 'listening');
+  await expect(page.locator('#paneltab-voice')).toHaveCount(1);
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => window.__faded)).toEqual([]);
+});
+
+test('a Voice window opened from the Panels menu is brought back by a reload', async ({ page }) => {
+  await serve(page, []);
+  await page.goto('/');
+  await page.getByTestId('panels-button').click();
+  await page.locator('#panels-menu [data-panel="voice"]').click();
+  await expect(page.locator('#paneltab-voice')).toBeVisible();
+
+  await page.reload();
+  await page.waitForSelector('canvas');
+  await expect(page.locator('#paneltab-voice')).toBeVisible();
+});
+
+test("a Voice window the conversation opened is the person's once they open it themselves", async ({ page }) => {
+  await serve(page, [{ state: 'speaking', text: 'Anything else?' }]);
+  await page.goto('/');
+  await expect(page.locator('#paneltab-voice')).toHaveCount(1);
+  await page.getByTestId('panels-button').click();
+  await page.locator('#panels-menu [data-panel="voice"]').click();
+
+  await page.unroute('**/api/voice/conversation');
+  await serve(page, []);
+  await page.reload();
+  await page.waitForSelector('canvas');
+  await expect(page.locator('#paneltab-voice')).toBeVisible();
+});
+
 test('every state looks different from every other', async ({ page }) => {
   const states = ['speaking', 'listening', 'hearing', 'pausing', 'transcribing',
                   'heard', 'no_speech', 'recorded', 'gave_up', 'idle'];
