@@ -109,9 +109,9 @@ the same without looking:
 | `R` | asks for it to be said again |
 | `Shift`+`Esc` | stops listening |
 | `~`, held | keeps the turn open through pauses; releasing it ends the turn |
-| `T` | opens or closes the transcript pane |
+| `T` | opens or closes the Transcript |
 | `L`, `A` | open or close the Library and the analysis Results |
-| `Esc` | closes the Library, the Results and the transcript pane |
+| `Esc` | closes the Library, the Results and the Transcript |
 
 A key or button counts as having said the word: the turn in progress ends at
 once. **A question can be answered before it ends:** a key, the held `~`, or
@@ -126,14 +126,14 @@ heard. They play only after a question, never through a silent wait, and
 on) names another by a fragment of its name.
 
 **The whole transcript, beside the piano roll:** `T`, or the transport's
-**Transcript** button, docks a pane at the right edge holding everything said
+**Transcript** button, opens a window beside the piano roll holding everything said
 in the exchange, oldest first -- each question as it was asked and each take
 as it was heard, with its struck words crossed out, how sure the transcriber
 was, whether it came by key or over the question, and how it was labelled.
 It is read from joe's datapoints, so a reload keeps it, and extended live; it
 follows the newest line unless scrolled back. **What can be said** lists the
-conversation's words and checks and joe's own. The piano roll keeps its notes
-out from under the pane.
+conversation's words and checks and joe's own. The piano roll narrows to make
+room for it.
 
 **A take on the visualiser:** a take's **Show** plays its recording through the
 transport and the spectrum, and lays its words along the bottom of the piano
@@ -235,16 +235,18 @@ Input audio is read from `Data/Audio/`.
 
 ## Frontend Architecture
 
-The Vite frontend (`src/`) has three layers:
+The Vite frontend (`src/`) is a dock of windows -- `src/layout/`, the
+visualiser and every panel as windows of one GoldenLayout, described in
+[docs/ui.md](docs/ui.md) -- and the visualiser has three layers:
 
 - **FFT canvas** — `src/sketch.js` runs a live mic FFT visualiser via `p5.AudioIn` + `p5.FFT`. p5 and p5.sound are loaded as CDN globals (not bundled via Vite) because p5.sound must patch `window.p5` at script-evaluation time. Dot size scales on a dB curve (`20·log₁₀(v/255)`) to match human loudness perception: nothing at or below a noise floor of 20, up to 10 px at full scale, 255.
-- **Piano roll canvas** — `src/components/MainCanvas.js` overlays a full-screen canvas that runs in two modes: **LIVE** (real-time scrolling note detections from mic onset detection) and **RESULTS** (static pitch × time piano roll from pipeline JSON, coloured by transform type: Raw white, Harmonic cyan, Percussive orange).
+- **Piano roll canvas** — `src/components/MainCanvas.js` draws over the FFT canvas, filling the visualiser's window, in two modes: **LIVE** (real-time scrolling note detections from mic onset detection) and **RESULTS** (static pitch × time piano roll from pipeline JSON, coloured by transform type: Raw white, Harmonic cyan, Percussive orange).
 - **Era panel** — `src/components/EraPanel.js` shows setlist metadata with arrow-key navigation and anime.js cross-fades.
 
 ### Bottom bar control groups
 
 ```text
-[Joe, go!] | [Browser mic|joe's mic] [Live] [dot] | [LIVE|RESULTS] [Play] [Stop] [scrub] | [Library] [Results] | [Instruct by voice]
+[Joe, go!] | [Browser mic|joe's mic] [Live] [dot] | [LIVE|RESULTS] [Play] [Stop] [scrub] | [♫] [▤] [¶] [▦] | [Instruct by voice]
 ```
 
 | Group | Controls | Notes |
@@ -252,7 +254,7 @@ The Vite frontend (`src/`) has three layers:
 | Audio context | `Joe, go!` | Starts Web Audio and enables Live; it then reads **Joe, stop!**, and a second press stops audio, unless a recording is running |
 | Live capture | where Live records from + `Live` + indicator | **Browser mic** = this browser's microphone (MediaRecorder); **joe's mic** = the microphone of the machine joe runs on (sounddevice WAV) |
 | Transport | mode badge + `Play/Stop` + scrub + `×` eject | `Play` and `Stop` are disabled while recording; badge shows `LIVE` or `RESULTS`; `×` clears active source |
-| Panels | `Library` + `Results` | Slide-in panels for file management and analysis output |
+| Windows | `♫` Library + `▤` Results + `¶` Transcript + `▦` Panels | Each opens its window beside the visualiser, or closes it when it is in front; `▦`, the Panels menu, lists every window and resets the layout ([docs/ui.md](docs/ui.md)) |
 | What is off | any of the above | The page reads `/api/health`: a control whose capability is off is greyed, its tooltip naming the setting, and its panel says so with a link to [docs/security.md](docs/security.md) |
 | Voice | `Instruct by voice` | One spoken instruction into qmcp's inbox; the outcome shows in the voice panel |
 
@@ -264,6 +266,7 @@ See [docs/cookbook.md](docs/cookbook.md) for step-by-step recipes.
 
 | Document | Contents |
 | --- | --- |
+| [docs/ui.md](docs/ui.md) | The page: its dock of windows, how they open, close and are kept, and what each holds |
 | [docs/contributing.md](docs/contributing.md) | Local setup, UI control groups, troubleshooting, branch naming, pre-PR checks, what CI runs |
 | [docs/cookbook.md](docs/cookbook.md) | Step-by-step recipes for common workflows |
 | [docs/api.md](docs/api.md) | FastAPI endpoint reference with `curl` examples |

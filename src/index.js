@@ -1,4 +1,5 @@
 // p5 and p5.sound are CDN globals loaded in index.html
+import './layout/golden-layout.css';
 import './style.css';
 import { createSketch } from './sketch.js';
 import { EraPanel }     from './components/EraPanel.js';
@@ -16,15 +17,27 @@ import { takeWords }      from './components/takeWords.js';
 import { Capabilities, adaptHint, markOff } from './components/Capabilities.js';
 import { PanelKeys }    from './components/PanelKeys.js';
 import { setlist }      from './config/setlists.js';
+import { Workspace }    from './layout/workspace.js';
+import { PanelsMenu }   from './layout/PanelsMenu.js';
 
 // Must match MainCanvas.js LABEL_W — used for p5 playhead pixel calculation.
 const LABEL_W = 28;
 
 const state = { current: 0 };
 
+// ─── The dock ────────────────────────────────────────────────────────────────
+// Built first: the visualiser's canvases take the size of the window it gives them.
+const workspace = new Workspace(document.getElementById('dock'), {
+  parked: document.getElementById('parked'),
+  note:   document.getElementById('layout-note'),
+});
+workspace.create();
+new PanelsMenu(document.getElementById('panels-button'), document.getElementById('panels-menu'), workspace).mount();
+
 // ─── p5 sketch ───────────────────────────────────────────────────────────────
+const sketchEl = document.getElementById('sketch');
 // eslint-disable-next-line no-undef
-const sketchInstance = new p5(createSketch(state), document.getElementById('sketch'));
+const sketchInstance = new p5(createSketch(state, sketchEl), sketchEl);
 
 // ─── Era panel ───────────────────────────────────────────────────────────────
 const eraPanel = new EraPanel(document.getElementById('era-panel'), state, setlist);
@@ -36,18 +49,20 @@ const transport  = new Transport(document.getElementById('transport'), mainCanva
 transport.mount();
 
 // ─── Results panel ───────────────────────────────────────────────────────────
-const resultsPanel = new ResultsPanel(document.getElementById('results-panel'), mainCanvas);
+const resultsPanel = new ResultsPanel(document.getElementById('results-panel'), mainCanvas,
+                                      workspace.window('results'));
 resultsPanel.mount();
 
 // ─── Capture / library panel ─────────────────────────────────────────────────
 const capturePanel = new CapturePanel(
   document.getElementById('capture-panel'),
   mainCanvas,
+  workspace.window('library'),
 );
 capturePanel.mount();
 
 // ─── Voice conversation ──────────────────────────────────────────────────────
-const voicePanel = new VoicePanel(document.getElementById('voice-panel'));
+const voicePanel = new VoicePanel(document.getElementById('voice-panel'), { window: workspace.window('voice') });
 voicePanel.mount();
 const voiceQueue = new VoiceQueue(document.querySelector('#voice-panel .voice-queue'), voicePanel);
 voiceQueue.mount();
@@ -67,9 +82,9 @@ const voiceKeys = new VoiceKeys(document.querySelector('#voice-panel .voice-cont
 voiceKeys.mount();
 const voiceTranscript = new VoiceTranscript(document.querySelector('#voice-panel .voice-transcript'), voicePanel);
 voiceTranscript.mount();
-// The whole exchange, readable in full beside the piano roll (T).
+// The whole exchange, readable in full in a window beside the piano roll (T).
 const transcriptPane = new TranscriptPane(document.getElementById('transcript-pane'), voicePanel,
-                                          { canvas: mainCanvas });
+                                          { window: workspace.window('transcript') });
 // A take shown on the visualiser: its recording on the transport and the
 // spectrum, its words on the piano roll's timeline, played from the start.
 transcriptPane.onShow = entry => {
@@ -90,12 +105,9 @@ document.getElementById('transcript-toggle')
   if (localStorage.getItem('joe-hint-dismissed')) {
     hintEl.classList.add('hidden');
   }
-  // The hint covers the bottom of the piano roll, where a take's words go.
-  mainCanvas.setBottomInset(hintEl.classList.contains('hidden') ? 0 : hintEl.offsetHeight);
   document.getElementById('hint-dismiss').addEventListener('click', () => {
     hintEl.classList.add('hidden');
     localStorage.setItem('joe-hint-dismissed', '1');
-    mainCanvas.setBottomInset(0);
   });
 }
 
@@ -123,7 +135,7 @@ function _startPlayheadSync() {
   const sync = () => {
     if (_hasResults && mainCanvas.totalDuration > 0) {
       const norm = transport.currentTime / mainCanvas.totalDuration;
-      sketchInstance.setPlayheadX(LABEL_W + norm * (window.innerWidth - LABEL_W));
+      sketchInstance.setPlayheadX(LABEL_W + norm * (sketchInstance.width - LABEL_W));
     }
     _syncRaf = requestAnimationFrame(sync);
   };

@@ -27,12 +27,76 @@ const EXCHANGE = [
   { state: 'recorded', text: 'approve' },
 ];
 
-test('the panel stays out of the way until a conversation starts', async ({ page }) => {
+test('the Voice window stays closed until a conversation starts', async ({ page }) => {
   await serve(page, []);
+  const connected = page.waitForRequest('**/api/voice/conversation');
   await page.goto('/');
+  await connected;
   await page.waitForSelector('canvas');
 
+  await expect(page.locator('#paneltab-voice')).toHaveCount(0);
   await expect(page.getByTestId('voice-panel')).toBeHidden();
+});
+
+test('a Voice window opened from the Panels menu stays open while no conversation runs', async ({ page }) => {
+  await page.clock.install();
+  await serve(page, []);
+  let polls = 0;
+  await page.route(url => url.pathname === '/v1/human/requests', route => {
+    polls += 1;
+    route.fulfill({ json: { requests: [], count: 0 } });
+  });
+  await page.goto('/');
+  await page.getByTestId('panels-button').click();
+  await page.locator('#panels-menu [data-panel="voice"]').click();
+  await expect(page.locator('#paneltab-voice')).toBeVisible();
+
+  const before = polls;
+  await page.clock.fastForward(60_000);   // the queue's polls, each finding nothing
+
+  await expect.poll(() => polls).toBeGreaterThan(before);
+  await expect(page.locator('#paneltab-voice')).toBeVisible();
+});
+
+test('a conversation opens the Voice window above the transcript, so both can be read', async ({ page }) => {
+  // The stream held until the transcript is open.
+  let release;
+  const held = new Promise(done => { release = done; });
+  await page.route('**/api/voice/conversation', async route => {
+    await held;
+    await route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' },
+                          body: sse([{ state: 'speaking', text: 'Anything else?' }]) });
+  });
+  await page.goto('/');
+  await page.getByTestId('transcript-toggle').click();
+  await expect(page.locator('#paneltab-transcript')).toBeVisible();
+
+  release();
+
+  await expect(page.getByTestId('voice-panel')).toBeVisible();
+  await expect(page.getByTestId('transcript-pane')).toBeVisible();
+  const voice = await page.locator('#panelbody-voice').boundingBox();
+  const transcript = await page.locator('#panelbody-transcript').boundingBox();
+  expect(voice.y + voice.height).toBeLessThanOrEqual(transcript.y);
+});
+
+test('a conversation leaves a tab the person put in front of the Voice window where it is', async ({ page }) => {
+  // The Voice window a tab behind the transcript's, as a person might have dragged it.
+  const window = id => ({ type: 'component', componentType: id, id, title: id });
+  await page.addInitScript(layout => {
+    if (sessionStorage.getItem('seeded')) return;
+    sessionStorage.setItem('seeded', '1');
+    localStorage.setItem('joe.layout.v1', layout);
+  }, JSON.stringify({ root: { type: 'row', content: [
+    { type: 'stack', content: [window('visualiser')] },
+    { type: 'stack', activeItemIndex: 0, content: [window('transcript'), window('voice')] },
+  ] } }));
+  await serve(page, [{ state: 'speaking', text: 'Anything else?' }, { state: 'listening' }]);
+  await page.goto('/');
+
+  await expect(page.getByTestId('voice-label')).toHaveText('Your turn');
+  await expect(page.locator('#paneltab-transcript')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('transcript-pane')).toBeVisible();
 });
 
 test('a whole exchange reads in order, ending on what was recorded', async ({ page }) => {
@@ -86,6 +150,78 @@ test('the microphone level shows only while the microphone is open', async ({ pa
   await page.goto('/');
   await expect(page.getByTestId('voice-panel')).toHaveAttribute('data-state', 'speaking');
   await expect(page.locator('.voice-level')).toBeHidden();
+});
+
+test("a conversation's first state shows in its own colour at once, not faded in from another", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__faded = [];
+    document.addEventListener('transitionrun', e => {
+      if (e.target.id === 'voice-panel') window.__faded.push(e.propertyName);
+    }, true);
+  });
+  await serve(page, [{ state: 'speaking', text: 'Anything else?' }]);
+  await page.goto('/');
+
+  await expect(page.getByTestId('voice-panel')).toHaveAttribute('data-state', 'speaking');
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => window.__faded)).toEqual([]);
+});
+
+test('a Voice window the conversation opened is not brought back by a reload, and opens again in its own colour', async ({ page }) => {
+  await serve(page, [{ state: 'speaking', text: 'Anything else?' }]);
+  await page.goto('/');
+  await expect(page.locator('#paneltab-voice')).toHaveCount(1);
+
+  // The next page's conversation speaks only once the dock is laid out.
+  await page.unroute('**/api/voice/conversation');
+  await page.route('**/api/voice/conversation', async route => {
+    await new Promise(resolve => setTimeout(resolve, 600));
+    await route.fulfill({
+      status: 200,
+      headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' },
+      body: sse([{ state: 'listening' }]),
+    });
+  });
+  await page.addInitScript(() => {
+    window.__faded = [];
+    document.addEventListener('transitionrun', e => {
+      if (e.target.id === 'voice-panel') window.__faded.push(e.propertyName);
+    }, true);
+  });
+  await page.reload();
+  await page.waitForSelector('canvas');
+  await expect(page.locator('#paneltab-voice')).toHaveCount(0);
+
+  await expect(page.getByTestId('voice-panel')).toHaveAttribute('data-state', 'listening');
+  await expect(page.locator('#paneltab-voice')).toHaveCount(1);
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => window.__faded)).toEqual([]);
+});
+
+test('a Voice window opened from the Panels menu is brought back by a reload', async ({ page }) => {
+  await serve(page, []);
+  await page.goto('/');
+  await page.getByTestId('panels-button').click();
+  await page.locator('#panels-menu [data-panel="voice"]').click();
+  await expect(page.locator('#paneltab-voice')).toBeVisible();
+
+  await page.reload();
+  await page.waitForSelector('canvas');
+  await expect(page.locator('#paneltab-voice')).toBeVisible();
+});
+
+test("a Voice window the conversation opened is the person's once they open it themselves", async ({ page }) => {
+  await serve(page, [{ state: 'speaking', text: 'Anything else?' }]);
+  await page.goto('/');
+  await expect(page.locator('#paneltab-voice')).toHaveCount(1);
+  await page.getByTestId('panels-button').click();
+  await page.locator('#panels-menu [data-panel="voice"]').click();
+
+  await page.unroute('**/api/voice/conversation');
+  await serve(page, []);
+  await page.reload();
+  await page.waitForSelector('canvas');
+  await expect(page.locator('#paneltab-voice')).toBeVisible();
 });
 
 test('every state looks different from every other', async ({ page }) => {

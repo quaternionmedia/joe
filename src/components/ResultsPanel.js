@@ -1,8 +1,7 @@
-import { animate } from 'animejs';
 import { offNote } from './Capabilities.js';
 
 /**
- * ResultsPanel — slide-in right panel for backend JSON output.
+ * ResultsPanel — the Results window: the pipeline's JSON output.
  *
  * Parsing and note rendering are delegated to MainCanvas.
  * This panel handles only metadata display and file/fetch controls.
@@ -12,14 +11,14 @@ export class ResultsPanel {
    * @param {HTMLElement} el         - #results-panel container
    * @param {MainCanvas}  mainCanvas
    */
-  constructor(el, mainCanvas) {
+  constructor(el, mainCanvas, window) {
     this._el         = el;
     this._mainCanvas = mainCanvas;
+    this._window     = window;
     this._fileInput  = el.querySelector('[data-testid="file-input"]');
     this._errorEl    = el.querySelector('[data-testid="load-error"]');
     this._parseError = this._errorEl?.textContent || '';
     this._metaEl     = el.querySelector('[data-testid="results-meta"]');
-    this._isOpen     = false;
     this._onFileChange = this._onFileChange.bind(this);
   }
 
@@ -29,21 +28,14 @@ export class ResultsPanel {
     if (fetchBtn) fetchBtn.addEventListener('click', () => this.fetchLatest());
   }
 
-  toggle() { this._isOpen ? this.close() : this.open(); }
+  toggle() { this._window.toggle(); }
 
-  get isOpen() { return this._isOpen; }
+  get isOpen() { return this._window.isOpen; }
 
-  /** Animation A — slide in */
-  open() {
-    this._isOpen = true;
-    animate(this._el, { translateX: ['100%', '0%'], duration: 320, ease: 'outQuart' });
-  }
+  /** The Results window, opened or brought to the front. */
+  open() { this._window.show(); }
 
-  /** Animation B — slide out */
-  close() {
-    this._isOpen = false;
-    animate(this._el, { translateX: ['0%', '100%'], duration: 280, ease: 'inQuart' });
-  }
+  close() { this._window.close(); }
 
   async fetchLatest() {
     try {

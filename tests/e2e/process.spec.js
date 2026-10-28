@@ -87,14 +87,8 @@ test('Library Process triggers pipeline and loads correct results', async ({ pag
   // Click Process on the library item
   await page.locator('[data-action="process"]').first().click();
 
-  // Wait for async pipeline call + fetchLatest + slide-in animation
-  await page.waitForTimeout(1000);
-
-  // Results panel should have slid in
-  const panel   = page.getByTestId('results-panel');
-  const box     = await panel.boundingBox();
-  const vw      = await page.evaluate(() => window.innerWidth);
-  expect(box.x).toBeLessThan(vw);
+  // The pipeline call and fetchLatest open the Results window
+  await expect(page.getByTestId('results-panel')).toBeVisible();
 
   // Results meta should reflect fixture note count
   const meta = await page.getByTestId('results-meta').textContent();
@@ -109,7 +103,7 @@ test('Library Process triggers pipeline and loads correct results', async ({ pag
   expect(errors).toHaveLength(0);
 });
 
-test('Pipeline failure does not open results panel or activate audio', async ({ page }) => {
+test('a pipeline failure opens no Results window and loads no recording', async ({ page }) => {
   const errors = [];
   page.on('pageerror', err => errors.push(err.message));
 
@@ -124,11 +118,8 @@ test('Pipeline failure does not open results panel or activate audio', async ({ 
   // Give enough time for any (incorrect) async effects to run
   await page.waitForTimeout(600);
 
-  // Results panel should remain off-screen (no joe:resultsReady fired)
-  const panel = page.getByTestId('results-panel');
-  const box   = await panel.boundingBox();
-  const vw    = await page.evaluate(() => window.innerWidth);
-  expect(box.x).toBeGreaterThanOrEqual(vw);
+  // The Results window stays closed (no joe:resultsReady fired)
+  await expect(page.getByTestId('results-panel')).toBeHidden();
 
   // Transport name should be empty — stale audio must NOT be activated
   await expect(page.getByTestId('transport-name')).toHaveText('');
@@ -208,7 +199,7 @@ test('Eject clears transport name, hides button, and removes library highlight',
 
 // ─── Library panel open/close ─────────────────────────────────────────────────
 
-test('Library panel closes on second toggle click', async ({ page }) => {
+test('the Library window closes on a second press of its button', async ({ page }) => {
   await mockApi(page, { filename: 'test.wav' });
   await page.goto('/');
   await page.waitForSelector('canvas');
@@ -217,12 +208,12 @@ test('Library panel closes on second toggle click', async ({ page }) => {
   await page.getByTestId('capture-toggle').click();
   await page.waitForSelector('[data-action="play"]', { timeout: 3000 });
   const panel = page.getByTestId('capture-panel');
-  await expect(panel).toHaveClass(/open/);
+  await expect(panel).toBeVisible();
 
   // Close
   await page.getByTestId('capture-toggle').click();
-  await page.waitForTimeout(300);
-  await expect(panel).not.toHaveClass(/open/);
+  await expect(panel).toBeHidden();
+  await expect(page.locator('#paneltab-library')).toHaveCount(0);
 });
 
 // ─── What the Library list shows ──────────────────────────────────────────────

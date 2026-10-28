@@ -1,6 +1,7 @@
 /**
- * PanelKeys — the side panels by key: L the Library, A the analysis Results,
- * and Esc closes whichever are open. T, the transcript, is the pane's own key.
+ * PanelKeys — the windows by key: L the Library, A the analysis Results, and
+ * Esc closes whichever of them and the Transcript are open. T, the
+ * Transcript, is its own pane's key.
  *
  * R is not one of them: it asks the voice loop to say its question again
  * (VoiceKeys), and Shift+Esc stops listening. Keys are ignored while typing
@@ -39,7 +40,7 @@ export class PanelKeys {
       e.preventDefault();
       this._results.toggle();
     } else if (e.code === 'Escape') {
-      // Only what is open: closing the Results slides them out, whether or not they were in.
+      // Only what is open: a closed window is not opened to be closed.
       if (this._library.isOpen) this._library.close();
       if (this._results.isOpen) this._results.close();
       if (this._transcript.isOpen) this._transcript.toggle(false);

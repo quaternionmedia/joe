@@ -10,24 +10,20 @@ const fixtureBuffer = Buffer.from(JSON.stringify(fixtureJson));
 // Helper: open the results panel via the toggle button
 async function openResultsPanel(page) {
   await page.getByTestId('results-toggle').click();
-  await page.waitForTimeout(400); // allow slide-in animation
+  await expect(page.getByTestId('results-panel')).toBeVisible();
 }
 
 // ─── Results panel visibility ─────────────────────────────────────────────────
 
-test('results panel is off-screen on load', async ({ page }) => {
+test('the Results window is closed on load', async ({ page }) => {
   await page.goto('/');
   await page.waitForSelector('canvas');
 
-  const panel = page.getByTestId('results-panel');
-  const box   = await panel.boundingBox();
-  const vw    = await page.evaluate(() => window.innerWidth);
-
-  // Panel should be translated fully off the right edge
-  expect(box.x).toBeGreaterThanOrEqual(vw);
+  await expect(page.getByTestId('results-panel')).toBeHidden();
+  await expect(page.locator('#paneltab-results')).toHaveCount(0);
 });
 
-test('results toggle button opens the results panel', async ({ page }) => {
+test('the Results button opens the Results window', async ({ page }) => {
   const errors = [];
   page.on('pageerror', (err) => errors.push(err.message));
 
@@ -35,21 +31,16 @@ test('results toggle button opens the results panel', async ({ page }) => {
   await page.waitForSelector('canvas');
   await openResultsPanel(page);
 
-  const panel = page.getByTestId('results-panel');
-  const box   = await panel.boundingBox();
-  const vw    = await page.evaluate(() => window.innerWidth);
-
-  // Panel should now be on-screen
-  expect(box.x).toBeLessThan(vw);
+  await expect(page.locator('#paneltab-results')).toBeVisible();
   expect(errors).toHaveLength(0);
 });
 
-test('file input is present inside the open results panel', async ({ page }) => {
+test('the file input is inside the open Results window', async ({ page }) => {
   await page.goto('/');
   await page.waitForSelector('canvas');
   await openResultsPanel(page);
 
-  await expect(page.getByTestId('file-input')).toBeAttached();
+  await expect(page.locator('#panelbody-results [data-testid="file-input"]')).toBeAttached();
 });
 
 // ─── JSON loading + piano roll ────────────────────────────────────────────────
@@ -133,7 +124,7 @@ test('era panel clamps at index 0 on repeated ArrowLeft', async ({ page }) => {
 
 // ─── Panel close ─────────────────────────────────────────────────────────────
 
-test('results panel closes on second toggle click', async ({ page }) => {
+test('the Results window closes on a second press of its button', async ({ page }) => {
   await page.goto('/');
   await page.waitForSelector('canvas');
 
@@ -141,11 +132,9 @@ test('results panel closes on second toggle click', async ({ page }) => {
 
   // Click again to close
   await page.getByTestId('results-toggle').click();
-  await page.waitForTimeout(400);
 
-  const box = await page.getByTestId('results-panel').boundingBox();
-  const vw  = await page.evaluate(() => window.innerWidth);
-  expect(box.x).toBeGreaterThanOrEqual(vw);
+  await expect(page.getByTestId('results-panel')).toBeHidden();
+  await expect(page.locator('#paneltab-results')).toHaveCount(0);
 });
 
 // ─── Fetch Latest ─────────────────────────────────────────────────────────────
