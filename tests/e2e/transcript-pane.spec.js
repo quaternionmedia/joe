@@ -40,7 +40,7 @@ async function script(page, { events = [], history = HISTORY, asking = ASKING, h
     asking ? route.fulfill({ json: asking }) : route.fulfill({ status: 503, body: '' }));
 }
 
-test('T opens the whole transcript, oldest first, with strikes, confidence and labels', async ({ page }) => {
+test('T opens the whole transcript, oldest first, with strikes, confidence and labels', { tag: '@voice-loop' }, async ({ page }) => {
   await script(page);
   await page.goto('/');
   const pane = page.getByTestId('transcript-pane');
@@ -59,7 +59,7 @@ test('T opens the whole transcript, oldest first, with strikes, confidence and l
   await expect(entries.nth(2).locator('.tp-text')).toHaveText('Agree or again?');
 });
 
-test('the pane closes with ×, opens from the transport, and is remembered across a reload', async ({ page }) => {
+test('the pane closes with ×, opens from the transport, and is remembered across a reload', { tag: '@voice-loop' }, async ({ page }) => {
   await script(page);
   await page.goto('/');
   await page.getByTestId('transcript-toggle').click();
@@ -75,7 +75,7 @@ test('the pane closes with ×, opens from the transport, and is remembered acros
   await expect(page.locator('#paneltab-transcript')).toHaveCount(0);
 });
 
-test('what is asked and the take being written arrive live', async ({ page }) => {
+test('what is asked and the take being written arrive live', { tag: '@voice-loop' }, async ({ page }) => {
   await script(page, { events: [
     { state: 'speaking', text: 'Anything else?' },
     { state: 'listening' },
@@ -98,7 +98,7 @@ test('what is asked and the take being written arrive live', async ({ page }) =>
   await expect(entries).toHaveCount(6);
 });
 
-test('what can be said lists the conversation, its checks and joe', async ({ page }) => {
+test('what can be said lists the conversation, its checks and joe', { tag: '@voice-loop' }, async ({ page }) => {
   await script(page);
   await page.goto('/');
   await page.keyboard.press('t');
@@ -112,7 +112,7 @@ test('what can be said lists the conversation, its checks and joe', async ({ pag
   await expect(say).toContainText('“scratch that”');
 });
 
-test('without the conversation running, joe\'s words are still listed', async ({ page }) => {
+test('without the conversation running, joe\'s words are still listed', { tag: '@voice-loop' }, async ({ page }) => {
   await script(page, { asking: null });
   await page.goto('/');
   await page.keyboard.press('t');
@@ -123,7 +123,7 @@ test('without the conversation running, joe\'s words are still listed', async ({
   await expect(say).toContainText('“scratch that”');
 });
 
-test('T typed into a field opens nothing', async ({ page }) => {
+test('T typed into a field opens nothing', { tag: '@voice-loop' }, async ({ page }) => {
   await script(page);
   await page.goto('/');
   await page.evaluate(() => {
@@ -136,7 +136,7 @@ test('T typed into a field opens nothing', async ({ page }) => {
   await expect(page.getByTestId('transcript-pane')).toBeHidden();
 });
 
-test('a history that arrives after the stream keeps what streamed in', async ({ page }) => {
+test('a history that arrives after the stream keeps what streamed in', { tag: '@voice-loop' }, async ({ page }) => {
   await script(page, { historyDelay: 800, events: [
     { state: 'speaking', text: 'Anything else?' },
     { state: 'transcript', take: 't2', text: 'run the tests in vox', segments: [
@@ -171,7 +171,7 @@ async function noteLater(page) {
 // A take that heard nothing: no words in its segments, no text.
 const QUIET = { kind: 'take', source: 'voice', text: '', segments: [{ index: 0, words: [], struck: [], start: 0, end: 1 }] };
 
-test('takes in a row that heard nothing fold into one line, which opens and stays open', async ({ page }) => {
+test('takes in a row that heard nothing fold into one line, which opens and stays open', { tag: '@voice-loop' }, async ({ page }) => {
   const history = { kept: true, entries: [
     { kind: 'said', text: 'What should be done?', at: 1000 },
     { ...QUIET, take: 'q1', at: 1001 },
@@ -206,7 +206,7 @@ test('takes in a row that heard nothing fold into one line, which opens and stay
   await expect(page.locator('.tp-fold-items').first()).toBeHidden();
 });
 
-test('a long question shows three lines until opened, and stays open', async ({ page }) => {
+test('a long question shows three lines until opened, and stays open', { tag: '@voice-loop' }, async ({ page }) => {
   const long = 'Run in qmcp: cross-check whether the local model tool and the files agree. '.repeat(8).trim();
   const history = { kept: true, entries: [
     { kind: 'said', text: long, at: 1000 },
@@ -238,7 +238,7 @@ test('a long question shows three lines until opened, and stays open', async ({ 
   expect(await asks.first().locator('.tp-text').evaluate(clipped)).toBe(false);
 });
 
-test('the transcript names each day where it changes: today, yesterday, then the date', async ({ page }) => {
+test('the transcript names each day where it changes: today, yesterday, then the date', { tag: '@voice-loop' }, async ({ page }) => {
   const now = Date.now() / 1000;
   const history = { kept: true, entries: [
     { kind: 'said', text: 'Two days ago.', at: now - 2 * 86400 },
@@ -258,7 +258,7 @@ test('the transcript names each day where it changes: today, yesterday, then the
   await expect(page.getByTestId('transcript-day')).toHaveText([older, 'Yesterday', 'Today']);
 });
 
-test('a day this year is named without its year, and one in another year with it', async ({ page }) => {
+test('a day this year is named without its year, and one in another year with it', { tag: '@voice-loop' }, async ({ page }) => {
   await page.goto('/');
   const said = await page.evaluate(async () => {
     const { dayLabel } = await import('/joe/components/TranscriptPane.js');
@@ -271,7 +271,7 @@ test('a day this year is named without its year, and one in another year with it
   expect(said).toEqual(['Today', 'Yesterday', true, false]);
 });
 
-test('opening the transcript shows its newest line', async ({ page }) => {
+test('opening the transcript shows its newest line', { tag: '@voice-loop' }, async ({ page }) => {
   const entries = Array.from({ length: 60 }, (_, i) => ({ kind: 'said', text: `Question ${i + 1}?`, at: 1000 + i }));
   await script(page, { history: { kept: true, entries } });
   await page.goto('/');
@@ -285,7 +285,7 @@ test('opening the transcript shows its newest line', async ({ page }) => {
   await expect.poll(() => list.evaluate(el => el.scrollHeight - el.scrollTop - el.clientHeight)).toBeLessThan(2);
 });
 
-test('the first-run hint sits below the pane, not over its last lines', async ({ page }) => {
+test('the first-run hint sits below the pane, not over its last lines', { tag: '@voice-loop' }, async ({ page }) => {
   await script(page);
   await page.goto('/');
   await page.keyboard.press('t');

@@ -47,7 +47,8 @@ uv run joe run
 
 See [api.md](api.md) for endpoint reference and `curl` examples.
 
-For practical end-to-end workflows, see [cookbook.md](cookbook.md).
+Each user path, step by step -- the music page, the voice loop, joe as a
+server -- is a page in [paths/](paths/README.md).
 
 ---
 
@@ -117,12 +118,18 @@ npm run build
 The media tests skip without ffmpeg. With none on `PATH`, name one in
 `JOE_FFMPEG`, so they run here as they do in CI on Linux.
 
-If your change affects frontend behaviour, also run the E2E tests, as CI
-does:
+If your change affects frontend behaviour, also run the E2E tests and the
+lane check, as CI does:
 
 ```powershell
+npm run check:paths
 npm run test:e2e
 ```
+
+A change to what a person or a program does starts on its lane's page in
+[paths/](paths/README.md): the step, and the spec or test that will check it,
+written before the change and red until it is made. `npm run check:paths`
+fails while a spec is not a step of its lane's page.
 
 If it affects runtime behaviour, also run the backend pipeline, which no CI
 job runs:
@@ -153,20 +160,13 @@ Outside CI an HTML report is written to `playwright-report/` (git-ignored). To o
 npx playwright show-report
 ```
 
-What the specs cover:
+Every spec is a step of a lane's page in [paths/](paths/README.md) and carries
+that lane's tag, so one lane runs on its own:
 
-| Spec | Covers |
-| --- | --- |
-| `app.spec.js` | Page load, **Joe, go!**, setlist navigation, and the pipeline JSON contract, against a fixture |
-| `layout.spec.js` | The dock: windows opening, closing and kept across a reload, the Panels menu, and a saved arrangement dropped |
-| `process.spec.js` | Processing and playing a file from the Library, and how a failure shows |
-| `results.spec.js` | The Results panel and the piano roll it loads |
-| `voice.spec.js` | The voice panel through a whole exchange |
-| `voice-keys.spec.js` | Answering by button and by key |
-| `voice-queue.spec.js` | Answering qmcp's waiting requests from the panel |
-| `voice-instruct.spec.js` | **Instruct by voice** |
-| `voice-transcript.spec.js` | The take as it is written, and striking its words |
-| `transcript-pane.spec.js` | The whole transcript beside the piano roll |
+```powershell
+npx playwright test --grep @music-page
+npx playwright test --grep @voice-loop
+```
 
 ## Pull Request Expectations
 
@@ -184,6 +184,8 @@ If you change commands, paths, setup flow, or contributor workflows, update:
 - `README.md`
 - `docs/modules.md` (if module behaviour/path details changed)
 - `docs/contributing.md` (if process/checks changed)
+- `docs/paths/` (if what a person or a program does changed: the step, and what checks it)
+- `docs/ui.md` (if a window, or how the dock keeps them, changed)
 
 ## CI
 
@@ -192,7 +194,7 @@ GitHub Actions runs three workflows, none of them filtered by path:
 | Workflow | When | Runs on | What it does |
 | --- | --- | --- | --- |
 | `tests.yml` | Every PR, and every push to `main` | `windows-latest` and `ubuntu-latest`, neither cancelled when the other fails | `uv sync --frozen`, then `uv run --frozen pytest tests/ -q`. Linux installs `libportaudio2` and `ffmpeg` first; Windows installs no ffmpeg, so the media tests that need one skip there |
-| `e2e.yml` | Every PR, every push to `main`, and by hand | `windows-latest`, Node 22 | `npm ci`, `npx playwright install --with-deps chromium`, then `npm run test:e2e` |
+| `e2e.yml` | Every PR, every push to `main`, and by hand | `windows-latest`, Node 22 | `npm ci`, `npx playwright install --with-deps chromium`, `npm run check:paths`, then `npm run test:e2e` |
 | `deploy.yml` | Every PR against `main`, every push to `main`, and by hand | `ubuntu-latest` | `npm ci` and `npm run build`; then, only for a push to `main` or a run by hand on `main`, publishes `dist/` to the `gh-pages` branch |
 
 A PR's build is checked, never published. Only `deploy.yml`'s publish can

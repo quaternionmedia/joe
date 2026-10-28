@@ -84,6 +84,24 @@ level, the take being written, the question's options as buttons, **Repeat**
 (`R`), **Stop** (`Shift`+`Esc`) and the held `~` that keeps the turn open,
 qmcp's queue, and what **Instruct by voice** recorded.
 
+## The transport
+
+The bar along the bottom, left to right:
+
+- **Joe, go!** starts the browser's audio, once a page load, before **Live**
+  can record; it then reads **Joe, stop!**, and a second press stops it, unless
+  a recording is running.
+- **Browser mic** or **joe's mic** sets where **Live** records from, and
+  **Live** starts and stops a recording, its dot pulsing while it runs. Play and
+  Stop are greyed while it does.
+- The canvas's mode -- `LIVE` while recording, `RESULTS` once notes are loaded --
+  then **Play**, **Stop**, the scrubber, the time, the name of what is loaded,
+  and **×** to eject it. joe plays one recording at a time: Library → Play, a
+  recording stopping, and the pipeline finishing each load theirs, and the
+  Library highlights it.
+- ♫ **Library**, ▤ **Results**, ¶ **Transcript** and ▦ **Panels**, the windows.
+- **Instruct by voice**, one spoken instruction into qmcp's inbox.
+
 ## What the window does not have
 
 - **No popouts.** Each window holds an element of this page, and a window of its

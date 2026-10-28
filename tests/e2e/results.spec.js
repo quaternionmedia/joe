@@ -15,7 +15,7 @@ async function openResultsPanel(page) {
 
 // ─── Results panel visibility ─────────────────────────────────────────────────
 
-test('the Results window is closed on load', async ({ page }) => {
+test('the Results window is closed on load', { tag: '@music-page' }, async ({ page }) => {
   await page.goto('/');
   await page.waitForSelector('canvas');
 
@@ -23,7 +23,7 @@ test('the Results window is closed on load', async ({ page }) => {
   await expect(page.locator('#paneltab-results')).toHaveCount(0);
 });
 
-test('the Results button opens the Results window', async ({ page }) => {
+test('the Results button opens the Results window', { tag: '@music-page' }, async ({ page }) => {
   const errors = [];
   page.on('pageerror', (err) => errors.push(err.message));
 
@@ -35,7 +35,7 @@ test('the Results button opens the Results window', async ({ page }) => {
   expect(errors).toHaveLength(0);
 });
 
-test('the file input is inside the open Results window', async ({ page }) => {
+test('the file input is inside the open Results window', { tag: '@music-page' }, async ({ page }) => {
   await page.goto('/');
   await page.waitForSelector('canvas');
   await openResultsPanel(page);
@@ -45,7 +45,7 @@ test('the file input is inside the open Results window', async ({ page }) => {
 
 // ─── JSON loading + piano roll ────────────────────────────────────────────────
 
-test('results meta shows note count after load', async ({ page }) => {
+test('results meta shows note count after load', { tag: '@music-page' }, async ({ page }) => {
   await page.goto('/');
   await page.waitForSelector('canvas');
   await openResultsPanel(page);
@@ -63,7 +63,7 @@ test('results meta shows note count after load', async ({ page }) => {
 
 // ─── Error handling ───────────────────────────────────────────────────────────
 
-test('malformed JSON shows load-error element and does not crash', async ({ page }) => {
+test('malformed JSON shows load-error element and does not crash', { tag: '@music-page' }, async ({ page }) => {
   const errors = [];
   page.on('pageerror', (err) => errors.push(err.message));
 
@@ -83,7 +83,7 @@ test('malformed JSON shows load-error element and does not crash', async ({ page
 
 // ─── Era panel ────────────────────────────────────────────────────────────────
 
-test('era panel shows correct genre after first ArrowRight', async ({ page }) => {
+test('era panel shows correct genre after first ArrowRight', { tag: '@music-page' }, async ({ page }) => {
   const errors = [];
   page.on('pageerror', (err) => errors.push(err.message));
 
@@ -97,7 +97,7 @@ test('era panel shows correct genre after first ArrowRight', async ({ page }) =>
   expect(errors).toHaveLength(0);
 });
 
-test('era panel genre updates on second ArrowRight', async ({ page }) => {
+test('era panel genre updates on second ArrowRight', { tag: '@music-page' }, async ({ page }) => {
   await page.goto('/');
   await page.waitForSelector('canvas');
 
@@ -109,7 +109,7 @@ test('era panel genre updates on second ArrowRight', async ({ page }) => {
   await expect(page.getByTestId('era-genre')).toHaveText('Classical');
 });
 
-test('era panel clamps at index 0 on repeated ArrowLeft', async ({ page }) => {
+test('era panel clamps at index 0 on repeated ArrowLeft', { tag: '@music-page' }, async ({ page }) => {
   await page.goto('/');
   await page.waitForSelector('canvas');
 
@@ -124,7 +124,7 @@ test('era panel clamps at index 0 on repeated ArrowLeft', async ({ page }) => {
 
 // ─── Panel close ─────────────────────────────────────────────────────────────
 
-test('the Results window closes on a second press of its button', async ({ page }) => {
+test('the Results window closes on a second press of its button', { tag: '@music-page' }, async ({ page }) => {
   await page.goto('/');
   await page.waitForSelector('canvas');
 
@@ -139,7 +139,7 @@ test('the Results window closes on a second press of its button', async ({ page 
 
 // ─── Fetch Latest ─────────────────────────────────────────────────────────────
 
-test('Fetch Latest button loads results and shows note count', async ({ page }) => {
+test('Fetch Latest button loads results and shows note count', { tag: '@music-page' }, async ({ page }) => {
   const errors = [];
   page.on('pageerror', err => errors.push(err.message));
 
@@ -167,7 +167,7 @@ test('Fetch Latest button loads results and shows note count', async ({ page }) 
 
 // ─── Canvas mode badge ────────────────────────────────────────────────────────
 
-test('Canvas mode badge shows RESULTS after loading notes from file input', async ({ page }) => {
+test('Canvas mode badge shows RESULTS after loading notes from file input', { tag: '@music-page' }, async ({ page }) => {
   const errors = [];
   page.on('pageerror', err => errors.push(err.message));
 
@@ -192,7 +192,7 @@ test('Canvas mode badge shows RESULTS after loading notes from file input', asyn
 
 // ─── What the meta shows ──────────────────────────────────────────────────────
 
-test('A track named with markup is shown as text', async ({ page }) => {
+test('A track named with markup is shown as text', { tag: '@music-page' }, async ({ page }) => {
   // A track is named after its file, which is whatever Data/Audio/ held.
   const errors = [];
   page.on('pageerror', err => errors.push(err.message));
@@ -217,7 +217,7 @@ test('A track named with markup is shown as text', async ({ page }) => {
   expect(errors).toHaveLength(0);
 });
 
-test("the panel's heading reads on one line, clear of its buttons", async ({ page }) => {
+test("the panel's heading reads on one line, clear of its buttons", { tag: '@music-page' }, async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 768 });
   await page.goto('/');
   await page.getByTestId('results-toggle').click();

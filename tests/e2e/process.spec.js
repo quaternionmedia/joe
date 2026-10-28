@@ -72,7 +72,7 @@ async function mockApi(page, {
 
 // ─── Process flow ─────────────────────────────────────────────────────────────
 
-test('Library Process triggers pipeline and loads correct results', async ({ page }) => {
+test('Library Process triggers pipeline and loads correct results', { tag: '@music-page' }, async ({ page }) => {
   const errors = [];
   page.on('pageerror', err => errors.push(err.message));
 
@@ -103,7 +103,7 @@ test('Library Process triggers pipeline and loads correct results', async ({ pag
   expect(errors).toHaveLength(0);
 });
 
-test('a pipeline failure opens no Results window and loads no recording', async ({ page }) => {
+test('a pipeline failure opens no Results window and loads no recording', { tag: '@music-page' }, async ({ page }) => {
   const errors = [];
   page.on('pageerror', err => errors.push(err.message));
 
@@ -135,7 +135,7 @@ test('a pipeline failure opens no Results window and loads no recording', async 
 
 // ─── Library Play ─────────────────────────────────────────────────────────────
 
-test('Library Play loads audio and highlights the active row', async ({ page }) => {
+test('Library Play loads audio and highlights the active row', { tag: '@music-page' }, async ({ page }) => {
   const errors = [];
   page.on('pageerror', err => errors.push(err.message));
 
@@ -164,7 +164,7 @@ test('Library Play loads audio and highlights the active row', async ({ page }) 
 
 // ─── Eject ────────────────────────────────────────────────────────────────────
 
-test('Eject clears transport name, hides button, and removes library highlight', async ({ page }) => {
+test('Eject clears transport name, hides button, and removes library highlight', { tag: '@music-page' }, async ({ page }) => {
   const errors = [];
   page.on('pageerror', err => errors.push(err.message));
 
@@ -199,7 +199,7 @@ test('Eject clears transport name, hides button, and removes library highlight',
 
 // ─── Library panel open/close ─────────────────────────────────────────────────
 
-test('the Library window closes on a second press of its button', async ({ page }) => {
+test('the Library window closes on a second press of its button', { tag: '@music-page' }, async ({ page }) => {
   await mockApi(page, { filename: 'test.wav' });
   await page.goto('/');
   await page.waitForSelector('canvas');
@@ -218,7 +218,7 @@ test('the Library window closes on a second press of its button', async ({ page 
 
 // ─── What the Library list shows ──────────────────────────────────────────────
 
-test('A file name is shown as text, never as markup', async ({ page }) => {
+test('A file name is shown as text, never as markup', { tag: '@music-page' }, async ({ page }) => {
   // A name is whatever Data/Audio/ holds; this page can drive joe's API.
   const errors = [];
   page.on('pageerror', err => errors.push(err.message));
@@ -239,7 +239,7 @@ test('A file name is shown as text, never as markup', async ({ page }) => {
   expect(errors).toHaveLength(0);
 });
 
-test('A library joe does not serve says so, and what turning it on exposes', async ({ page }) => {
+test('A library joe does not serve says so, and what turning it on exposes', { tag: '@music-page' }, async ({ page }) => {
   const errors = [];
   page.on('pageerror', err => errors.push(err.message));
   const detail = 'the audio library is off on this joe: JOE_ALLOW_LIBRARY=1 turns it on, for '

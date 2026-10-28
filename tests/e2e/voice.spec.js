@@ -27,7 +27,7 @@ const EXCHANGE = [
   { state: 'recorded', text: 'approve' },
 ];
 
-test('the Voice window stays closed until a conversation starts', async ({ page }) => {
+test('the Voice window stays closed until a conversation starts', { tag: '@voice-loop' }, async ({ page }) => {
   await serve(page, []);
   const connected = page.waitForRequest('**/api/voice/conversation');
   await page.goto('/');
@@ -38,7 +38,7 @@ test('the Voice window stays closed until a conversation starts', async ({ page 
   await expect(page.getByTestId('voice-panel')).toBeHidden();
 });
 
-test('a Voice window opened from the Panels menu stays open while no conversation runs', async ({ page }) => {
+test('a Voice window opened from the Panels menu stays open while no conversation runs', { tag: '@voice-loop' }, async ({ page }) => {
   await page.clock.install();
   await serve(page, []);
   let polls = 0;
@@ -58,7 +58,7 @@ test('a Voice window opened from the Panels menu stays open while no conversatio
   await expect(page.locator('#paneltab-voice')).toBeVisible();
 });
 
-test('a conversation opens the Voice window above the transcript, so both can be read', async ({ page }) => {
+test('a conversation opens the Voice window above the transcript, so both can be read', { tag: '@voice-loop' }, async ({ page }) => {
   // The stream held until the transcript is open.
   let release;
   const held = new Promise(done => { release = done; });
@@ -80,7 +80,7 @@ test('a conversation opens the Voice window above the transcript, so both can be
   expect(voice.y + voice.height).toBeLessThanOrEqual(transcript.y);
 });
 
-test('a conversation leaves a tab the person put in front of the Voice window where it is', async ({ page }) => {
+test('a conversation leaves a tab the person put in front of the Voice window where it is', { tag: '@voice-loop' }, async ({ page }) => {
   // The Voice window a tab behind the transcript's, as a person might have dragged it.
   const window = id => ({ type: 'component', componentType: id, id, title: id });
   await page.addInitScript(layout => {
@@ -99,7 +99,7 @@ test('a conversation leaves a tab the person put in front of the Voice window wh
   await expect(page.getByTestId('transcript-pane')).toBeVisible();
 });
 
-test('a whole exchange reads in order, ending on what was recorded', async ({ page }) => {
+test('a whole exchange reads in order, ending on what was recorded', { tag: '@voice-loop' }, async ({ page }) => {
   const errors = [];
   page.on('pageerror', err => errors.push(err.message));
   await serve(page, EXCHANGE);
@@ -122,7 +122,7 @@ test('a whole exchange reads in order, ending on what was recorded', async ({ pa
   expect(errors).toHaveLength(0);
 });
 
-test('a re-ask says why it is asking again', async ({ page }) => {
+test('a re-ask says why it is asking again', { tag: '@voice-loop' }, async ({ page }) => {
   await serve(page, [
     { state: 'speaking', text: 'Voice check. Say approve or hold.' },
     { state: 'listening' },
@@ -135,7 +135,7 @@ test('a re-ask says why it is asking again', async ({ page }) => {
   await expect(page.getByTestId('voice-hint')).toHaveText('Asking again: that matched no option');
 });
 
-test('the microphone level shows only while the microphone is open', async ({ page }) => {
+test('the microphone level shows only while the microphone is open', { tag: '@voice-loop' }, async ({ page }) => {
   await serve(page, [{ state: 'hearing' }], [{ rms: 0.008, threshold: 0.004 }]);
   await page.goto('/');
 
@@ -152,7 +152,7 @@ test('the microphone level shows only while the microphone is open', async ({ pa
   await expect(page.locator('.voice-level')).toBeHidden();
 });
 
-test("a conversation's first state shows in its own colour at once, not faded in from another", async ({ page }) => {
+test("a conversation's first state shows in its own colour at once, not faded in from another", { tag: '@voice-loop' }, async ({ page }) => {
   await page.addInitScript(() => {
     window.__faded = [];
     document.addEventListener('transitionrun', e => {
@@ -167,7 +167,7 @@ test("a conversation's first state shows in its own colour at once, not faded in
   expect(await page.evaluate(() => window.__faded)).toEqual([]);
 });
 
-test('a Voice window the conversation opened is not brought back by a reload, and opens again in its own colour', async ({ page }) => {
+test('a Voice window the conversation opened is not brought back by a reload, and opens again in its own colour', { tag: '@voice-loop' }, async ({ page }) => {
   await serve(page, [{ state: 'speaking', text: 'Anything else?' }]);
   await page.goto('/');
   await expect(page.locator('#paneltab-voice')).toHaveCount(1);
@@ -198,7 +198,7 @@ test('a Voice window the conversation opened is not brought back by a reload, an
   expect(await page.evaluate(() => window.__faded)).toEqual([]);
 });
 
-test('a Voice window opened from the Panels menu is brought back by a reload', async ({ page }) => {
+test('a Voice window opened from the Panels menu is brought back by a reload', { tag: '@voice-loop' }, async ({ page }) => {
   await serve(page, []);
   await page.goto('/');
   await page.getByTestId('panels-button').click();
@@ -210,7 +210,7 @@ test('a Voice window opened from the Panels menu is brought back by a reload', a
   await expect(page.locator('#paneltab-voice')).toBeVisible();
 });
 
-test("a Voice window the conversation opened is the person's once they open it themselves", async ({ page }) => {
+test("a Voice window the conversation opened is the person's once they open it themselves", { tag: '@voice-loop' }, async ({ page }) => {
   await serve(page, [{ state: 'speaking', text: 'Anything else?' }]);
   await page.goto('/');
   await expect(page.locator('#paneltab-voice')).toHaveCount(1);
@@ -224,7 +224,7 @@ test("a Voice window the conversation opened is the person's once they open it t
   await expect(page.locator('#paneltab-voice')).toBeVisible();
 });
 
-test('every state looks different from every other', async ({ page }) => {
+test('every state looks different from every other', { tag: '@voice-loop' }, async ({ page }) => {
   const states = ['speaking', 'listening', 'hearing', 'pausing', 'transcribing',
                   'heard', 'no_speech', 'recorded', 'gave_up', 'idle'];
   const seen = [];
