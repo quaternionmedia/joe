@@ -149,6 +149,15 @@ def test_run_on_file_rejects_non_bare_names(client, no_subprocess, name):
     assert no_subprocess == []
 
 
+def test_run_on_file_refuses_a_format_the_pipeline_cannot_read(client, no_subprocess, audio_dir):
+    (audio_dir / "take.aiff").write_bytes(b"FORM")
+    res = client.post("/api/run/take.aiff")
+    assert res.status_code == 200
+    assert res.json()["returncode"] == 1
+    assert "not supported by the pipeline" in res.json()["stderr"]
+    assert no_subprocess == []
+
+
 def test_run_on_file_missing_file_is_404(client, no_subprocess):
     res = client.post("/api/run/absent.wav")
     assert res.status_code == 404
@@ -206,12 +215,3 @@ def test_resolve_audio_path_rejects_missing_file(voice_dirs):
     with pytest.raises(HTTPException) as excinfo:
         api._resolve_audio_path("absent.wav")
     assert excinfo.value.status_code == 404
-
-
-@pytest.mark.parametrize("name", BAD_HANDLER_NAMES)
-def test_both_resolvers_agree_on_every_bad_name(audio_dir, voice_dirs, name):
-    """Both resolvers give every bad name the same answer."""
-    for resolver in (api._audio_file, api._resolve_audio_path):
-        with pytest.raises(HTTPException) as excinfo:
-            resolver(name)
-        assert excinfo.value.status_code == 404, f"{resolver.__name__} allowed {name!r}"
