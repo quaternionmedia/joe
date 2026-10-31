@@ -32,7 +32,7 @@ async function pageHasRead(page) {
   await expect(page.getByTestId('capture-toggle')).toHaveAttribute('data-own-title', /.*/);
 }
 
-test('a joe serving the media API alone greys Library, Transcript and Live, each naming its setting', async ({ page }) => {
+test('a joe serving the media API alone greys Library, Transcript and Live, each naming its setting', { tag: '@music-page' }, async ({ page }) => {
   await serve(page, FRESH);
   await page.goto('/');
 
@@ -53,7 +53,7 @@ test('a joe serving the media API alone greys Library, Transcript and Live, each
     'Off on this joe: JOE_ALLOW_MICROPHONE=1 and JOE_ALLOW_LIBRARY=1 turns it on');
 });
 
-test('a joe serving everything greys nothing, and Live opens once audio starts', async ({ page }) => {
+test('a joe serving everything greys nothing, and Live opens once audio starts', { tag: '@music-page' }, async ({ page }) => {
   await serve(page, ALL);
   await page.goto('/');
   await pageHasRead(page);
@@ -66,7 +66,7 @@ test('a joe serving everything greys nothing, and Live opens once audio starts',
   await expect(page.getByTestId('live-toggle')).toBeEnabled();
 });
 
-test('with no backend nothing is greyed: no backend is a normal way to run the page', async ({ page }) => {
+test('with no backend nothing is greyed: no backend is a normal way to run the page', { tag: '@music-page' }, async ({ page }) => {
   await serve(page, null);
   await page.goto('/');
   await page.getByTestId('start-button').click();
@@ -76,7 +76,7 @@ test('with no backend nothing is greyed: no backend is a normal way to run the p
   await expect(page.getByTestId('transcript-toggle')).not.toHaveClass(/is-off/);
 });
 
-test('the Library and the transcript each say what is off, in a sentence with a link', async ({ page }) => {
+test('the Library and the transcript each say what is off, in a sentence with a link', { tag: '@music-page' }, async ({ page }) => {
   await serve(page, FRESH);
   await page.goto('/');
 
@@ -93,7 +93,7 @@ test('the Library and the transcript each say what is off, in a sentence with a 
   await expect(transcripts.getByRole('link')).toHaveAttribute('href', SECURITY_URL);
 });
 
-test('Fetch Latest is greyed while the library is off, and a refusal it meets anyway says so', async ({ page }) => {
+test('Fetch Latest is greyed while the library is off, and a refusal it meets anyway says so', { tag: '@music-page' }, async ({ page }) => {
   await serve(page, FRESH);
   await page.goto('/');
   await expect(page.getByTestId('fetch-latest')).toBeDisabled();
@@ -111,7 +111,7 @@ test('Fetch Latest is greyed while the library is off, and a refusal it meets an
   await expect(page.getByTestId('load-error')).not.toContainText('Could not parse');
 });
 
-test('the first-run hint keeps the steps that work and says what --allow turns on', async ({ page }) => {
+test('the first-run hint keeps the steps that work and says what --allow turns on', { tag: '@music-page' }, async ({ page }) => {
   await serve(page, FRESH);
   await page.goto('/');
 
@@ -123,7 +123,7 @@ test('the first-run hint keeps the steps that work and says what --allow turns o
   await expect(said.getByRole('link')).toHaveAttribute('href', SECURITY_URL);
 });
 
-test('on a joe serving everything the first-run hint keeps all four steps', async ({ page }) => {
+test('on a joe serving everything the first-run hint keeps all four steps', { tag: '@music-page' }, async ({ page }) => {
   await serve(page, ALL);
   await page.goto('/');
   await pageHasRead(page);
@@ -133,7 +133,7 @@ test('on a joe serving everything the first-run hint keeps all four steps', asyn
   await expect(page.getByTestId('hint-off')).toBeHidden();
 });
 
-test('Live names only what its capture mode needs, and nothing once that is on', async ({ page }) => {
+test('Live names only what its capture mode needs, and nothing once that is on', { tag: '@music-page' }, async ({ page }) => {
   await serve(page, { ...ALL, microphone: false });
   await page.goto('/');
   await page.getByTestId('start-button').click();
@@ -150,7 +150,7 @@ test('Live names only what its capture mode needs, and nothing once that is on',
   await expect(live).toHaveAttribute('title', '');
 });
 
-test('the hint numbers the steps it keeps again, and names each flag once', async ({ page }) => {
+test('the hint numbers the steps it keeps again, and names each flag once', { tag: '@music-page' }, async ({ page }) => {
   await page.goto('/');
   const kept = await page.evaluate(async () => {
     const { adaptHint } = await import('/joe/components/Capabilities.js');

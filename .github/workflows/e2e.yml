@@ -24,5 +24,7 @@ jobs:
           node-version: 22
       - run: npm ci
       - run: npx playwright install --with-deps chromium
+      - name: Every spec is a step of its lane's page
+        run: npm run check:paths
       - name: Run the specs
         run: npm run test:e2e

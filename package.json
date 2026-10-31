@@ -8,7 +8,8 @@
     "start": "vite",
     "build": "vite build",
     "check": "npm run build",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "check:paths": "node tests/paths/check.mjs"
   },
   "repository": {
     "type": "git",
