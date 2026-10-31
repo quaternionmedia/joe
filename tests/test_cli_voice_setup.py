@@ -97,8 +97,8 @@ def _four_way_level(duration, device):
 
 
 def test_setup_reaches_the_loudest_microphone_through_its_most_reliable_host_api(saved_file):
-    """The failure this pins: the sweep chose WDM-KS because it read loudest,
-    saved it, and the recording that followed could not open it."""
+    """The sweep hears WDM-KS loudest; setup saves the same microphone
+    through a host API a recording can open."""
     with patch("Modules.Voice.list_input_devices", return_value=ONE_MIC_FOUR_WAYS), patch(
         "Modules.Voice.input_level", side_effect=_four_way_level
     ):
