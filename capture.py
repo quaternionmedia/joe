@@ -16,7 +16,6 @@ import queue
 import threading
 from pathlib import Path
 
-import sounddevice as sd
 import soundfile as sf
 
 AUDIO_DIR = Path("Data/Audio")
@@ -33,6 +32,10 @@ class AudioCapture:
         self.q.put(indata.copy())
 
     def _record(self, filename: str, samplerate: int = 44100, channels: int = 1):
+        # Imported here: importing sounddevice starts PortAudio, which fails on
+        # a machine with no audio server, and the API imports this module.
+        import sounddevice as sd
+
         AUDIO_DIR.mkdir(parents=True, exist_ok=True)
         path = AUDIO_DIR / filename
         with sf.SoundFile(str(path), mode="w", samplerate=samplerate,
