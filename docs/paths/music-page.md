@@ -102,13 +102,16 @@ npx playwright test --grep @music-page
    - spec: the transport's groups lie side by side at 1024 px, with a take and its note showing
    - spec: the transport's groups lie side by side at 1280 px, with a take and its note showing
 
-5. Or from a terminal, `uv run joe run` analyses every file in `Data/Audio/`;
-   then **Results** (`A`) → **Fetch Latest** draws the newest result.
+5. Or from a terminal, `uv run joe run` analyses the newest recording in
+   `Data/Audio/`, `uv run joe run NAME...` those named, and `uv run joe run --all`
+   every one; then **Results** (`A`) → **Fetch Latest** draws the newest result.
 
    - spec: the Results button opens the Results window
    - spec: Fetch Latest button loads results and shows note count
    - spec: the Results window closes on a second press of its button
    - spec: the panel's heading reads on one line, clear of its buttons
+   - test: tests/test_run_choice.py::test_joe_run_hands_the_pipeline_its_choice
+   - test: tests/test_main.py::test_main_py_analyses_the_newest_those_named_or_all
 
 6. Or an earlier result, with no server needed: **Results** → **Load JSON** and
    a `Process_Data_*.json` from `Data/Output/`. A file that is not one says so,
