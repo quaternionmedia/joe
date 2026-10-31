@@ -287,10 +287,9 @@ def test_rank_candidates_puts_an_unnamed_host_api_between_the_known_and_wdm_ks()
 
 def test_a_click_before_the_answer_does_not_start_the_take():
     """SpeechRecognition's `phrase_threshold` and Pipecat's `start_secs`
-    both refuse to count speech until it is sustained. A single loud block
-    -- a click, a cough -- used to start the take here, so a person pausing
-    before answering was cut off. Now one block is a transient, and the
-    take runs on until real, sustained speech has come and gone."""
+    both refuse to count speech until it is sustained, and so does the
+    endpointer: one loud block -- a click, a cough -- is a transient, and
+    the take runs on until real, sustained speech has come and gone."""
     from Modules.Voice import _capture_until_silence
 
     quiet, loud = 0.0005, 0.2
@@ -306,11 +305,10 @@ def test_a_click_before_the_answer_does_not_start_the_take():
 
 
 def test_a_fast_responder_is_heard_without_waiting_for_the_cap():
-    """Calibrating on the first blocks' loudest level meant a person who
-    answered the instant the prompt ended raised the bar above their own
-    voice, and the take ran to the cap. The floor now comes from the
-    quietest calibration block and keeps adapting during non-speech, the
-    way SpeechRecognition's dynamic energy threshold does."""
+    """A person who answers the instant the prompt ends does not raise the
+    bar above their own voice: the floor comes from the quietest
+    calibration block and keeps adapting during non-speech, the way
+    SpeechRecognition's dynamic energy threshold does."""
     from Modules.Voice import _capture_until_silence
 
     quiet, loud = 0.0005, 0.2
@@ -353,9 +351,8 @@ def test_listen_skips_transcription_when_nobody_spoke(tmp_path, monkeypatch):
 
 # --- how a take is decoded ----------------------------------------------------
 #
-# Measured on synthesized short answers, scored the way the dialog asking the
-# question reads them: whisper's defaults guess the language per clip and run
-# greedy, and a one-word answer has nothing to recover from either.
+# whisper's defaults guess the language per clip and run greedy, and a
+# one-word answer has nothing to recover from either.
 
 
 def _decoded_with(seconds, hint=None):

@@ -4,7 +4,7 @@ Joe FastAPI server — exposes pipeline results and a trigger endpoint.
 Endpoints:
     GET  /api/health                Health check
     GET  /api/results/latest        Returns the most-recent Process_Data JSON
-    POST /api/run                   Runs the pipeline on Data/Audio/ (all files)
+    POST /api/run                   Runs the pipeline on Data/Audio/: the newest, ?files=, or ?all=true
     POST /api/capture/start         Start backend sounddevice recording
     POST /api/capture/stop          Stop recording, flush WAV, return filename
     POST /api/audio/upload          Receive audio blob from browser, save to Data/Audio/
@@ -25,8 +25,14 @@ Endpoints:
     POST /api/voice/unwatch         Closes a watch that will not be listened to
     GET  /api/voice/vocabulary      joe's own spoken words, and what each does
     GET  /api/voice/history         The whole transcript: every take heard and every sentence said
+    GET  /api/voice/takes/{take}/audio  One take's recording, for the visualiser
     POST /api/voice/strike          Strike or restore a word of the take being transcribed
     GET  /api/voice/transcript      The take being transcribed, or the last one, once
+    GET  /api/media/capabilities    What the media API takes and does (docs/media.md)
+    POST /api/media                 Takes audio or video and keeps its sound for a while
+    POST /api/media/{id}/transcribe What is said in an upload, with segment and word times
+    POST /api/media/{id}/analyze    Tempo, beats, onsets, loudness, silences and peaks of an upload
+    DELETE /api/media/{id}          Removes an upload now
 
 Run directly:
     python -m uvicorn api:app --reload --port 8000
@@ -36,27 +42,48 @@ Or via the CLI:
 """
 
 import asyncio
+import functools
 import json
 import os
 import sys
 import threading
+import traceback
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import APIRouter, FastAPI, HTTPException, Query, Request, Response
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.routing import APIRoute
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.requests import ClientDisconnect
 
 from capture import AudioCapture
 
-from Modules import Cue
+from Modules import Analysis, Cue, Media
 from Modules.Control import Control
 from Modules.Transcript import Datapoints, LiveTranscript
 from Modules.Conversation import POSTED, Conversation
 from Modules.Voice import STALL_SECONDS, NoMicrophoneError, Voice, input_level, list_input_devices
 from Modules.Watch import Unwatched, Watch
 
-app = FastAPI(title="Joe API", version="0.1.0")
+
+@asynccontextmanager
+async def _lifespan(_app):
+    """While the server runs, uploaded media is swept as it expires -- even when
+    nothing is being asked of it (`_sweep_media`)."""
+    stop = threading.Event()
+    threading.Thread(target=_sweep_media, args=(stop,), name="joe-media-sweep", daemon=True).start()
+    try:
+        yield
+    finally:
+        stop.set()
+
+
+app = FastAPI(title="Joe API", version="0.1.0", lifespan=_lifespan)
 
 # Allow the Vite dev server to call us directly (backup for when proxy isn't used)
 app.add_middleware(
@@ -101,7 +128,7 @@ MAX_OPTIONS = 9
 ANSWER_CHARS = 100
 
 
-# ─── Existing endpoints ───────────────────────────────────────────────────────
+# ─── Health and results ───────────────────────────────────────────────────────
 
 @app.get("/api/health")
 def health():
@@ -136,20 +163,13 @@ def get_latest():
     return json.loads(files[0].read_text(encoding="utf-8"))
 
 
-@app.post("/api/run")
-async def run_pipeline():
-    """
-    Runs the pipeline on all files in Data/Audio/ and returns stdout/stderr.
-    Blocks until the pipeline completes.
-    """
-    # Strip any inherited JOE_AUDIO_FILE so the all-files route is never
-    # accidentally scoped to a single file from a previous request.
-    env = {k: v for k, v in os.environ.items() if k != "JOE_AUDIO_FILE"}
+async def _run_main(*args: str) -> dict:
+    """Run the pipeline, `main.py` with `args`, waiting for it, and say how it went."""
     try:
         proc = await asyncio.create_subprocess_exec(
             sys.executable,
             str(_MAIN_PY),
-            env=env,
+            *args,
             cwd=str(_PROJECT_ROOT),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -165,6 +185,24 @@ async def run_pipeline():
         "stdout": stdout.decode("utf-8", errors="replace"),
         "stderr": stderr.decode("utf-8", errors="replace"),
     }
+
+
+@app.post("/api/run")
+async def run_pipeline(files: list[str] = Query(default=[]), every: bool = Query(False, alias="all")):
+    """
+    Runs the pipeline on recordings in Data/Audio/ and returns stdout/stderr:
+    those named in `files`, every one with `all=true`, or else the newest.
+    Blocks until the pipeline completes.
+    """
+    if files and every:
+        raise HTTPException(status_code=400, detail="name files or ask for all, not both")
+    names = []
+    for name in files:
+        path = _audio_file(name)
+        if path.suffix.lower() not in PIPELINE_EXTENSIONS:
+            raise HTTPException(status_code=404, detail=f"No recording in Data/Audio/: {name}")
+        names.append(path.name)
+    return await _run_main(*(["--all"] if every else names))
 
 
 # ─── Backend capture ──────────────────────────────────────────────────────────
@@ -250,10 +288,8 @@ def _is_bare_filename(filename: str) -> bool:
     trailing dot or space (Windows strips those when opening, so `x.wav.`
     and `"x.wav "` open the file they alias under a name no listing shows).
 
-    Shared by every route that takes a name, because the two that existed
-    did not agree: `/api/audio/{filename}` refused all of this and
-    `/api/voice/transcribe` refused none of it, so one name was 404 on the
-    first and 200 on the second.
+    Shared by every route that takes a name, so one name gets the same
+    answer from each.
     """
     return not (
         not filename
@@ -302,8 +338,7 @@ PIPELINE_EXTENSIONS = {".wav", ".webm", ".mp3", ".ogg", ".flac"}
 @app.post("/api/run/{filename}")
 async def run_on_file(filename: str):
     """
-    Run the pipeline on a specific file in Data/Audio/.
-    Sets JOE_AUDIO_FILE env var so main.py processes only that file.
+    Run the pipeline on a specific file in Data/Audio/, named to main.py.
     """
     path = _audio_file(filename)
     if path.suffix.lower() not in PIPELINE_EXTENSIONS:
@@ -316,31 +351,15 @@ async def run_on_file(filename: str):
                 f"(WebM requires ffmpeg on PATH)"
             ),
         }
-    env = {**os.environ, "JOE_AUDIO_FILE": str(path)}
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            sys.executable,
-            str(_MAIN_PY),
-            env=env,
-            cwd=str(_PROJECT_ROOT),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
-    except asyncio.TimeoutError:
-        proc.kill()
-        return {"returncode": -1, "stdout": "", "stderr": "Pipeline timeout (120 s)"}
-    except Exception as exc:
-        return {"returncode": -1, "stdout": "", "stderr": f"Pipeline error: {exc}"}
-    return {
-        "returncode": proc.returncode,
-        "stdout": stdout.decode("utf-8", errors="replace"),
-        "stderr": stderr.decode("utf-8", errors="replace"),
-    }
+    return await _run_main(path.name)
 
 
 def _resolve_audio_path(filename: str) -> Path:
-    """Resolve `filename` to a real file under Data/Audio/ or Data/Voice/.
+    """Resolve `filename` to a real file under Data/Voice/ or Data/Audio/.
+
+    Data/Voice/ is looked in first: it is where voice tools write the files they
+    ask about (`vox loop` writes `said.wav` and `echo.wav` there), so a name in
+    both is the voice folder's, never a library recording of the same name.
 
     Holds the name to the same rule as `/api/audio/{filename}`: a bare
     filename, resolving inside one of the two directories. This is reachable
@@ -353,7 +372,7 @@ def _resolve_audio_path(filename: str) -> Path:
     )
     if not _is_bare_filename(filename):
         raise not_found
-    for base in (Path("Data/Audio"), Path("Data/Voice")):
+    for base in (Path("Data/Voice"), Path("Data/Audio")):
         try:
             candidate = (base / filename).resolve()
         except (OSError, RuntimeError):
@@ -399,7 +418,7 @@ def voice_listen(
     This is the human-facing seam, so the polite default lives here:
     `duration` is the cap, and the recording ends `silence_ms` after the
     speaker stops — a fixed window truncates a slow answer and keeps
-    recording after a quick one. `until_silence=false` restores the
+    recording after a quick one. `until_silence=false` records the
     exact-length window.
 
     `device` is an index or a name fragment; omitted, the server's default
@@ -631,6 +650,30 @@ def voice_history(limit: int = 200):
     return {"entries": History.read(datapoints.manifest, limit), "kept": datapoints.enabled}
 
 
+@app.get("/api/voice/takes/{take}/audio")
+def voice_take_audio(take: str):
+    """One take's recording, as joe wrote it, for the visualiser to play with
+    the take's words on its timeline. Only a recording under joe's own voice
+    folder is served, whatever the record names."""
+    import re
+
+    from Modules import History
+    from Modules.Voice import Voice
+
+    if not re.fullmatch(r"[0-9a-f]{6,32}", take):
+        raise HTTPException(status_code=400, detail="a take is named by its hex id")
+    entry = History.take(datapoints.manifest, take)
+    if entry is None or not entry.get("audio"):
+        raise HTTPException(status_code=404, detail=f"no recording kept for take {take}")
+    path = Path(entry["audio"])
+    path = path if path.is_absolute() else datapoints.root / path
+    path = path.resolve()
+    roots = {datapoints.root.resolve(), Path(Voice().capture_dir).resolve()}
+    if not any(path.is_relative_to(root) for root in roots) or not path.is_file():
+        raise HTTPException(status_code=404, detail=f"no recording kept for take {take}")
+    return FileResponse(str(path), media_type="audio/wav")
+
+
 @app.get("/api/voice/vocabulary")
 def voice_vocabulary():
     """joe's own spoken words -- what a segment saying each does -- for the
@@ -770,3 +813,216 @@ def voice_level(duration: float = 1.0, device: str | None = None):
         return input_level(duration=duration, device=device)
     except NoMicrophoneError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
+
+
+# ─── Media for the video pipeline ─────────────────────────────────────────────
+#
+# Audio or video uploaded once, then analysed -- and transcribed -- by id, for a
+# video editor's captions and timeline. Every failure is `{"detail": str}`.
+# docs/media.md is the reference; Modules/Media.py and Modules/Analysis.py are
+# the work.
+
+media_store = Media.MediaStore()
+
+# Media work runs on threads of its own, never on the event loop nor on the
+# pool FastAPI answers plain `def` routes with -- the voice API's among them, so
+# a video editor's queue never keeps a conversation waiting. Transcriptions
+# take turns on one thread, in the order they came (they share one whisper
+# model); decoding uploads and analysing them, up to four at once.
+_speech_work = ThreadPoolExecutor(max_workers=1, thread_name_prefix="joe-media-speech")
+_media_work = ThreadPoolExecutor(max_workers=4, thread_name_prefix="joe-media")
+
+
+async def _on(pool: ThreadPoolExecutor, work, /, *args, **kwargs):
+    """`work(*args, **kwargs)` on `pool`, awaited."""
+    return await asyncio.get_running_loop().run_in_executor(pool, functools.partial(work, *args, **kwargs))
+
+
+def _sweep_media(stop: threading.Event) -> None:
+    """Sweep expired uploads now and then until `stop`: a quarter of the TTL,
+    at most a minute apart. A sweep that fails waits for the next."""
+    while True:
+        try:
+            media_store.sweep()
+        except Exception:  # noqa: BLE001 -- the next sweep tries again
+            traceback.print_exc()
+        if stop.wait(min(60.0, max(1.0, media_store.ttl / 4))):
+            return
+
+
+def _refusal(errors) -> str:
+    """FastAPI's validation errors as one sentence: `where: what`, joined."""
+    said = []
+    for error in errors:
+        where = ".".join(str(part) for part in tuple(error.get("loc", ()))[1:]) or "request"
+        said.append(f"{where}: {error.get('msg', 'is not valid')}")
+    return "; ".join(said) or "the request is not valid"
+
+
+class _MediaRoute(APIRoute):
+    """A media route answers every failure as `{"detail": str}`, V1's one error
+    shape: a refused parameter as well, which FastAPI would answer with a list,
+    a `Media.MediaError` with its own status, and anything unforeseen as a 500
+    whose traceback goes to the server's log. Scoped to `/api/media`, so every
+    other route answers as it always has."""
+
+    def get_route_handler(self):
+        handle = super().get_route_handler()
+
+        async def route(request: Request):
+            try:
+                return await handle(request)
+            except RequestValidationError as exc:
+                raise HTTPException(status_code=422, detail=_refusal(exc.errors())) from None
+            except Media.MediaError as exc:
+                raise HTTPException(status_code=exc.status, detail=exc.detail) from None
+            except (StarletteHTTPException, ClientDisconnect):
+                raise  # answered as it is; a client that left hears nothing
+            except Exception as exc:  # noqa: BLE001 -- answered in V1's shape, and logged
+                traceback.print_exc()
+                raise HTTPException(status_code=500, detail=f"{type(exc).__name__}: {exc}") from None
+
+        return route
+
+
+media = APIRouter(prefix="/api/media", route_class=_MediaRoute)
+
+
+@media.get("/capabilities")
+def media_capabilities():
+    """What this engine takes and does, for a client to check before sending:
+    `{"formats", "features", "speech_model", "word_timestamps", "max_bytes",
+    "max_seconds", "ttl_seconds"}`. `formats` is empty when there is no ffmpeg,
+    since then nothing can be taken."""
+    return {
+        "formats": sorted(Media.FORMATS) if Media.ffmpeg_path() else [],
+        "features": list(Analysis.FEATURES),
+        "speech_model": Media.speech_model(),
+        # The locked openai-whisper has had word timestamps since 20230314.
+        "word_timestamps": True,
+        "max_bytes": Media.max_bytes(),
+        "max_seconds": Media.max_seconds(),
+        "ttl_seconds": float(media_store.ttl),
+    }
+
+
+@media.post("", status_code=201)
+async def media_upload(request: Request):
+    """Audio or video as the raw body, its type in `Content-Type`. Answers `201
+    {"media_id", "duration", "sample_rate", "channels", "has_audio"}`.
+
+    The headers are judged before a byte is read: 415 for a type joe does not
+    take, 413 for a declared length over `JOE_MEDIA_MAX_BYTES`, 503 when there
+    is no ffmpeg. The body is written to disk as it arrives and refused (413)
+    the moment it passes the cap; ffmpeg's decode runs on the media threads.
+    422 for a file with no decodable audio -- a video with no sound track
+    among them -- and 413 for a sound longer than `JOE_MEDIA_MAX_SECONDS`.
+    """
+    content_type = request.headers.get("content-type")
+    kind = Media.content_kind(content_type)
+    if kind is None:
+        given = (content_type or "").split(";")[0].strip().lower() or "none"
+        raise HTTPException(
+            status_code=415,
+            detail=f"unsupported media type '{given}'; joe takes {', '.join(sorted(Media.FORMATS))}",
+        )
+    cap = Media.max_bytes()
+    too_large = f"media larger than {cap} bytes (JOE_MEDIA_MAX_BYTES)"
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > cap:
+        raise HTTPException(status_code=413, detail=too_large)
+    ffmpeg = Media.ffmpeg_path()
+    if ffmpeg is None:
+        raise HTTPException(status_code=503,
+                            detail="ffmpeg was not found: set JOE_FFMPEG to its path or put it on PATH")
+    await _on(_media_work, media_store.sweep)
+    with media_store.receiving() as (media_id, folder):
+        upload = folder / f"upload.{Media.FORMATS[kind]}"
+        written = 0
+        with open(upload, "wb") as out:
+            async for chunk in request.stream():
+                written += len(chunk)
+                if written > cap:
+                    raise HTTPException(status_code=413, detail=too_large)
+                out.write(chunk)
+        try:
+            sound = await _on(_media_work, Media.extract, upload, folder, ffmpeg)
+        finally:
+            upload.unlink(missing_ok=True)
+        return media_store.commit(media_id, sound).answer()
+
+
+# The analysis's answer, in V1's order: every key but `duration` is a feature's.
+_ANALYSIS_KEYS = ("tempo", "beats", "onsets", "loudness", "silences", "peaks")
+
+
+def _features(asked: str | None) -> list[str]:
+    """`features`, comma-separated; absent or empty means all of them."""
+    names = [name.strip().lower() for name in (asked or "").split(",") if name.strip()]
+    if not names:
+        return list(Analysis.FEATURES)
+    unknown = [name for name in names if name not in Analysis.FEATURES]
+    if unknown:
+        raise HTTPException(
+            status_code=422,
+            detail=f"unknown feature '{unknown[0]}'; joe measures {', '.join(Analysis.FEATURES)}",
+        )
+    return names
+
+
+@media.post("/{media_id}/analyze")
+async def media_analyze(
+    media_id: str,
+    features: str | None = None,
+    peaks_rate: int = Query(Analysis.DEFAULT_PEAKS_RATE, ge=1, le=1000),
+    silence_db: float = Query(Analysis.DEFAULT_SILENCE_DB, ge=-120.0, le=0.0),
+    silence_min: float = Query(Analysis.DEFAULT_SILENCE_MIN, gt=0.0, le=3600.0),
+):
+    """`{"duration", "tempo", "beats", "onsets", "loudness", "silences", "peaks"}`,
+    with only the features asked for. Times are seconds of the uploaded media.
+
+    `peaks_rate` is the waveform's values per second; `silence_db` and
+    `silence_min` are the level a silence stays under and how long it lasts.
+    Measured on the media threads.
+    """
+    wanted = _features(features)
+
+    def analyze() -> dict:
+        with media_store.use(media_id) as item:
+            found = Analysis.analyze(
+                item.sound, item.rhythm, wanted, peaks_rate=peaks_rate, silence_db=silence_db,
+                silence_min=silence_min, ffmpeg=Media.ffmpeg_path(),
+            )
+        return {"duration": item.duration, **{key: found[key] for key in _ANALYSIS_KEYS if key in found}}
+
+    return await _on(_media_work, analyze)
+
+
+@media.post("/{media_id}/transcribe")
+async def media_transcribe(media_id: str, language: str | None = None, words: bool = True):
+    """`{"text", "language", "segments": [{"start", "end", "text", "words":
+    [{"start", "end", "word", "probability"}]}], "info"}`, in seconds of the
+    uploaded media.
+
+    `language` is a code or a name; absent or empty, whisper detects it.
+    `words=false` leaves every segment's `words` empty. Transcriptions take
+    turns, in the order they came, on media's own thread and whisper model --
+    never the voice loop's.
+    """
+
+    def transcribe() -> dict:
+        with media_store.use(media_id) as item:
+            return Media.transcribe(item, language=language, words=words)
+
+    return await _on(_speech_work, transcribe)
+
+
+@media.delete("/{media_id}", status_code=204)
+def media_delete(media_id: str):
+    """Removes an upload now -- or, if it is being transcribed or analysed, as
+    soon as that ends. 404 for one that is not here."""
+    media_store.delete(media_id)
+    return Response(status_code=204)
+
+
+app.include_router(media)

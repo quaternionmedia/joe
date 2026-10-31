@@ -13,7 +13,7 @@ The repo has two primary parts:
 
 - Python `3.11.x` (required by `pyproject.toml`)
 - Node.js + npm
-- [`uv`](https://docs.astral.sh/uv/) (recommended) **or** `pdm` / `venv+pip`
+- [`uv`](https://docs.astral.sh/uv/): `uv.lock` is the one description of joe's Python dependencies
 
 ### Recommended: uv
 
@@ -28,7 +28,7 @@ uv run joe dev       # Vite :3000 + API :8000
 Then in a second terminal, run the pipeline:
 
 ```powershell
-uv run joe run       # processes Data/Audio/ -> Data/Output/
+uv run joe run       # the newest recording in Data/Audio/ -> Data/Output/
 ```
 
 Open `http://localhost:3000/joe`, click **Results → Fetch Latest**.
@@ -40,7 +40,7 @@ Open `http://localhost:3000/joe`, click **Results → Fetch Latest**.
 | `uv run joe frontend` | Vite dev server only (`localhost:3000`) |
 | `uv run joe backend` | FastAPI API server only (`localhost:8000`) |
 | `uv run joe dev` | Both servers (Ctrl+C to stop) |
-| `uv run joe run` | Run the pipeline once |
+| `uv run joe run [NAME...] [--all]` | Run the pipeline once: on the newest recording in `Data/Audio/`, those named, or every one |
 | `uv run joe voice setup` | **Start here for voice.** Find your microphone while you talk, save it, and prove it with a transcribed sentence |
 | `uv run joe voice listen [--device N] [--fixed]` | Record until you stop talking, then transcribe (`--fixed` records the whole `--duration`) |
 | `uv run joe voice transcribe <path>` | Transcribe an audio file to text |
@@ -87,6 +87,8 @@ the same without looking:
 | `Shift`+`Esc` | stops listening |
 | `~`, held | keeps the turn open through pauses; releasing it ends the turn |
 | `T` | opens or closes the transcript pane |
+| `L`, `A` | open or close the Library and the analysis Results |
+| `Esc` | closes the Library, the Results and the transcript pane |
 
 A key or button counts as having said the word: the turn in progress ends at
 once. **A question can be answered before it ends:** a key, the held `~`, or
@@ -110,6 +112,13 @@ follows the newest line unless scrolled back. **What can be said** lists the
 conversation's words and checks and joe's own. The piano roll keeps its notes
 out from under the pane.
 
+**A take on the visualiser:** a take's **Show** plays its recording through the
+transport and the spectrum, and lays its words along the bottom of the piano
+roll at the times they were said, the word under the playhead lit and struck
+words crossed out. joe knows when each segment of a take began and ended, so a
+segment's words share its span evenly. Ejecting the recording, or a pipeline
+run finishing, takes the words away.
+
 **The transcript as it is written:** a take is transcribed piece by piece
 while it is spoken, and the panel shows the words as they arrive. Clicking a
 word strikes it, or restores it; Backspace strikes the last word still
@@ -124,6 +133,18 @@ own WAV under `Data/Voice/segments/` and described in `Data/Voice/segments.jsonl
 -- its timing and levels, the hint and prompt it was decoded with, whisper's
 own confidence, the text, the words struck, and what the dialog asking finally
 accepted. `JOE_DATAPOINTS=0` writes none; nothing deletes them.
+
+**The audio engine of a video editor:** alfred uploads a clip, or the mixed
+sound of a timeline, to `/api/media` and asks by id what is said in it -- each
+segment and word with its time, for captions -- and how it moves: tempo,
+beats, onsets, loudness (dBFS and LUFS), silences and a waveform's peaks.
+Uploads are kept privately under `Data/Media/` for an hour after their last
+use. It needs ffmpeg (on PATH, or named by `JOE_FFMPEG`). Beside alfred, which
+has port 8000, run the API alone: `uv run uvicorn api:app --port 8010`. That
+listens on loopback, which alfred's containers reach on Docker Desktop and not
+on a Linux Docker host; joe has no authentication, so mind what else can reach
+it before binding wider. [docs/media.md](docs/media.md) is its reference, and
+says how to run it on a Linux host and what that exposes.
 
 See [docs/api.md](docs/api.md) for the full API endpoint reference.
 
@@ -151,8 +172,12 @@ npm run test:e2e
 Run Python tests:
 
 ```powershell
-python -m pytest -q
+uv run --frozen pytest tests/ -q
 ```
+
+The media API's tests make their media with ffmpeg and skip without it; name
+one with `JOE_FFMPEG` to run them. One runs the real whisper model, when it is
+already cached here (`-m "not whisper_model"` leaves it out).
 
 Run frontend E2E tests:
 
@@ -163,7 +188,7 @@ npm run test:e2e
 Run backend pipeline:
 
 ```powershell
-python main.py
+uv run python main.py
 ```
 
 Expected artifacts are created under `Data/Output/<timestamp>/`:
@@ -177,7 +202,7 @@ Input audio is read from `Data/Audio/`.
 ## Project Structure
 
 - `Data/`: input audio and generated outputs (git-ignored)
-- `Modules/`: core Python classes (`Audio`, `Chroma`, `MIDI`, `Note`, utilities) — see [docs/modules.md](docs/modules.md)
+- `Modules/`: core Python classes (`Audio`, `Chroma`, `MIDI`, `Note`, utilities), and `Media` and `Analysis` behind the media API — see [docs/modules.md](docs/modules.md)
 - `src/`: frontend source (`p5.js` + Vite) — components, config, sketch
 - `tests/`: Python unit tests; `tests/e2e/` for Playwright E2E tests
 - `docs/`: contributor guide, module reference, API reference
@@ -189,21 +214,21 @@ Input audio is read from `Data/Audio/`.
 
 The Vite frontend (`src/`) has three layers:
 
-- **FFT canvas** — `src/sketch.js` runs a live mic FFT visualiser via `p5.AudioIn` + `p5.FFT`. p5 and p5.sound are loaded as CDN globals (not bundled via Vite) because p5.sound must patch `window.p5` at script-evaluation time. Dot size scales on a dB curve (`20·log₁₀(v/255)`) to match human loudness perception.
+- **FFT canvas** — `src/sketch.js` runs a live mic FFT visualiser via `p5.AudioIn` + `p5.FFT`. p5 and p5.sound are loaded as CDN globals (not bundled via Vite) because p5.sound must patch `window.p5` at script-evaluation time. Dot size scales on a dB curve (`20·log₁₀(v/255)`) to match human loudness perception: nothing at or below a noise floor of 20, up to 10 px at full scale, 255.
 - **Piano roll canvas** — `src/components/MainCanvas.js` overlays a full-screen canvas that runs in two modes: **LIVE** (real-time scrolling note detections from mic onset detection) and **RESULTS** (static pitch × time piano roll from pipeline JSON, coloured by transform type: Raw white, Harmonic cyan, Percussive orange).
 - **Era panel** — `src/components/EraPanel.js` shows setlist metadata with arrow-key navigation and anime.js cross-fades.
 
 ### Bottom bar control groups
 
 ```text
-[Joe, go!] | [Browser|Backend] [Live] [dot] | [LIVE|RESULTS] [Play] [Stop] [scrub] | [Library] [Results] | [Instruct by voice]
+[Joe, go!] | [Browser mic|joe's mic] [Live] [dot] | [LIVE|RESULTS] [Play] [Stop] [scrub] | [Library] [Results] | [Instruct by voice]
 ```
 
 | Group | Controls | Notes |
 | --- | --- | --- |
-| Audio context | `Joe, go!` | One-time click — resumes Web Audio, enables Live |
-| Live capture | mode select + `Live` + indicator | Browser = MediaRecorder mic; Backend = sounddevice WAV |
-| Transport | mode badge + `Play/Stop` + scrub + `×` eject | Disabled while recording; badge shows `LIVE` or `RESULTS`; `×` clears active source |
+| Audio context | `Joe, go!` | Starts Web Audio and enables Live; it then reads **Joe, stop!**, and a second press stops audio, unless a recording is running |
+| Live capture | where Live records from + `Live` + indicator | **Browser mic** = this browser's microphone (MediaRecorder); **joe's mic** = the microphone of the machine joe runs on (sounddevice WAV) |
+| Transport | mode badge + `Play/Stop` + scrub + `×` eject | `Play` and `Stop` are disabled while recording; badge shows `LIVE` or `RESULTS`; `×` clears active source |
 | Panels | `Library` + `Results` | Slide-in panels for file management and analysis output |
 | Voice | `Instruct by voice` | One spoken instruction into qmcp's inbox; the outcome shows in the voice panel |
 
@@ -215,9 +240,10 @@ See [docs/cookbook.md](docs/cookbook.md) for step-by-step recipes.
 
 | Document | Contents |
 | --- | --- |
-| [docs/contributing.md](docs/contributing.md) | Local setup, UI control groups, troubleshooting, branch naming, pre-PR checks |
+| [docs/contributing.md](docs/contributing.md) | Local setup, UI control groups, troubleshooting, branch naming, pre-PR checks, what CI runs |
 | [docs/cookbook.md](docs/cookbook.md) | Step-by-step recipes for common workflows |
 | [docs/api.md](docs/api.md) | FastAPI endpoint reference with `curl` examples |
+| [docs/media.md](docs/media.md) | The media API a video editor uses: uploads, transcripts with word times, analysis |
 | [docs/modules.md](docs/modules.md) | Python module architecture and data flow |
 
 ## Contributing

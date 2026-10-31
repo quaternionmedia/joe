@@ -168,6 +168,23 @@ async function noteLater(page) {
   return release;
 }
 
+test('the first-run hint sits below the pane, not over its last lines', async ({ page }) => {
+  await script(page);
+  await page.goto('/');
+  await page.keyboard.press('t');
+  const pane = page.getByTestId('transcript-pane');
+  const hint = page.locator('#first-run-hint');
+  await expect(hint).toBeVisible();
+
+  const paneBottom = async () => (await pane.boundingBox()).y + (await pane.boundingBox()).height;
+  expect(await paneBottom()).toBeLessThanOrEqual((await hint.boundingBox()).y + 0.5);
+
+  await page.locator('#hint-dismiss').click();
+  await expect(hint).toBeHidden();
+  const viewport = page.viewportSize();
+  expect(await paneBottom()).toBeCloseTo(viewport.height - 48, 0);
+});
+
 // A take that heard nothing: no words in its segments, no text.
 const QUIET = { kind: 'take', source: 'voice', text: '', segments: [{ index: 0, words: [], struck: [], start: 0, end: 1 }] };
 
