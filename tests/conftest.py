@@ -4,8 +4,9 @@ import pytest
 
 # joe's settings, as a person's shell or a launcher may hold them. Every test
 # starts without them; a test of one sets it itself.
-MACHINE_SETTINGS = ("JOE_AUDIO_FILE", "JOE_BARGE_FACTOR", "JOE_BARGE_IN", "JOE_DATAPOINTS",
-                    "JOE_INPUT_DEVICE", "JOE_LANGUAGE", "JOE_OUTPUT_DEVICE", "VOX_OUTPUT_DEVICE")
+MACHINE_SETTINGS = ("JOE_BARGE_FACTOR", "JOE_BARGE_IN", "JOE_DATAPOINTS", "JOE_INPUT_DEVICE",
+                    "JOE_LANGUAGE", "JOE_MEDIA_DIR", "JOE_MEDIA_MAX_BYTES", "JOE_MEDIA_MAX_SECONDS",
+                    "JOE_MEDIA_TTL", "JOE_OUTPUT_DEVICE", "VOX_OUTPUT_DEVICE")
 
 
 @pytest.fixture(autouse=True)
