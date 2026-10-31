@@ -53,14 +53,15 @@ For practical end-to-end workflows, see [cookbook.md](cookbook.md).
 
 ## UI Control Groups
 
-The bottom transport bar has four groups, left to right:
+The bottom transport bar has five groups, left to right:
 
 | Group | Controls | Purpose |
 | --- | --- | --- |
 | **1. Audio context** | `Joe, go!` | Resumes the Web Audio context (required once per page load). Turns green when active. |
 | **2. Live capture** | `Browser mic\|joe's mic` select + `Live` button + red dot | Sets where Live records from; `Live` starts/stops recording. Disabled until **Joe, go!** is clicked. |
 | **3. Transport** | `LIVE\|RESULTS` badge + `Play` + `Stop` + scrub + time + filename + `×` | Plays back a loaded audio file; badge shows canvas mode. Play/Stop disabled while recording. `×` ejects the current source. |
-| **4. Panels** | `Library` + `Results` | Slide-in panels for audio file management and analysis output. |
+| **4. Panels** | `Library` + `Results` + `Transcript` | Slide-in panels for audio file management and analysis output, and the transcript pane. |
+| **5. Voice** | `Instruct by voice` | One spoken instruction into qmcp's inbox; the outcome shows in the voice panel. |
 
 **Dependency chain:**
 
@@ -84,7 +85,6 @@ Joe, go!  ->  enables Live  ->  recording  ->  stop  ->  Library: Process  ->  R
 | `Live` starts but no notes appear | Mic permission denied or wrong source | Check browser mic permissions; try **joe's mic** |
 | `Play` button is greyed out | Live recording is active | Click **Stop** to end recording first |
 | **Fetch Latest** returns 404 | No pipeline output yet | Run `uv run joe run` (or process a file via Library) |
-| Red dot pulses but canvas is blank | `Joe, go!` not clicked | Click **Joe, go!** — Web Audio must be started before FFT is active |
 | Backend capture fails silently | `sounddevice` not installed or no device | Check `uv sync` completed; verify audio input device |
 
 ---
