@@ -1,7 +1,8 @@
 # Joe API Reference
 
 The Joe FastAPI server (`api.py`) provides endpoints for pipeline results, audio capture,
-the audio library, and speech analysis.
+the audio library, and speech analysis -- and, under `/api/media`, the media API a video
+editor uses for captions and analysis, documented in [media.md](media.md).
 
 **Base URL (local dev):** `http://localhost:8000`
 
@@ -595,6 +596,25 @@ is skipped. They play on the default output unless `JOE_OUTPUT_DEVICE`, or
 `VOX_OUTPUT_DEVICE`, names another by a fragment of its name; of an output
 listed under several host APIs, MME's is played to, and a fragment naming two
 different outputs is refused.
+
+### Media for the video pipeline
+
+Audio or video uploaded once, then transcribed and analysed by id -- a video
+editor's captions, beats and waveforms. Its own page, [media.md](media.md), is
+the reference; in short:
+
+| Route | Answers |
+| --- | --- |
+| `GET /api/media/capabilities` | `{"formats", "features", "speech_model", "word_timestamps", "max_bytes", "max_seconds", "ttl_seconds"}` |
+| `POST /api/media` | Raw audio or video body, typed by `Content-Type` -> `201 {"media_id", "duration", "sample_rate", "channels", "has_audio"}`; `415`, `413`, `422`, `503` |
+| `POST /api/media/{media_id}/transcribe?language=&words=true` | `{"text", "language", "segments": [{"start", "end", "text", "words"}], "info"}` |
+| `POST /api/media/{media_id}/analyze?features=...` | `{"duration", "tempo", "beats", "onsets", "loudness", "silences", "peaks"}` |
+| `DELETE /api/media/{media_id}` | `204`; `404` for one that is not here |
+
+Every failure there is `{"detail": str}`. Uploads are kept privately under
+`Data/Media/` and removed `JOE_MEDIA_TTL` seconds (an hour) after their last
+use. ffmpeg is required (`JOE_FFMPEG`, or on PATH). Beside alfred, which has
+port 8000, run the API alone: `uv run uvicorn api:app --port 8010`.
 
 ---
 
