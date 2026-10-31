@@ -87,6 +87,8 @@ the same without looking:
 | `Shift`+`Esc` | stops listening |
 | `~`, held | keeps the turn open through pauses; releasing it ends the turn |
 | `T` | opens or closes the transcript pane |
+| `L`, `A` | open or close the Library and the analysis Results |
+| `Esc` | closes the Library, the Results and the transcript pane |
 
 A key or button counts as having said the word: the turn in progress ends at
 once. **A question can be answered before it ends:** a key, the held `~`, or
@@ -110,6 +112,13 @@ follows the newest line unless scrolled back. **What can be said** lists the
 conversation's words and checks and joe's own. The piano roll keeps its notes
 out from under the pane.
 
+**A take on the visualiser:** a take's **Show** plays its recording through the
+transport and the spectrum, and lays its words along the bottom of the piano
+roll at the times they were said, the word under the playhead lit and struck
+words crossed out. joe knows when each segment of a take began and ended, so a
+segment's words share its span evenly. Ejecting the recording, or a pipeline
+run finishing, takes the words away.
+
 **The transcript as it is written:** a take is transcribed piece by piece
 while it is spoken, and the panel shows the words as they arrive. Clicking a
 word strikes it, or restores it; Backspace strikes the last word still
@@ -124,6 +133,15 @@ own WAV under `Data/Voice/segments/` and described in `Data/Voice/segments.jsonl
 -- its timing and levels, the hint and prompt it was decoded with, whisper's
 own confidence, the text, the words struck, and what the dialog asking finally
 accepted. `JOE_DATAPOINTS=0` writes none; nothing deletes them.
+
+**The audio engine of a video editor:** alfred uploads a clip, or the mixed
+sound of a timeline, to `/api/media` and asks by id what is said in it -- each
+segment and word with its time, for captions -- and how it moves: tempo,
+beats, onsets, loudness (dBFS and LUFS), silences and a waveform's peaks.
+Uploads are kept privately under `Data/Media/` for an hour after their last
+use. It needs ffmpeg (on PATH, or named by `JOE_FFMPEG`). Beside alfred, which
+has port 8000, run the API alone: `uv run uvicorn api:app --port 8010`.
+[docs/media.md](docs/media.md) is its reference.
 
 See [docs/api.md](docs/api.md) for the full API endpoint reference.
 
@@ -154,6 +172,10 @@ Run Python tests:
 python -m pytest -q
 ```
 
+The media API's tests make their media with ffmpeg and skip without it; name
+one with `JOE_FFMPEG` to run them. One runs the real whisper model, when it is
+already cached here (`-m "not whisper_model"` leaves it out).
+
 Run frontend E2E tests:
 
 ```powershell
@@ -177,7 +199,7 @@ Input audio is read from `Data/Audio/`.
 ## Project Structure
 
 - `Data/`: input audio and generated outputs (git-ignored)
-- `Modules/`: core Python classes (`Audio`, `Chroma`, `MIDI`, `Note`, utilities) — see [docs/modules.md](docs/modules.md)
+- `Modules/`: core Python classes (`Audio`, `Chroma`, `MIDI`, `Note`, utilities), and `Media` and `Analysis` behind the media API — see [docs/modules.md](docs/modules.md)
 - `src/`: frontend source (`p5.js` + Vite) — components, config, sketch
 - `tests/`: Python unit tests; `tests/e2e/` for Playwright E2E tests
 - `docs/`: contributor guide, module reference, API reference
@@ -196,13 +218,13 @@ The Vite frontend (`src/`) has three layers:
 ### Bottom bar control groups
 
 ```text
-[Joe, go!] | [Browser|Backend] [Live] [dot] | [LIVE|RESULTS] [Play] [Stop] [scrub] | [Library] [Results] | [Instruct by voice]
+[Joe, go!] | [Browser mic|joe's mic] [Live] [dot] | [LIVE|RESULTS] [Play] [Stop] [scrub] | [Library] [Results] | [Instruct by voice]
 ```
 
 | Group | Controls | Notes |
 | --- | --- | --- |
 | Audio context | `Joe, go!` | One-time click — resumes Web Audio, enables Live |
-| Live capture | mode select + `Live` + indicator | Browser = MediaRecorder mic; Backend = sounddevice WAV |
+| Live capture | where Live records from + `Live` + indicator | **Browser mic** = this browser's microphone (MediaRecorder); **joe's mic** = the microphone of the machine joe runs on (sounddevice WAV) |
 | Transport | mode badge + `Play/Stop` + scrub + `×` eject | Disabled while recording; badge shows `LIVE` or `RESULTS`; `×` clears active source |
 | Panels | `Library` + `Results` | Slide-in panels for file management and analysis output |
 | Voice | `Instruct by voice` | One spoken instruction into qmcp's inbox; the outcome shows in the voice panel |
@@ -218,6 +240,7 @@ See [docs/cookbook.md](docs/cookbook.md) for step-by-step recipes.
 | [docs/contributing.md](docs/contributing.md) | Local setup, UI control groups, troubleshooting, branch naming, pre-PR checks |
 | [docs/cookbook.md](docs/cookbook.md) | Step-by-step recipes for common workflows |
 | [docs/api.md](docs/api.md) | FastAPI endpoint reference with `curl` examples |
+| [docs/media.md](docs/media.md) | The media API a video editor uses: uploads, transcripts with word times, analysis |
 | [docs/modules.md](docs/modules.md) | Python module architecture and data flow |
 
 ## Contributing

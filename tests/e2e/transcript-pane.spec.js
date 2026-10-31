@@ -152,3 +152,68 @@ test('a history that arrives after the stream keeps what streamed in', async ({ 
   await page.waitForTimeout(2600);  // past a reconnect, which sends the events again
   await expect(entries).toHaveCount(5);
 });
+
+test('the first-run hint sits below the pane, not over its last lines', async ({ page }) => {
+  await script(page);
+  await page.goto('/');
+  await page.keyboard.press('t');
+  const pane = page.getByTestId('transcript-pane');
+  const hint = page.locator('#first-run-hint');
+  await expect(hint).toBeVisible();
+
+  const paneBottom = async () => (await pane.boundingBox()).y + (await pane.boundingBox()).height;
+  expect(await paneBottom()).toBeLessThanOrEqual((await hint.boundingBox()).y + 0.5);
+
+  await page.locator('#hint-dismiss').click();
+  await expect(hint).toBeHidden();
+  const viewport = page.viewportSize();
+  expect(await paneBottom()).toBeCloseTo(viewport.height - 48, 0);
+});
+
+// A take that heard nothing: no words in its segments, no text.
+const QUIET = { kind: 'take', source: 'voice', text: '', segments: [{ index: 0, words: [], struck: [], start: 0, end: 1 }] };
+
+test('takes in a row that heard nothing fold into one line, which opens and stays open', async ({ page }) => {
+  const history = { kept: true, entries: [
+    { kind: 'said', text: 'What should be done?', at: 1000 },
+    { ...QUIET, take: 'q1', at: 1001 },
+    { ...QUIET, take: 'q2', at: 1002, segments: [] },
+    { ...QUIET, take: 'q3', at: 1003 },
+    { kind: 'take', take: 'k1', text: 'yes', source: 'key', segments: [], at: 1004 },
+    { ...QUIET, take: 'q4', at: 1005 },
+  ] };
+  await script(page, { history });
+  // The stream's second connection carries a note, so the pane is drawn again
+  // after the run is opened.
+  let connections = 0;
+  let release;
+  const released = new Promise(done => { release = done; });
+  await page.route('**/api/voice/conversation', async route => {
+    connections += 1;
+    if (connections > 1) await released;
+    const events = connections > 1 ? [{ state: 'note', text: 'Loud enough.', at: 3000 }] : [];
+    await route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: sse(events) });
+  });
+  await page.goto('/');
+  await page.keyboard.press('t');
+
+  const folds = page.getByTestId('transcript-fold');
+  await expect(folds).toHaveText(['3 takes, nothing heard', '1 take, nothing heard']);
+  const lines = page.getByTestId('transcript-entries').locator(':scope > .tp-entry');
+  await expect(lines.locator('.tp-who')).toHaveText(['Asked', 'Heard']);
+  await expect(lines.nth(1).locator('.tp-text')).toHaveText('yes');
+  const run = page.locator('.tp-fold-items').first();
+  await expect(run).toBeHidden();
+
+  await folds.first().click();
+  await expect(folds.first()).toHaveAttribute('aria-expanded', 'true');
+  await expect(run).toBeVisible();
+  await expect(run.locator('.tp-entry')).toHaveCount(3);
+
+  release();
+  await expect(page.locator('.tp-note')).toHaveCount(1, { timeout: 10_000 });
+  await expect(page.locator('.tp-fold-items').first()).toBeVisible();
+
+  await folds.first().click();
+  await expect(page.locator('.tp-fold-items').first()).toBeHidden();
+});
