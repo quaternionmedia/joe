@@ -1,9 +1,10 @@
 """
 Joe FastAPI server — exposes pipeline results and a trigger endpoint.
 
-Endpoints. Each but the health check and the vocabulary belongs to the
-capability in brackets, and answers 403 while it is off; a fresh joe has only
-[media] on (Modules/Access.py, docs/security.md):
+Endpoints. Each but the health check, the vocabulary and FastAPI's own
+/openapi.json, /docs and /redoc belongs to the capability in brackets, and
+answers 403 while it is off; a fresh joe has only [media] on
+(Modules/Access.py, docs/security.md):
     GET  /api/health                Health check, and which capabilities are on
     GET  /api/results/latest        Returns the most-recent Process_Data JSON  [library]
     POST /api/run                   Runs the pipeline on Data/Audio/: the newest, ?files=, or ?all=true  [library]
@@ -696,7 +697,7 @@ def voice_history(limit: int = 200):
     return {"entries": History.read(datapoints.manifest, limit), "kept": datapoints.enabled}
 
 
-@app.get("/api/voice/takes/{take}/audio")
+@app.get("/api/voice/takes/{take}/audio", dependencies=TRANSCRIPTS)
 def voice_take_audio(take: str):
     """One take's recording, as joe wrote it, for the visualiser to play with
     the take's words on its timeline. Only a recording under joe's own voice

@@ -31,10 +31,11 @@ describes is `Modules/Access.py`.
 
 ## The capabilities and their settings
 
-Each route but the health check and the vocabulary belongs to one
-capability. A capability is a setting, `1` or `0`, read from the environment
-the API runs in; a route of one that is off answers `403` naming the setting,
-before it judges anything it was asked.
+Each route but the health check, the vocabulary and FastAPI's own
+`/openapi.json`, `/docs` and `/redoc` belongs to one capability. A capability is
+a setting, `1` or `0`, read from the environment the API runs in; a route of one
+that is off answers `403` naming the setting, before it judges anything it was
+asked.
 
 | Capability | Setting | Fresh joe | What it serves | Turned on, whatever reaches the port... |
 | --- | --- | --- | --- | --- |
@@ -107,7 +108,7 @@ joe: !!! WARNING: answering 192.168.1.20, which is not this machine's loopback. 
 | --- | --- | --- |
 | **alfred**, through `vox.media` (`alfred/core/utils/audio_engine.py`) | `GET /api/media/capabilities`, `POST /api/media`, `POST /api/media/{id}/transcribe`, `POST /api/media/{id}/analyze`, `DELETE /api/media/{id}` | **Nothing.** `media` is on in a fresh joe. alfred's containers reach joe as `host.docker.internal` on Docker Desktop and as docker0's address on Linux; joe answers to both. On Linux, listening on docker0's address is a choice of its own ([media.md](media.md)) |
 | **qmcp's voice loop**: `qmcp human voice`, `qmcp serve --converse`, and joe's page's **Answer by voice** and **Instruct by voice**, which start it | `GET /api/health`, `POST /api/voice/listen`, `POST /api/voice/watch`, `POST /api/voice/unwatch`, `GET /api/voice/control`, `POST /api/voice/conversation` | `JOE_ALLOW_MICROPHONE=1` |
-| ...and joe's page showing that conversation (the voice panel, the transcript pane) | `GET /api/voice/conversation` (events), `GET /api/voice/history`, `GET /api/voice/vocabulary`; the page's keys and buttons post `answer`, `hold` and `strike` | `JOE_ALLOW_TRANSCRIPTS=1` as well |
+| ...and joe's page showing that conversation (the voice panel, the transcript pane) | `GET /api/voice/conversation` (events), `GET /api/voice/history`, `GET /api/voice/vocabulary`, and `GET /api/voice/takes/{take}/audio` for a take shown on the visualiser; the page's keys and buttons post `answer`, `hold` and `strike` | `JOE_ALLOW_TRANSCRIPTS=1` as well |
 | **vox's voice loop**, against a running joe: `vox doctor`, `vox self-report` (live) | `GET /api/health`, `GET /api/voice/devices`, `POST /api/voice/listen` | `JOE_ALLOW_MICROPHONE=1` |
 | `vox loop`, `vox self-report FILE` | `POST /api/voice/transcribe?filename=`, on a file it writes where joe resolves names (`--echo-dir`, joe's `Data/Voice/` or `Data/Audio/`) | `JOE_ALLOW_LIBRARY=1` |
 | **The family hub**: the performing family's demo, which starts joe with `joe serve` and checks it with `joe check` (joe's `feat/family-control`, not on this branch) | joe's page through Vite: the library, the pipeline and its results; and the hub's `POST /family/cue` and `GET /family/state`, which that branch adds | `JOE_ALLOW_LIBRARY=1`. The `/family` routes write into the library and run the pipeline, and have no capability yet: when that branch lands they belong to `library` or to one of their own |
@@ -197,6 +198,7 @@ access control.
 | `GET /api/voice/conversation/state` | `transcripts` | The current state and recent events |
 | `GET /api/voice/history` | `transcripts` | Every take and every sentence said, from the start |
 | `GET /api/voice/transcript` | `transcripts` | The take being transcribed, or the last |
+| `GET /api/voice/takes/{take}/audio` | `transcripts` | One take's recording, by its id, from joe's voice folder alone |
 | `GET /api/audio/files` | `library` | The names, sizes and times of `Data/Audio/`'s recordings |
 | `GET /api/audio/{filename}` | `library` | One recording, whole |
 | `POST /api/audio/upload` | `library` | Writes up to 100 MB into `Data/Audio/` |
@@ -273,7 +275,8 @@ separator, no `..`, no NUL, and no trailing dot or space (which Windows
 strips, opening a file under a name no listing shows), and must resolve to a
 file inside `Data/Audio/` (or `Data/Voice/`), symlinks included; anything
 else is a 404, the same as a missing file. A media id must be 32 hexadecimal
-digits before it reaches the filesystem. joe makes every name it writes.
+digits before it reaches the filesystem, and a take's id 6 to 32, and its recording is
+served only from under `Data/Voice/`, whatever its record names. joe makes every name it writes.
 
 **Where files go.** Some of joe's folders under `Data/` resolve against the
 directory the API runs in and some against the checkout: run the API from

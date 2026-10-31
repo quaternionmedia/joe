@@ -143,7 +143,7 @@ def dev(allow: Allow = None):
     """Start both frontend and backend dev servers. Ctrl+C stops both.
 
     With no `--allow`, the API serves every capability -- the page's Library
-    and Results need `library`, its Backend capture and voice keys
+    and Results need `library`, its joe's mic capture and voice keys
     `microphone`, and its voice panel and transcript `transcripts` -- on
     loopback alone. A setting already in the environment is kept. With
     `--allow`, it serves what `backend` would: `--allow media` for the media
@@ -184,7 +184,7 @@ def run(
     _echo("Running pipeline...")
     result = subprocess.run([sys.executable, "main.py", *(["--all"] if every else names)], check=False)
     if result.returncode == 0:
-        _echo("Done. Load results with `joe backend` + Fetch Latest.")
+        _echo("Done. Load results with `joe backend --allow library` + Fetch Latest.")
     else:
         _echo(f"Pipeline exited with code {result.returncode}.", err=True)
         raise typer.Exit(result.returncode)

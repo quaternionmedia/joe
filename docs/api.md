@@ -15,10 +15,10 @@ directly when both servers are running via `joe dev`.
 
 ## Capabilities
 
-Each route but the health check and the vocabulary belongs to a **capability**, named
-under its heading below. A capability that is off answers every one of its routes with
-`403` and a `detail` naming the setting that turns it on, before anything the route was
-asked is judged:
+Each route but the health check, the vocabulary and FastAPI's own `/openapi.json`, `/docs`
+and `/redoc` belongs to a **capability**, named under its heading below. A capability that
+is off answers every one of its routes with `403` and a `detail` naming the setting that
+turns it on, before anything the route was asked is judged:
 
 ```json
 {"detail": "the audio library is off on this joe: JOE_ALLOW_LIBRARY=1 turns it on, for whatever can reach this port -- joe has no authentication (docs/security.md)"}
@@ -28,7 +28,7 @@ asked is judged:
 | --- | --- | --- | --- |
 | `media` | `JOE_ALLOW_MEDIA` | on | `/api/media/*` ([media.md](media.md)) |
 | `microphone` | `JOE_ALLOW_MICROPHONE` | off | `/api/capture/*`, `/api/voice/devices`, `listen`, `watch`, `unwatch`, `level`, `answer`, `hold`, `strike`, `control`, and `POST /api/voice/conversation` |
-| `transcripts` | `JOE_ALLOW_TRANSCRIPTS` | off | `GET /api/voice/conversation`, `/conversation/state`, `/history`, `/transcript` |
+| `transcripts` | `JOE_ALLOW_TRANSCRIPTS` | off | `GET /api/voice/conversation`, `/conversation/state`, `/history`, `/transcript`, `/takes/{take}/audio` |
 | `library` | `JOE_ALLOW_LIBRARY` | off | `/api/audio/*`, `/api/voice/transcribe`, `/api/run`, `/api/run/{filename}`, `/api/results/latest` |
 
 Set them in the API's environment, or start it with `uv run joe backend --allow
@@ -42,9 +42,12 @@ Whatever is on, joe refuses what a page on another site can make a browser send
 
 | Status | When |
 | --- | --- |
-| `400` | The `Host` is not `localhost`, an IP address, `host.docker.internal`, or a name in `JOE_ALLOWED_HOSTS` |
+| `400` | The `Host` is not `localhost`, a `*.localhost` name, an IP address, `host.docker.internal`, or a name in `JOE_ALLOWED_HOSTS` |
 | `403` | A POST or DELETE whose `Origin` is not the page joe served, its dev page on port 3000, or one in `JOE_ALLOWED_ORIGINS`; or anything marked `Sec-Fetch-Site: cross-site` but following a link |
 | `415` | A body sent to `answer`, `hold`, `strike` or `POST /api/voice/conversation` whose `Content-Type` is not `application/json` |
+
+A page in `JOE_ALLOWED_ORIGINS` may `GET` and `POST` and read the answers; the browser's
+preflight of its `DELETE` is refused ([security.md](security.md#requests-from-a-browser)).
 
 curl, vox and alfred send none of those headers, and reach joe at names it answers to.
 
@@ -655,6 +658,8 @@ closed before anyone spoke -- is no entry, and a line cut short is skipped.
 under `JOE_DATAPOINTS=0`, when nothing is written to read back.
 
 ### `GET /api/voice/takes/{take}/audio`
+
+**Capability:** `transcripts`.
 
 One take's recording, `audio/wav`, by the take's hex id, for the visualiser to
 play with the take's words on its timeline. Only a recording under joe's own
