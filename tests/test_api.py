@@ -138,8 +138,8 @@ def test_run_on_file_runs_pipeline_for_file_inside_audio_dir(client, no_subproce
     assert res.status_code == 200
     assert res.json() == {"returncode": 0, "stdout": "ok", "stderr": ""}
     assert len(no_subprocess) == 1
-    (_, kwargs), = no_subprocess
-    assert Path(kwargs["env"]["JOE_AUDIO_FILE"]) == (api.AUDIO_DIR / GOOD).resolve()
+    (args, _), = no_subprocess
+    assert args[-1] == GOOD
 
 
 @pytest.mark.parametrize("name", BAD_REQUEST_NAMES)
