@@ -94,3 +94,53 @@ test('a refusal shows qmcp\'s reason', async ({ page }) => {
 
   await expect(page.getByTestId('voice-queue-note')).toHaveText(detail);
 });
+
+// The page's visibility, as a browser sets it when the tab is hidden or shown.
+const showPage = (page, state) => page.evaluate(state => {
+  Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state });
+  document.dispatchEvent(new Event('visibilitychange'));
+}, state);
+
+test('while qmcp cannot be reached, Instruct by voice says so, and a hidden page asks nothing', async ({ page }) => {
+  let asked = 0;
+  await page.clock.install();
+  await page.route('**/api/voice/conversation', route =>
+    route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: '' }));
+  // What the dev proxy answers when nothing listens where qmcp should.
+  await page.route(url => url.pathname === '/v1/human/requests', route => {
+    asked += 1;
+    route.fulfill({ status: 500, body: '' });
+  });
+  await page.goto('/');
+
+  const instruct = page.getByTestId('voice-instruct');
+  await expect(instruct).toHaveClass(/is-unreachable/);
+  await expect(instruct).toHaveAttribute('title', /qmcp is not reachable/);
+  await expect.poll(() => asked).toBe(1);
+
+  await showPage(page, 'hidden');
+  await page.clock.fastForward(10 * 60_000);
+  await page.waitForTimeout(500);   // a request the timers started would have arrived by now
+  expect(asked).toBe(1);
+
+  await showPage(page, 'visible');
+  await expect.poll(() => asked).toBe(2);
+});
+
+test('once qmcp answers, Instruct by voice is itself again', async ({ page }) => {
+  let reachable = false;
+  await page.clock.install();
+  await page.route('**/api/voice/conversation', route =>
+    route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: '' }));
+  await page.route(url => url.pathname === '/v1/human/requests', route => reachable
+    ? route.fulfill({ json: { requests: [], count: 0 } })
+    : route.fulfill({ status: 500, body: '' }));
+  await page.goto('/');
+  const instruct = page.getByTestId('voice-instruct');
+  await expect(instruct).toHaveClass(/is-unreachable/);
+
+  reachable = true;
+  await page.clock.fastForward(60_000);
+  await expect(instruct).not.toHaveClass(/is-unreachable/);
+  await expect(instruct).toHaveAttribute('title', '');
+});

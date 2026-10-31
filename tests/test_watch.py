@@ -170,9 +170,10 @@ def test_the_margin_over_the_echo_is_the_watch_s(factor, begins):
 
 
 def test_a_voice_rising_into_its_first_word_still_begins_it():
-    """Seen on a virtual cable: an answer about twice the question's loudness
-    rose over three blocks, each raising a tracked echo level ahead of it, and
-    never began. Mutation: keep learning the echo after its window -- red."""
+    """An answer about twice the question's loudness, rising over three
+    blocks, begins the take: the echo's level is learned in its window and
+    then held, not tracked. Mutation: keep learning the echo after its
+    window -- red."""
     watch = _Watch()
     blocks = ([_blk(ROOM)] * 2 + _echo(20) + [_blk(level) for level in (0.04, 0.07, 0.12, 0.12, 0.12)]
               + [_blk(ROOM)] * 6)
@@ -304,7 +305,7 @@ def test_a_take_begun_over_the_question_is_the_listen_s(fresh, voice):
 
     assert client.post("/api/voice/watch", params={"duration": 4, "hint": "approve, hold"}).json() == {
         "watching": True, "voice": True}
-    api.watching.finished.wait(2)
+    assert api.watching.finished.wait(2), "the watch never finished"
     assert client.get("/api/voice/control").json()["interrupted"] is True
 
     heard = client.post("/api/voice/listen", params={"duration": 4}).json()
@@ -362,7 +363,7 @@ def test_a_microphone_that_fails_under_a_begun_watch_fails_the_listen(fresh, voi
     client = TestClient(api.app)
 
     client.post("/api/voice/watch")
-    api.watching.finished.wait(2)
+    assert api.watching.finished.wait(2), "the watch never finished"
 
     assert client.post("/api/voice/listen").status_code == 503
 

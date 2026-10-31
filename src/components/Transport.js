@@ -26,7 +26,18 @@ export class Transport {
       this._setPlayBtn('Play');
       cancelAnimationFrame(this._raf);
     };
+    // A source that cannot be loaded leaves the transport stopped, and says so.
+    // An ejected one (src emptied, no name) is not reported.
+    this._audio.onerror = () => {
+      if (!this._name) return;
+      this._audio.pause();
+      cancelAnimationFrame(this._raf);
+      this._setPlayBtn('Play');
+      this._el.querySelector('[data-testid="transport-duration"]').textContent = '0:00';
+      this._setNote(this._unavailable);
+    };
     this._name = '';
+    this._unavailable = '';
   }
 
   mount() {
@@ -54,9 +65,13 @@ export class Transport {
    * Load an audio file and update the transport UI.
    * @param {string} name - display filename
    * @param {string} url  - audio source URL
+   * @param {object} [opts]
+   * @param {string} [opts.unavailable] - what the transport says when the source cannot be loaded
    */
-  setFile(name, url) {
+  setFile(name, url, { unavailable = 'could not be loaded' } = {}) {
     this._name  = name;
+    this._unavailable = unavailable;
+    this._setNote('');
     this._audio.src = url;
     this._audio.load();
     const q = s => this._el.querySelector(s);
@@ -91,6 +106,7 @@ export class Transport {
     this._audio.pause();
     this._audio.src = '';
     this._name = '';
+    this._setNote('');
     this._audio.onloadedmetadata = null;
     cancelAnimationFrame(this._raf);
     this._mc.setPlayhead(0);
@@ -107,7 +123,7 @@ export class Transport {
   }
 
   play() {
-    if (!this._audio.src) return;
+    if (!this._audio.src || this._audio.error) return;
     this._audio.play().catch(() => {});
     this._setPlayBtn('Pause');
     const tick = () => {
@@ -178,6 +194,13 @@ export class Transport {
 
   _setPlayBtn(label) {
     this._el.querySelector('[data-testid="transport-play"]').textContent = label;
+  }
+
+  _setNote(text) {
+    const note = this._el.querySelector('[data-testid="transport-note"]');
+    if (!note) return;
+    note.textContent = text;
+    note.hidden = !text;
   }
 
   _fmt(t) {

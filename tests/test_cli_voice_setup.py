@@ -97,8 +97,8 @@ def _four_way_level(duration, device):
 
 
 def test_setup_reaches_the_loudest_microphone_through_its_most_reliable_host_api(saved_file):
-    """The failure this pins: the sweep chose WDM-KS because it read loudest,
-    saved it, and the recording that followed could not open it."""
+    """The sweep hears WDM-KS loudest; setup saves the same microphone
+    through a host API a recording can open."""
     with patch("Modules.Voice.list_input_devices", return_value=ONE_MIC_FOUR_WAYS), patch(
         "Modules.Voice.input_level", side_effect=_four_way_level
     ):
@@ -175,6 +175,54 @@ def test_a_saved_device_that_is_gone_yields_the_default(saved_file):
 
 def test_no_saved_file_yields_the_default(saved_file):
     assert voice_module.saved_input_device() is None
+
+
+def test_a_saved_device_that_is_gone_is_named(saved_file):
+    voice_module.save_input_device(DEVICES[1])
+    others = [d for d in DEVICES if d["name"] != "Headset Mic"]
+    with patch("Modules.Voice.list_input_devices", return_value=others):
+        assert voice_module.missing_saved_device() == "Headset Mic"
+    with patch("Modules.Voice.list_input_devices", return_value=DEVICES):
+        assert voice_module.missing_saved_device() is None
+
+
+def test_no_saved_file_misses_nothing(saved_file):
+    with patch("Modules.Voice.list_input_devices", return_value=DEVICES):
+        assert voice_module.missing_saved_device() is None
+
+
+def _recording_on_the_default(saved_file, monkeypatch, capture):
+    """A Voice whose saved microphone is gone, recording through `capture`."""
+    voice_module.save_input_device(DEVICES[1])
+    others = [d for d in DEVICES if d["name"] != "Headset Mic"]
+    monkeypatch.setattr(voice_module, "list_input_devices", lambda: others)
+    monkeypatch.setattr(voice_module, "_capture", capture)
+    monkeypatch.setattr(voice_module, "resolve_input_device", lambda d: d)
+    monkeypatch.delenv("JOE_INPUT_DEVICE", raising=False)
+    monkeypatch.setattr(voice_module.Voice, "__init__", lambda self, **k: setattr(self, "capture_dir", str(saved_file.parent)))
+    return voice_module.Voice()
+
+
+def test_a_failure_on_the_default_names_the_saved_microphone_it_stood_in_for(saved_file, monkeypatch):
+    def failing(duration, device, target_rate=16000):
+        raise voice_module.NoMicrophoneError("Recording failed on device default at 44100 Hz / 2ch: MME error 1")
+
+    voice = _recording_on_the_default(saved_file, monkeypatch, failing)
+    with pytest.raises(voice_module.NoMicrophoneError) as raised:
+        voice.record(duration=0.01)
+    said = str(raised.value)
+    assert said.startswith("Recording failed on device default")
+    assert "The saved microphone, Headset Mic, is not connected" in said
+    assert "joe voice setup" in said
+
+
+def test_recording_on_the_default_in_place_of_a_gone_microphone_says_so(saved_file, monkeypatch, capsys):
+    import numpy as np
+
+    voice = _recording_on_the_default(saved_file, monkeypatch,
+                                      lambda duration, device, target_rate=16000: (np.zeros(160, dtype="float32"), device))
+    voice.record(duration=0.01)
+    assert "the saved microphone, Headset Mic, is not connected" in capsys.readouterr().out
 
 
 def test_recording_uses_the_saved_device_unless_the_environment_names_one(saved_file, monkeypatch):

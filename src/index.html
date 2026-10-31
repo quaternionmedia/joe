@@ -5,8 +5,17 @@
     <title>Joe | QM</title>
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
     <link rel="stylesheet" href="style.css" />
-    <script src="https://cdn.jsdelivr.net/npm/p5@1.11.2/lib/p5.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/p5@1.11.2/lib/addons/p5.sound.js"></script>
+    <!-- p5 and p5.sound from the CDN, held to the bytes of the p5 1.11.2 that
+         package-lock.json locks: a CDN serving anything else is refused, rather
+         than run on the page that drives joe's API. Hashes of
+         node_modules/p5/lib/p5.min.js and lib/addons/p5.sound.js:
+         openssl dgst -sha384 -binary FILE | openssl base64 -A -->
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.11.2/lib/p5.min.js"
+            integrity="sha384-fN6ZTti0XTr3VpiB6wpl+XOK8SAd8oa3WaMuDrOIQh7x1KuAXYjsp8nQag3IQ5xR"
+            crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.11.2/lib/addons/p5.sound.js"
+            integrity="sha384-J3aj2fxqM8PEjTu8t76hyRt96sYunZpReLpvWu8CnuYc791rqlBNDWCl9UZZWHBS"
+            crossorigin="anonymous"></script>
   </head>
 
   <body>
@@ -140,12 +149,13 @@
       <span class="hint-steps">
         <span class="hint-step"><b>1.</b> Joe, go! — start audio</span>
         <span class="hint-sep">·</span>
-        <span class="hint-step"><b>2.</b> Browser/Backend + Live — record</span>
+        <span class="hint-step" data-needs="library" data-what="recording"><b>2.</b> Browser mic or joe's mic + Live — record</span>
         <span class="hint-sep">·</span>
-        <span class="hint-step"><b>3.</b> Library → Process — run pipeline</span>
+        <span class="hint-step" data-needs="library" data-what="the pipeline"><b>3.</b> Library → Process — run pipeline</span>
         <span class="hint-sep">·</span>
-        <span class="hint-step"><b>4.</b> Results — view piano roll</span>
+        <span class="hint-step" data-needs="library" data-what="results"><b>4.</b> Results — view piano roll</span>
       </span>
+      <span class="hint-off" data-testid="hint-off" hidden></span>
       <button id="hint-dismiss" type="button" aria-label="Dismiss">×</button>
     </div>
 
@@ -161,9 +171,10 @@
 
       <!-- 2. Live capture: mode selector + record toggle + indicator -->
       <div class="tg">
-        <select id="capture-mode" data-testid="capture-mode" aria-label="Capture mode">
-          <option value="browser">Browser</option>
-          <option value="backend">Backend</option>
+        <select id="capture-mode" data-testid="capture-mode" aria-label="Live records from"
+                title="Where Live records from">
+          <option value="browser" title="This browser's microphone; the take is sent to joe's library">Browser mic</option>
+          <option value="backend" title="The microphone of the machine joe runs on, recorded by joe">joe's mic</option>
         </select>
         <button id="live-toggle" data-testid="live-toggle" type="button" disabled>Live</button>
         <span id="live-indicator" class="capture-indicator"></span>
@@ -183,6 +194,7 @@
         <span class="transport-sep">/</span>
         <span data-testid="transport-duration">0:00</span>
         <span data-testid="transport-name" class="transport-name"></span>
+        <span data-testid="transport-note" class="transport-note" role="status" hidden></span>
         <button id="transport-eject" data-testid="transport-eject"
                 type="button" hidden aria-label="Eject audio">×</button>
       </div>
@@ -191,8 +203,10 @@
 
       <!-- 4. Panel toggles -->
       <div class="tg">
-        <button id="capture-toggle" data-testid="capture-toggle" type="button">Library</button>
-        <button id="results-toggle" data-testid="results-toggle" type="button">Results</button>
+        <button id="capture-toggle" data-testid="capture-toggle" type="button"
+                title="Recordings, and the pipeline (L)">Library</button>
+        <button id="results-toggle" data-testid="results-toggle" type="button"
+                title="The analysis results (A)">Results</button>
         <button id="transcript-toggle" data-testid="transcript-toggle" type="button"
                 title="The whole spoken exchange (T)">Transcript</button>
       </div>
