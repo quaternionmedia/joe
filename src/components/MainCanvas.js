@@ -20,7 +20,6 @@ const PITCH_MAX = 107;
 const PITCH_RNG = PITCH_MAX - PITCH_MIN;   // 87
 
 const LABEL_W      = 28;   // px reserved for pitch labels on the left
-const TRANSPORT_H  = 48;   // px reserved for the transport bar at the bottom
 
 const TYPE_COLOURS = {
   Raw:        'rgba(255,255,255,0.80)',
@@ -70,12 +69,6 @@ export class MainCanvas {
     this._totalDur = 0;
     this._playhead = 0;   // seconds
 
-    // Pixels at the right edge something docked covers; nothing is drawn under them.
-    this._inset = 0;
-
-    // Pixels at the bottom a bar covers (the first-run hint); the words lane sits above them.
-    this._bottomInset = 0;
-
     // Words lane: a take's words on the timeline
     this._words     = [];
     this._wordsDur  = 0;
@@ -98,8 +91,9 @@ export class MainCanvas {
     this._liveActiveNotes = [];
     this._liveDuration    = 0;   // seconds; set after recording so notes align with audio
 
+    // The canvas fills the visualiser's window, whatever size the dock gives it.
     this._resize();
-    window.addEventListener('resize', () => this._resize());
+    new ResizeObserver(() => this._resize()).observe(this._canvas.parentElement);
     this._tick();
   }
 
@@ -145,11 +139,6 @@ export class MainCanvas {
     this._syncLitWord();
   }
 
-  /** Keep the words lane above a bar along the bottom, `px` tall. */
-  setBottomInset(px) {
-    this._bottomInset = Math.max(0, Math.round(px) || 0);
-  }
-
   /** The recording's own length, once known, so the words sit where they were said. */
   setWordsDuration(seconds) {
     if (this._words.length && seconds > 0) this._wordsDur = seconds;
@@ -187,19 +176,20 @@ export class MainCanvas {
 
   /** A clipped word in the lane, under the pointer, shown whole beside it. */
   _hoverLane(e) {
-    const overRoll = e.target === document.body || e.target === document.documentElement
-      || e.target.tagName === 'CANVAS';
+    const overRoll = e.target.tagName === 'CANVAS';
+    // The lane's boxes are in the canvas's own pixels; the pointer is in the page's.
+    const at = this._canvas.getBoundingClientRect();
+    const x = e.clientX - at.left, y = e.clientY - at.top;
     const box = overRoll && !this._liveActive
-      ? this._laneBoxes.find(b => b.clipped && e.clientX >= b.x0 && e.clientX < b.x1
-                                  && e.clientY >= b.y0 && e.clientY <= b.y1)
+      ? this._laneBoxes.find(b => b.clipped && x >= b.x0 && x < b.x1 && y >= b.y0 && y <= b.y1)
       : null;
     if (!box) {
       this._tip.hidden = true;
       return;
     }
     this._tip.textContent = box.text;
-    this._tip.style.left  = `${box.x0}px`;
-    this._tip.style.top   = `${box.y0 - 4}px`;
+    this._tip.style.left  = `${at.left + box.x0}px`;
+    this._tip.style.top   = `${at.top + box.y0 - 4}px`;
     this._tip.hidden      = false;
   }
 
@@ -251,14 +241,10 @@ export class MainCanvas {
 
   // ─── Rendering ──────────────────────────────────────────────────────────
 
-  /** Keep the notes out from under a pane docked at the right edge, `px` wide. */
-  setInset(px) {
-    this._inset = Math.max(0, Math.round(px) || 0);
-  }
-
   _resize() {
-    this._canvas.width  = window.innerWidth;
-    this._canvas.height = window.innerHeight - TRANSPORT_H;
+    const box = this._canvas.parentElement;
+    this._canvas.width  = Math.max(1, box.clientWidth);
+    this._canvas.height = Math.max(1, box.clientHeight);
   }
 
   _tick() {
@@ -275,7 +261,7 @@ export class MainCanvas {
     const { _canvas: canvas, _ctx: ctx } = this;
     const W     = canvas.width;
     const H     = canvas.height;
-    const drawW = Math.max(1, W - LABEL_W - this._inset);
+    const drawW = Math.max(1, W - LABEL_W);
     const rowH  = H / PITCH_RNG;
 
     ctx.clearRect(0, 0, W, H);
@@ -327,7 +313,7 @@ export class MainCanvas {
     // ── Words lane — a take's words along the bottom, the current one lit ──
     if (!this._liveActive && this._words.length) {
       const dur   = Math.max(this._totalDur, this._wordsDur) || 1;
-      const laneY = H - LANE_H - 6 - this._bottomInset;
+      const laneY = H - LANE_H - 6;
       ctx.save();
       ctx.font         = '12px sans-serif';
       ctx.textBaseline = 'middle';

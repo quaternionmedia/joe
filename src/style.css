@@ -12,10 +12,19 @@ html, body {
   color: #fff;
 }
 
+/* ─── The page: the dock, then the first-run hint and the transport below it ─ */
+body { display: flex; flex-direction: column; }
+#dock { position: relative; flex: 1 1 0; min-height: 0; }
+#parked { display: none; }
+
+/* ─── The visualiser's window: the p5 canvas, the piano roll over it ──────── */
+#visualiser { position: relative; width: 100%; height: 100%; overflow: hidden; }
+#sketch { position: absolute; inset: 0; }
+
 /* ─── p5 canvas layer (z-index 0) ────────────────────────────────────────── */
 #sketch canvas {
   display: block;
-  position: fixed;
+  position: absolute;
   top: 0;
   left: 0;
   z-index: 0;
@@ -23,18 +32,16 @@ html, body {
 
 /* ─── Main unified piano roll canvas (z-index 5) ─────────────────────────── */
 #piano-roll-canvas {
-  position: fixed;
+  position: absolute;
   top: 0;
   left: 0;
-  width: 100vw;
-  height: calc(100vh - 48px);
   z-index: 5;
   pointer-events: none;
 }
 
 /* ─── Era panel ──────────────────────────────────────────────────────────── */
 #era-panel {
-  position: fixed;
+  position: absolute;
   top: 0;
   left: 0;
   right: 0;
@@ -73,13 +80,13 @@ button {
   flex-shrink: 0;
 }
 button:hover { border-color: rgba(255, 255, 255, 0.7); }
+/* A window's button in the transport: its glyph, its name in its tooltip and accessible name. */
+button.tb-icon { font-size: 0.9rem; letter-spacing: 0; padding: 2px 8px; line-height: 1.2; }
 
 /* ─── Single bottom control bar ──────────────────────────────────────────── */
 #transport {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  position: relative;
+  flex: none;
   height: 48px;
   z-index: 25;
   background: rgba(8, 8, 12, 0.94);
@@ -149,7 +156,10 @@ button:hover { border-color: rgba(255, 255, 255, 0.7); }
   font-size: 0.66rem;
   color: #f5a623;
   white-space: nowrap;
-  flex-shrink: 0;
+  /* Shortened before it runs under the window buttons; whole in its tooltip. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   margin-left: 4px;
 }
 
@@ -169,10 +179,8 @@ button:hover { border-color: rgba(255, 255, 255, 0.7); }
 
 /* ─── First-run hint strip ───────────────────────────────────────────────── */
 .first-run-hint {
-  position: fixed;
-  bottom: 48px;
-  left: 0;
-  right: 0;
+  position: relative;
+  flex: none;
   height: 28px;
   z-index: 24;
   background: rgba(12, 20, 30, 0.92);
@@ -284,15 +292,9 @@ button:hover { border-color: rgba(255, 255, 255, 0.7); }
 
 /* ─── Results panel ──────────────────────────────────────────────────────── */
 #results-panel {
-  position: fixed;
-  top: 0;
-  right: 0;
-  width: 320px;
-  height: calc(100vh - 48px);
-  transform: translateX(100%);
-  z-index: 20;
+  width: 100%;
+  height: 100%;
   background: rgba(8, 8, 12, 0.95);
-  border-left: 1px solid rgba(255, 255, 255, 0.1);
   overflow-y: auto;
   padding: 18px;
   display: flex;
@@ -358,24 +360,15 @@ button:hover { border-color: rgba(255, 255, 255, 0.7); }
 
 /* ─── Capture / Library panel ────────────────────────────────────────────── */
 .capture-panel {
-  position: fixed;
-  left: 0;
-  top: 0;
-  width: 320px;
-  height: calc(100vh - 48px);
-  transform: translateX(-100%);
-  transition: transform 0.28s ease;
-  z-index: 20;
+  width: 100%;
+  height: 100%;
   background: rgba(8, 8, 12, 0.95);
-  border-right: 1px solid rgba(255, 255, 255, 0.1);
   overflow-y: auto;
   padding: 18px;
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
-
-.capture-panel.open { transform: translateX(0); }
 
 .capture-header {
   display: flex;
@@ -500,21 +493,16 @@ button:hover { border-color: rgba(255, 255, 255, 0.7); }
 
 #voice-panel {
   --voice: #8a8a8a;
-  position: fixed;
-  top: 12px;
-  right: 12px;
-  z-index: 20;
-  width: min(320px, calc(100vw - 24px));
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
   padding: 10px 12px;
   background: rgba(8, 8, 12, 0.94);
-  border: 1px solid rgba(255, 255, 255, 0.1);
   border-left: 3px solid var(--voice);
-  border-radius: 6px;
   color: #e6e6e6;
   font-size: 0.75rem;
   transition: border-color 0.2s ease;
 }
-#voice-panel[hidden] { display: none; }
 
 #voice-panel[data-state="speaking"]     { --voice: #f5a623; }
 #voice-panel[data-state="listening"]    { --voice: #2ec4b6; }
@@ -649,26 +637,16 @@ button:hover { border-color: rgba(255, 255, 255, 0.7); }
 #voice-instruct:disabled { opacity: 0.4; cursor: default; }
 #voice-instruct.is-unreachable { opacity: 0.45; border-style: dashed; }
 
-/* ─── Transcript pane — the whole spoken exchange, docked right ────────────── */
-:root { --pane-w: min(380px, calc(100vw - 24px)); }
+/* ─── Transcript pane — the whole spoken exchange, in a window of its own ──── */
 #transcript-pane {
-  position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 48px;
-  z-index: 19;
-  width: var(--pane-w);
+  width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   background: rgba(8, 8, 12, 0.96);
-  border-left: 1px solid rgba(255, 255, 255, 0.1);
   color: #e6e6e6;
   font-size: 0.8rem;
 }
-#transcript-pane[hidden] { display: none; }
-/* The first-run hint, 28 px above the transport, is not drawn over the pane's last lines. */
-body:has(#first-run-hint:not(.hidden)) #transcript-pane { bottom: 76px; }
-body.transcript-open #voice-panel { right: calc(var(--pane-w) + 12px); }
 .tp-head {
   display: flex;
   align-items: center;
@@ -771,11 +749,6 @@ body.transcript-open #voice-panel { right: calc(var(--pane-w) + 12px); }
 .tp-word.is-struck { text-decoration: line-through; color: #666; }
 .tp-word.is-pending { color: #8a8a8a; }
 
-/* ─── Off on this joe — a capability not served (docs/security.md) ─────────── */
-.is-off { opacity: 0.4; border-style: dashed; }
-.off-note { color: rgba(255, 255, 255, 0.7); line-height: 1.45; }
-.off-note a, .hint-off a { color: rgba(0, 229, 255, 0.8); }
-
 /* ─── Words lane tooltip — a clipped word, whole ─────────────────────────── */
 .lane-tip {
   position: fixed;
@@ -790,3 +763,61 @@ body.transcript-open #voice-panel { right: calc(var(--pane-w) + 12px); }
   white-space: nowrap;
   pointer-events: none;
 }
+
+/* ─── Off on this joe — a capability not served (docs/security.md) ─────────── */
+.is-off { opacity: 0.4; border-style: dashed; }
+.off-note { color: rgba(255, 255, 255, 0.7); line-height: 1.45; }
+.off-note a, .hint-off a { color: rgba(0, 229, 255, 0.8); }
+
+/* ─── The Panels menu: every window, and Reset layout ────────────────────── */
+.panels-menu { position: relative; display: inline-flex; }
+#panels-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  min-width: 180px;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  background: rgba(8, 8, 12, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+#panels-menu[hidden] { display: none; }
+#panels-menu [role="menuitem"] {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 5px 12px;
+  border: 0;
+  background: none;
+  color: #e6e6e6;
+  font: inherit;
+  font-size: 0.7rem;
+  text-align: left;
+  cursor: pointer;
+}
+#panels-menu [role="menuitem"]:hover,
+#panels-menu [role="menuitem"]:focus { background: rgba(0, 229, 255, 0.12); outline: none; }
+#panels-menu .closed .pm-name { color: rgba(230, 230, 230, 0.55); }
+.pm-state { color: rgba(230, 230, 230, 0.4); font-style: italic; }
+.pm-divider { height: 1px; margin: 4px 0; background: rgba(255, 255, 255, 0.12); }
+
+/* ─── Why a saved arrangement was dropped ────────────────────────────────── */
+.layout-note {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  max-width: min(560px, calc(100vw - 24px));
+  padding: 8px 14px;
+  background: rgba(30, 12, 12, 0.96);
+  border: 1px solid rgba(255, 109, 0, 0.5);
+  border-radius: 4px;
+  color: #e6e6e6;
+  font-size: 0.75rem;
+}
+.layout-note[hidden] { display: none; }

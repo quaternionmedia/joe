@@ -27,6 +27,7 @@
   "homepage": "https://github.com/quaternionmedia/joe#readme",
   "dependencies": {
     "animejs": "^4.3.6",
+    "golden-layout": "^2.6.0",
     "p5": "^1.11.2"
   },
   "devDependencies": {

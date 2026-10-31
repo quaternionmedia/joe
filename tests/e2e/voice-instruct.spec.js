@@ -36,13 +36,15 @@ async function script(page, { post = STARTED, runs = [], latest = [ROTATE], pend
   return calls;
 }
 
-test('the button is at hand while the panel is out of the way', async ({ page }) => {
+test('the button is at hand while the Voice window is closed', async ({ page }) => {
   await script(page, {});
+  const asked = page.waitForRequest(req => new URL(req.url()).pathname === '/v1/human/requests');
   await page.goto('/');
+  await asked;
   await page.waitForSelector('canvas');
 
   await expect(page.getByTestId('voice-instruct')).toBeEnabled();
-  await expect(page.getByTestId('voice-panel')).toBeHidden();
+  await expect(page.locator('#paneltab-voice')).toHaveCount(0);
 });
 
 // Seen to fail: with the POST sent to `/instructions/voic`, the mock never saw
@@ -150,9 +152,11 @@ test('the outcome stepping aside leaves the panel to the queue', async ({ page }
   const left = await page.waitForFunction(() => {
     const outcome = document.querySelector('[data-testid="voice-instruct-outcome"]');
     if (!outcome.hidden) return null;
-    return { panelHidden: document.querySelector('[data-testid="voice-panel"]').hidden };
+    // The Voice window is still in the dock, its panel not parked.
+    return { panelOpen: Boolean(document.getElementById('paneltab-voice'))
+                        && !document.getElementById('parked').contains(document.querySelector('[data-testid="voice-panel"]')) };
   }, null, { timeout: 15000 });
-  expect(await left.jsonValue()).toEqual({ panelHidden: false });
+  expect(await left.jsonValue()).toEqual({ panelOpen: true });
   await expect(page.getByTestId('voice-queue-prompt')).toHaveText('Launch the audit?  (approve / hold)');
 });
 

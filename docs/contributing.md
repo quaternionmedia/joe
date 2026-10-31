@@ -60,7 +60,7 @@ The bottom transport bar has five groups, left to right:
 | **1. Audio context** | `Joe, go!` | Resumes the Web Audio context (required once per page load). Turns green when active. |
 | **2. Live capture** | `Browser mic\|joe's mic` select + `Live` button + red dot | Sets where Live records from; `Live` starts/stops recording. Disabled until **Joe, go!** is clicked. |
 | **3. Transport** | `LIVE\|RESULTS` badge + `Play` + `Stop` + scrub + time + filename + `×` | Plays back a loaded audio file; badge shows canvas mode. Play/Stop disabled while recording. `×` ejects the current source. |
-| **4. Panels** | `Library` + `Results` + `Transcript` | Slide-in panels for audio file management and analysis output, and the transcript pane. |
+| **4. Windows** | `♫` Library + `▤` Results + `¶` Transcript + `▦` Panels | Each opens its window beside the visualiser, or closes it when it is in front; `▦`, the Panels menu, lists every window and resets the layout. [ui.md](ui.md) describes the dock. |
 | **5. Voice** | `Instruct by voice` | One spoken instruction into qmcp's inbox; the outcome shows in the voice panel. |
 
 **Dependency chain:**
@@ -159,6 +159,7 @@ What the specs cover:
 | Spec | Covers |
 | --- | --- |
 | `app.spec.js` | Page load, **Joe, go!**, setlist navigation, and the pipeline JSON contract, against a fixture |
+| `layout.spec.js` | The dock: windows opening, closing and kept across a reload, the Panels menu, and a saved arrangement dropped |
 | `process.spec.js` | Processing and playing a file from the Library, and how a failure shows |
 | `results.spec.js` | The Results panel and the piano roll it loads |
 | `voice.spec.js` | The voice panel through a whole exchange |

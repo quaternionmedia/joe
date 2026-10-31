@@ -1,0 +1,31 @@
+/*
+ * GoldenLayout's own stylesheets, bundled with the page like everything else
+ * it shows: the structure, then the dark theme, then joe's palette over it.
+ *
+ * Imported from a stylesheet rather than from a script: golden-layout's
+ * package declares `"sideEffects": false`, which entitles a bundler to drop a
+ * bare `import 'golden-layout/...css'` from a script.
+ */
+@import 'golden-layout/dist/css/goldenlayout-base.css';
+@import 'golden-layout/dist/css/themes/goldenlayout-dark-theme.css';
+
+.lm_goldenlayout { background: #000; }
+.lm_content { background: transparent; }
+.lm_header { background: rgba(8, 8, 12, 0.94); }
+.lm_splitter { background: rgba(255, 255, 255, 0.08); }
+.lm_splitter:hover, .lm_splitter.lm_dragging { background: rgba(0, 229, 255, 0.35); }
+
+.lm_header .lm_tab {
+  font-family: inherit;
+  font-size: 0.65rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.04);
+  /* Room for the ✕, so a title never runs under it. */
+  padding-right: 24px;
+}
+.lm_header .lm_tab.lm_active { color: #e6e6e6; background: rgba(0, 229, 255, 0.1); }
+.lm_header .lm_tab:focus-visible { outline: 1px solid rgba(0, 229, 255, 0.8); outline-offset: -1px; }
+/* A window that cannot be closed has no ✕, and no room kept for one. */
+.lm_header .lm_tab:not(:has(.lm_close_tab:not([style*="none"]))) { padding-right: 10px; }
