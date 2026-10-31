@@ -31,7 +31,7 @@ uv run joe dev
 
 # Or start separately (useful for isolating issues):
 uv run joe frontend   # Vite only → http://localhost:3000/joe
-uv run joe backend    # API only  → http://localhost:8000/api/health
+uv run joe backend    # API only  → http://127.0.0.1:1059/api/health
 
 # Run the pipeline
 uv run joe run
@@ -43,7 +43,7 @@ uv run joe run
 2. `uv run joe run` → generates `Data/Output/<timestamp>/Process_Data_*.json`
 3. In the browser: open **Results** panel → click **Fetch Latest**
 4. If "Fetch Latest" shows an error, check the API server is running and visit
-   `http://localhost:8000/api/results/latest` directly to inspect the response.
+   `http://127.0.0.1:1059/api/results/latest` directly to inspect the response.
 
 See [api.md](api.md) for endpoint reference and `curl` examples.
 

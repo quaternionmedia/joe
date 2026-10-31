@@ -22,7 +22,7 @@ Install everything and launch both servers in one step:
 ```powershell
 uv sync
 npm install
-uv run joe dev       # Vite :3000 + API :8000
+uv run joe dev       # Vite :3000 + API :1059
 ```
 
 Then in a second terminal, run the pipeline:
@@ -38,7 +38,7 @@ Open `http://localhost:3000/joe`, click **Results → Fetch Latest**.
 | Command | What it does |
 | --- | --- |
 | `uv run joe frontend` | Vite dev server only (`localhost:3000`) |
-| `uv run joe backend` | FastAPI API server only (`localhost:8000`) |
+| `uv run joe backend` | FastAPI API server only (`127.0.0.1:1059`) |
 | `uv run joe dev` | Both servers (Ctrl+C to stop) |
 | `uv run joe run` | Run the pipeline once |
 | `uv run joe voice setup` | **Start here for voice.** Find your microphone while you talk, save it, and prove it with a transcribed sentence |
@@ -46,6 +46,11 @@ Open `http://localhost:3000/joe`, click **Results → Fetch Latest**.
 | `uv run joe voice transcribe <path>` | Transcribe an audio file to text |
 | `uv run joe voice devices` | List audio input devices, with the host API that distinguishes same-named ones; `S` marks the saved microphone |
 | `uv run joe voice level [--device N] [--every]` | How loud an input is right now |
+
+**The API's port** is 1059, the twelfth root of two (2^(1/12) = 1.0594…), one
+semitone. qm's port allocation, in its `ci/dashboard.py`, gives each server the
+first four digits of a constant; it gives alfred's editor 1732, root three, so
+the two do not collide.
 
 **Voice, the first time:** run `uv run joe voice setup` and keep talking when
 it says so. Once a test sentence has recorded from the microphone that heard

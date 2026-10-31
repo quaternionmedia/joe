@@ -4,7 +4,7 @@ export default {
   server: {
     port: 3000,
     proxy: {
-      '/api': 'http://localhost:8000',
+      '/api': 'http://127.0.0.1:1059',
       // qmcp's human queue, for "Answer by voice". QMCP_URL moves it.
       '/v1': process.env.QMCP_URL || 'http://localhost:3141',
     },

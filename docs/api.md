@@ -3,7 +3,7 @@
 The Joe FastAPI server (`api.py`) provides endpoints for pipeline results, audio capture,
 the audio library, and speech analysis.
 
-**Base URL (local dev):** `http://localhost:8000`
+**Base URL (local dev):** `http://127.0.0.1:1059`
 
 The Vite dev server proxies `/api/*` to this address, so the browser can call all endpoints
 directly when both servers are running via `joe dev`.
@@ -25,7 +25,7 @@ Returns `200 OK` when the server is up.
 **curl**
 
 ```bash
-curl http://localhost:8000/api/health
+curl http://127.0.0.1:1059/api/health
 ```
 
 ---
@@ -49,7 +49,7 @@ The full `Process_Data` JSON object (same schema as the file on disk). See
 **curl**
 
 ```bash
-curl http://localhost:8000/api/results/latest
+curl http://127.0.0.1:1059/api/results/latest
 ```
 
 **Troubleshooting**
@@ -81,7 +81,7 @@ A non-zero `returncode` means the pipeline failed. Check `stderr` for the Python
 **curl**
 
 ```bash
-curl -X POST http://localhost:8000/api/run
+curl -X POST http://127.0.0.1:1059/api/run
 ```
 
 ---
@@ -111,7 +111,7 @@ Supported pipeline formats: `.wav`, `.webm`, `.mp3`, `.ogg`, `.flac`. WebM decod
 **curl**
 
 ```bash
-curl -X POST http://localhost:8000/api/run/capture_20240101_120000.wav
+curl -X POST http://127.0.0.1:1059/api/run/capture_20240101_120000.wav
 ```
 
 ---
@@ -136,7 +136,7 @@ live to `Data/Audio/`.
 **curl**
 
 ```bash
-curl -X POST http://localhost:8000/api/capture/start
+curl -X POST http://127.0.0.1:1059/api/capture/start
 ```
 
 ---
@@ -160,7 +160,7 @@ Stop the active backend recording and flush the WAV file to disk.
 **curl**
 
 ```bash
-curl -X POST http://localhost:8000/api/capture/stop
+curl -X POST http://127.0.0.1:1059/api/capture/stop
 ```
 
 ---
@@ -188,7 +188,7 @@ Content-Type: audio/webm  ->  saves as capture_<timestamp>.webm
 **curl**
 
 ```bash
-curl -X POST http://localhost:8000/api/audio/upload \
+curl -X POST http://127.0.0.1:1059/api/audio/upload \
   -H "Content-Type: audio/webm" \
   --data-binary @recording.webm
 ```
@@ -213,7 +213,7 @@ Supported extensions: `.wav`, `.webm`, `.mp3`, `.ogg`, `.flac`
 **curl**
 
 ```bash
-curl http://localhost:8000/api/audio/files
+curl http://127.0.0.1:1059/api/audio/files
 ```
 
 ---
@@ -238,7 +238,7 @@ appropriate `Content-Type` for the browser's `<audio>` element.
 **curl**
 
 ```bash
-curl -o recording.wav http://localhost:8000/api/audio/capture_20240101_120000.wav
+curl -o recording.wav http://127.0.0.1:1059/api/audio/capture_20240101_120000.wav
 ```
 
 ---
@@ -269,7 +269,7 @@ has no usable input device, or its audio backend itself couldn't be reached
 **curl**
 
 ```bash
-curl http://localhost:8000/api/voice/devices
+curl http://127.0.0.1:1059/api/voice/devices
 ```
 
 ---
@@ -301,7 +301,7 @@ resolve outside them are rejected.
 **curl**
 
 ```bash
-curl -X POST "http://localhost:8000/api/voice/transcribe?filename=clip.wav"
+curl -X POST "http://127.0.0.1:1059/api/voice/transcribe?filename=clip.wav"
 ```
 
 ---
@@ -360,8 +360,8 @@ fixed one. When the endpointer heard no speech, the transcriber is not run and
 **curl**
 
 ```bash
-curl -X POST "http://localhost:8000/api/voice/listen?duration=5"
-curl -X POST "http://localhost:8000/api/voice/listen?duration=5&device=USB"
+curl -X POST "http://127.0.0.1:1059/api/voice/listen?duration=5"
+curl -X POST "http://127.0.0.1:1059/api/voice/listen?duration=5&device=USB"
 ```
 
 ---
@@ -401,7 +401,7 @@ is either the wrong one or muted, and a device list cannot tell those apart.
 **curl**
 
 ```bash
-curl -X POST "http://localhost:8000/api/voice/level?device=12"
+curl -X POST "http://127.0.0.1:1059/api/voice/level?device=12"
 ```
 
 ---
@@ -436,7 +436,7 @@ after it. The microphone's level arrives as its own event type, `level`, with
 `{"rms", "threshold", "seq"}`; `threshold` is null while the room is measured.
 
 ```bash
-curl -N http://localhost:8000/api/voice/conversation
+curl -N http://127.0.0.1:1059/api/voice/conversation
 ```
 
 ### `GET /api/voice/conversation/state`
@@ -602,8 +602,8 @@ different outputs is refused.
 
 FastAPI auto-generates an interactive API explorer at:
 
-- Swagger UI: <http://localhost:8000/docs>
-- ReDoc:      <http://localhost:8000/redoc>
+- Swagger UI: <http://127.0.0.1:1059/docs>
+- ReDoc:      <http://127.0.0.1:1059/redoc>
 
 ## Typical workflows
 
@@ -617,16 +617,16 @@ uv run joe dev
 #     Recording auto-loads into the transport bar; open "Library" -> click "Process"
 
 # 2b. Record from the backend
-curl -X POST http://localhost:8000/api/capture/start
+curl -X POST http://127.0.0.1:1059/api/capture/start
 # ... wait ...
-curl -X POST http://localhost:8000/api/capture/stop
+curl -X POST http://127.0.0.1:1059/api/capture/stop
 
 # 3. Process a specific recording
-curl -X POST http://localhost:8000/api/run/capture_20240101_120000.wav
+curl -X POST http://127.0.0.1:1059/api/run/capture_20240101_120000.wav
 
 # 4. View results — "Results" -> "Fetch Latest"
 #    (auto-opens after clicking "Process" in the Library panel)
 
 # 5. Drop audio into Data/Audio/ and run the full pipeline
-curl -X POST http://localhost:8000/api/run
+curl -X POST http://127.0.0.1:1059/api/run
 ```

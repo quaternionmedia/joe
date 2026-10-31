@@ -30,7 +30,7 @@ Endpoints:
     GET  /api/voice/transcript      The take being transcribed, or the last one, once
 
 Run directly:
-    python -m uvicorn api:app --reload --port 8000
+    python -m uvicorn api:app --reload --port 1059
 
 Or via the CLI:
     uv run joe backend

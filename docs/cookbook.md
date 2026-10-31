@@ -57,7 +57,7 @@ The recording is saved automatically to `Data/Audio/`. Open **Library** to see i
 2. Click **Joe, go!** then **Live** — this triggers `POST /api/capture/start`.
 3. Play or route audio through your system device.
 4. Click **Stop** — this flushes a WAV file to `Data/Audio/`.
-5. Process via **Library → Process** or `curl -X POST http://localhost:8000/api/run/{filename}`.
+5. Process via **Library → Process** or `curl -X POST http://127.0.0.1:1059/api/run/{filename}`.
 
 **Requires:** `sounddevice` is installed (`uv sync` includes it via `pyproject.toml`).
 
@@ -80,17 +80,17 @@ The piano roll renders immediately — no server required for this path.
 
 ```bash
 # Upload
-curl -X POST http://localhost:8000/api/audio/upload \
+curl -X POST http://127.0.0.1:1059/api/audio/upload \
   -H "Content-Type: audio/wav" \
   --data-binary @my_recording.wav
 
 # Returns: {"filename": "capture_20240101_120000.wav"}
 
 # Process
-curl -X POST http://localhost:8000/api/run/capture_20240101_120000.wav
+curl -X POST http://127.0.0.1:1059/api/run/capture_20240101_120000.wav
 
 # Fetch result
-curl http://localhost:8000/api/results/latest | python -m json.tool
+curl http://127.0.0.1:1059/api/results/latest | python -m json.tool
 ```
 
 ---
