@@ -15,28 +15,33 @@
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.2/lib/addons/p5.sound.js"
             integrity="sha384-J3aj2fxqM8PEjTu8t76hyRt96sYunZpReLpvWu8CnuYc791rqlBNDWCl9UZZWHBS"
             crossorigin="anonymous"></script>
-    <script type="module" crossorigin src="/joe/assets/index-DmRWf9au.js"></script>
-    <link rel="stylesheet" crossorigin href="/joe/assets/index-EMcvDuai.css">
+    <script type="module" crossorigin src="/joe/assets/index-BIlRkcKI.js"></script>
+    <link rel="stylesheet" crossorigin href="/joe/assets/index-Dsw4KWLI.css">
   </head>
 
   <body>
-    <!-- Layer 0: p5 FFT canvas -->
-    <div id="sketch"></div>
+    <!-- The dock: the visualiser and every panel are windows of one GoldenLayout (src/layout/) -->
+    <main id="dock" data-testid="dock"></main>
 
-    <!-- Layer 1: unified piano roll canvas — full-screen, always on -->
-    <canvas id="piano-roll-canvas" data-testid="piano-roll-canvas"></canvas>
+    <!-- What each window holds, built once; a closed window's waits here, hidden -->
+    <div id="parked" hidden>
 
-    <!-- Era overlay: top-centre, fades in after first navigation -->
-    <div id="era-panel" data-testid="era-panel">
-      <div class="era-content">
-        <span class="era-genre"    data-testid="era-genre"></span>
-        <span class="era-title"    data-testid="era-title"></span>
-        <span class="era-composer" data-testid="era-composer"></span>
-        <span class="era-year"     data-testid="era-year"></span>
+    <!-- The visualiser: the p5 FFT canvas, the piano roll over it, the era overlay -->
+    <div id="visualiser">
+      <div id="sketch"></div>
+      <canvas id="piano-roll-canvas" data-testid="piano-roll-canvas"></canvas>
+      <!-- Era overlay: top-centre, fades in after first navigation -->
+      <div id="era-panel" data-testid="era-panel">
+        <div class="era-content">
+          <span class="era-genre"    data-testid="era-genre"></span>
+          <span class="era-title"    data-testid="era-title"></span>
+          <span class="era-composer" data-testid="era-composer"></span>
+          <span class="era-year"     data-testid="era-year"></span>
+        </div>
       </div>
     </div>
 
-    <!-- Capture slide-in panel: left edge — library only -->
+    <!-- The Library window: recordings, and the pipeline -->
     <div id="capture-panel" data-testid="capture-panel" class="capture-panel">
       <div class="capture-header">
         <span class="capture-title">Library</span>
@@ -54,7 +59,7 @@
       </div>
     </div>
 
-    <!-- Results slide-in panel: right edge — metadata + controls -->
+    <!-- The Results window: what the pipeline found -->
     <div id="results-panel" data-testid="results-panel">
       <div class="results-header">
         <h2>Analysis Results</h2>
@@ -78,7 +83,7 @@
     </div>
 
     <!-- ─── Voice conversation: a spoken exchange, live ────────────────── -->
-    <section id="voice-panel" data-testid="voice-panel" data-state="idle" hidden
+    <section id="voice-panel" data-testid="voice-panel" data-state="idle"
              aria-label="Voice conversation">
       <div class="voice-status" role="status" aria-live="polite">
         <span class="voice-orb" aria-hidden="true"></span>
@@ -131,9 +136,8 @@
       </div>
     </section>
 
-    <!-- ─── First-run hint (dismissed via localStorage) ─────────────────── -->
     <!-- The whole spoken exchange, readable in full; T opens and closes it -->
-    <aside id="transcript-pane" data-testid="transcript-pane" hidden aria-label="Transcript">
+    <aside id="transcript-pane" data-testid="transcript-pane" aria-label="Transcript">
       <header class="tp-head">
         <span class="tp-title">Transcript</span>
         <button type="button" data-testid="transcript-say-toggle"
@@ -145,6 +149,13 @@
       <p class="tp-empty" data-testid="transcript-empty" hidden></p>
       <ol class="tp-entries" data-testid="transcript-entries"></ol>
     </aside>
+
+    </div>
+
+    <!-- Why a saved arrangement of the windows was dropped, when it was -->
+    <div id="layout-note" data-testid="layout-note" class="layout-note" role="status" hidden></div>
+
+    <!-- ─── First-run hint (dismissed via localStorage) ─────────────────── -->
 
     <div id="first-run-hint" class="first-run-hint" role="note" aria-label="Quick start guide">
       <span class="hint-steps">
@@ -202,14 +213,20 @@
 
       <div class="td"></div>
 
-      <!-- 4. Panel toggles -->
+      <!-- 4. Windows: each panel's, and the Panels menu -->
       <div class="tg">
-        <button id="capture-toggle" data-testid="capture-toggle" type="button"
-                title="Recordings, and the pipeline (L)">Library</button>
-        <button id="results-toggle" data-testid="results-toggle" type="button"
-                title="The analysis results (A)">Results</button>
-        <button id="transcript-toggle" data-testid="transcript-toggle" type="button"
-                title="The whole spoken exchange (T)">Transcript</button>
+        <button id="capture-toggle" data-testid="capture-toggle" type="button" class="tb-icon"
+                aria-label="Library" title="Library: recordings, and the pipeline (L)">♫</button>
+        <button id="results-toggle" data-testid="results-toggle" type="button" class="tb-icon"
+                aria-label="Results" title="Results: what the pipeline found (A)">▤</button>
+        <button id="transcript-toggle" data-testid="transcript-toggle" type="button" class="tb-icon"
+                aria-label="Transcript" title="Transcript: the whole spoken exchange (T)">¶</button>
+        <span class="panels-menu">
+          <button id="panels-button" data-testid="panels-button" type="button" class="tb-icon"
+                  aria-haspopup="menu" aria-expanded="false" aria-controls="panels-menu" aria-label="Panels"
+                  title="Panels: show a window, bring back a closed one, or reset the layout">▦</button>
+          <ul id="panels-menu" role="menu" aria-label="Windows" hidden></ul>
+        </span>
       </div>
 
       <div class="td"></div>
