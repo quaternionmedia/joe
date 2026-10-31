@@ -633,7 +633,7 @@ uv run joe dev
 
 # 2a. Record from the browser
 #     Open http://localhost:3000/joe
-#     Click "Joe, go!" -> select "Browser" -> click "Live" -> speak -> click "Stop"
+#     Click "Joe, go!" -> select "Browser mic" -> click "Live" -> speak -> click "Stop"
 #     Recording auto-loads into the transport bar; open "Library" -> click "Process"
 
 # 2b. Record from the backend
