@@ -29,7 +29,7 @@ To play the audio alongside the roll, open **Library** and click **Play** next t
 
 1. Make sure your browser mic is accessible (HTTPS or localhost).
 2. Click **Joe, go!** — the button turns green and **Live** becomes enabled.
-3. Select **Browser** in the capture mode selector (default).
+3. Select **Browser mic** where Live records from (the default).
 4. Click **Live** — the red dot pulses and the canvas shows `LIVE`.
 5. Play your instrument; onset detections scroll across the canvas in real time.
 6. Click **Stop** when done.
@@ -53,7 +53,7 @@ The recording is saved automatically to `Data/Audio/`. Open **Library** to see i
 
 **Goal:** Record at higher quality via `sounddevice` (no browser compression).
 
-1. Select **Backend** in the capture mode selector in the transport bar.
+1. Select **joe's mic** where Live records from, in the transport bar.
 2. Click **Joe, go!** then **Live** — this triggers `POST /api/capture/start`.
 3. Play or route audio through your system device.
 4. Click **Stop** — this flushes a WAV file to `Data/Audio/`.
@@ -163,10 +163,59 @@ with the piano roll aligned to the audio.
 
 ---
 
+## Recipe 10 — Caption and analyse a video for an editor
+
+**Goal:** Give a video editor (alfred) what joe hears in a clip: the words with
+their times, for captions, and its beats, loudness, silences and waveform, for
+cutting. No browser here — this is joe as an engine, over HTTP.
+
+1. Put ffmpeg where joe finds it: on PATH, or name it.
+
+   ```powershell
+   $env:JOE_FFMPEG = "C:\Program Files\kdenlive\bin\ffmpeg.exe"
+   ```
+
+2. Start the API alone on a port alfred does not use (alfred has 8000), and
+   check that it is joe answering there:
+
+   ```powershell
+   uv run uvicorn api:app --port 8010
+   curl http://localhost:8010/openapi.json   # "title": "Joe API"
+   ```
+
+3. Upload the clip. The answer's `media_id` is how you ask about it from here:
+
+   ```bash
+   curl -X POST http://localhost:8010/api/media \
+     -H "Content-Type: video/mp4" --data-binary @clip.mp4
+   # {"media_id": "323be26e5105eb0a57ca72d44566409b", "duration": 2.005,
+   #  "sample_rate": 48000, "channels": 1, "has_audio": true}
+   ```
+
+4. Ask for the words, each with its time, and for what the sound does:
+
+   ```bash
+   curl -X POST "http://localhost:8010/api/media/323be26e5105eb0a57ca72d44566409b/transcribe"
+   curl -X POST "http://localhost:8010/api/media/323be26e5105eb0a57ca72d44566409b/analyze?features=beats,loudness,silence"
+   ```
+
+5. Delete it when you are done, or leave it: an upload goes an hour after its
+   last use (`JOE_MEDIA_TTL`).
+
+   ```bash
+   curl -X DELETE http://localhost:8010/api/media/323be26e5105eb0a57ca72d44566409b
+   ```
+
+Every time in the answers is a time in the clip. A clip with no sound track is
+refused with a 422 rather than kept. [media.md](media.md) has every field, the
+settings and the errors.
+
+---
+
 ## How the bottom bar controls relate
 
 ```text
-[Joe, go!] [Browser|Backend] [Live] [●]   [LIVE|RESULTS] [Play] [Stop] [━━] 0:00/0:00 filename ×   [Library] [Results]
+[Joe, go!] [Browser mic|joe's mic] [Live] [●]   [LIVE|RESULTS] [Play] [Stop] [━━] 0:00/0:00 filename ×   [Library] [Results]
     │              │            │                │             │                        │
     │         Sets capture      │           Canvas mode        │                  Eject (×) clears
     │         mode for Live     │           badge              │                  the active source
@@ -178,7 +227,7 @@ with the piano roll aligned to the audio.
 ```
 
 - **Joe, go!** resumes the Web Audio context — required once per page load before Live works.
-- **Browser / Backend** selector sets where the captured audio comes from.
+- **Browser mic / joe's mic** sets where Live records from: this browser's microphone, or the microphone of the machine joe runs on.
 - **Live** starts/stops real-time recording. Disables Play/Stop while active.
 - **Play / Stop** controls recorded-file playback. Disabled while Live is recording.
 - **×** (eject) clears the active audio source. Appears only when a file is loaded.

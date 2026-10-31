@@ -1,7 +1,8 @@
 # Joe API Reference
 
 The Joe FastAPI server (`api.py`) provides endpoints for pipeline results, audio capture,
-the audio library, and speech analysis.
+the audio library, and speech analysis -- and, under `/api/media`, the media API a video
+editor uses for captions and analysis, documented in [media.md](media.md).
 
 **Base URL (local dev):** `http://localhost:8000`
 
@@ -280,9 +281,10 @@ curl http://localhost:8000/api/voice/devices
 
 ### `POST /api/voice/transcribe`
 
-Transcribes an audio file already present under `Data/Audio/` or `Data/Voice/` using
+Transcribes an audio file already present under `Data/Voice/` or `Data/Audio/` using
 whisper. `filename` is a name relative to one of those two directories — paths that
-resolve outside them are rejected.
+resolve outside them are rejected. `Data/Voice/` is looked in first, so a name in both
+is the voice folder's file: the one a voice tool such as `vox loop` wrote.
 
 **Query params**
 
@@ -316,10 +318,9 @@ Records `duration` seconds (default `5.0`, max `60`) from an input device,
 writes it to `Data/Voice/`, and transcribes the result.
 
 The device is opened at *its* native sample rate and channel count, and the
-audio is downmixed and resampled to 16 kHz mono afterwards. Asking a device
-to open at 16 kHz fails on most of them — one machine here has twenty inputs
-and every one refused, WASAPI saying "Invalid sample rate" and the others
-less.
+audio is downmixed and resampled to 16 kHz mono afterwards: many devices
+refuse to open at 16 kHz (WASAPI answers "Invalid sample rate").
+[modules.md](modules.md#voice) says how a device is chosen, opened and read.
 
 **Query params**
 
@@ -395,8 +396,8 @@ and read the peaks.
 { "device": 12, "name": "USB Microphone", "peak": 0.0812, "rms": 0.0091, "silent": false }
 ```
 
-`silent` is the useful field: a device returning digital silence is either
-the wrong one or muted, and a device list cannot tell those apart.
+`silent` says whether anything arrived: a device returning digital silence
+is either the wrong one or muted, and a device list cannot tell those apart.
 
 **Errors**
 
@@ -550,6 +551,13 @@ closed before anyone spoke -- is no entry, and a line cut short is skipped.
 `limit` (default 200, at most 2000) keeps the last entries. `kept` is false
 under `JOE_DATAPOINTS=0`, when nothing is written to read back.
 
+### `GET /api/voice/takes/{take}/audio`
+
+One take's recording, `audio/wav`, by the take's hex id, for the visualiser to
+play with the take's words on its timeline. Only a recording under joe's own
+voice folder is served, whatever the take's record names. `400` for an id that
+is not hex, `404` for a take with no recording kept.
+
 ### `GET /api/voice/vocabulary`
 
 joe's own spoken words: `{"phrases": [{"key", "says", "phrases"}]}`.
@@ -597,6 +605,25 @@ is skipped. They play on the default output unless `JOE_OUTPUT_DEVICE`, or
 listed under several host APIs, MME's is played to, and a fragment naming two
 different outputs is refused.
 
+### Media for the video pipeline
+
+Audio or video uploaded once, then transcribed and analysed by id -- a video
+editor's captions, beats and waveforms. Its own page, [media.md](media.md), is
+the reference; in short:
+
+| Route | Answers |
+| --- | --- |
+| `GET /api/media/capabilities` | `{"formats", "features", "speech_model", "word_timestamps", "max_bytes", "max_seconds", "ttl_seconds"}` |
+| `POST /api/media` | Raw audio or video body, typed by `Content-Type` -> `201 {"media_id", "duration", "sample_rate", "channels", "has_audio"}`; `415`, `413`, `422`, `503` |
+| `POST /api/media/{media_id}/transcribe?language=&words=true` | `{"text", "language", "segments": [{"start", "end", "text", "words"}], "info"}` |
+| `POST /api/media/{media_id}/analyze?features=...` | `{"duration", "tempo", "beats", "onsets", "loudness", "silences", "peaks"}` |
+| `DELETE /api/media/{media_id}` | `204`; `404` for one that is not here |
+
+Every failure there is `{"detail": str}`. Uploads are kept privately under
+`Data/Media/` and removed `JOE_MEDIA_TTL` seconds (an hour) after their last
+use. ffmpeg is required (`JOE_FFMPEG`, or on PATH). Beside alfred, which has
+port 8000, run the API alone: `uv run uvicorn api:app --port 8010`.
+
 ---
 
 ## Interactive docs
@@ -614,7 +641,7 @@ uv run joe dev
 
 # 2a. Record from the browser
 #     Open http://localhost:3000/joe
-#     Click "Joe, go!" -> select "Browser" -> click "Live" -> speak -> click "Stop"
+#     Click "Joe, go!" -> select "Browser mic" -> click "Live" -> speak -> click "Stop"
 #     Recording auto-loads into the transport bar; open "Library" -> click "Process"
 
 # 2b. Record from the backend
