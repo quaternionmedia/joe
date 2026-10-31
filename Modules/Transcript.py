@@ -81,6 +81,16 @@ class Datapoints:
                 out.write(json.dumps(record, default=str) + "\n")
         return record
 
+    def kept_as(self, path) -> str | None:
+        """`path` as a record keeps it: relative to `root` when it is inside it, so
+        the voice folder can be moved or copied whole; as it is otherwise."""
+        if not path:
+            return None
+        try:
+            return Path(path).resolve().relative_to(self.root.resolve()).as_posix()
+        except ValueError:
+            return str(path)
+
     def audio(self, take: str, index: int, samples, rate: int = 16000) -> str | None:
         """Write one segment's samples as a WAV. Returns its path relative to `root`."""
         if not self.enabled:
