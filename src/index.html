@@ -5,8 +5,17 @@
     <title>Joe | QM</title>
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
     <link rel="stylesheet" href="style.css" />
-    <script src="https://cdn.jsdelivr.net/npm/p5@1.11.2/lib/p5.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/p5@1.11.2/lib/addons/p5.sound.js"></script>
+    <!-- p5 and p5.sound from the CDN, held to the bytes of the p5 1.11.2 that
+         package-lock.json locks: a CDN serving anything else is refused, rather
+         than run on the page that drives joe's API. Hashes of
+         node_modules/p5/lib/p5.min.js and lib/addons/p5.sound.js:
+         openssl dgst -sha384 -binary FILE | openssl base64 -A -->
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.11.2/lib/p5.min.js"
+            integrity="sha384-fN6ZTti0XTr3VpiB6wpl+XOK8SAd8oa3WaMuDrOIQh7x1KuAXYjsp8nQag3IQ5xR"
+            crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.11.2/lib/addons/p5.sound.js"
+            integrity="sha384-J3aj2fxqM8PEjTu8t76hyRt96sYunZpReLpvWu8CnuYc791rqlBNDWCl9UZZWHBS"
+            crossorigin="anonymous"></script>
   </head>
 
   <body>
@@ -140,12 +149,13 @@
       <span class="hint-steps">
         <span class="hint-step"><b>1.</b> Joe, go! — start audio</span>
         <span class="hint-sep">·</span>
-        <span class="hint-step"><b>2.</b> Browser mic or joe's mic + Live — record</span>
+        <span class="hint-step" data-needs="library" data-what="recording"><b>2.</b> Browser mic or joe's mic + Live — record</span>
         <span class="hint-sep">·</span>
-        <span class="hint-step"><b>3.</b> Library → Process — run pipeline</span>
+        <span class="hint-step" data-needs="library" data-what="the pipeline"><b>3.</b> Library → Process — run pipeline</span>
         <span class="hint-sep">·</span>
-        <span class="hint-step"><b>4.</b> Results — view piano roll</span>
+        <span class="hint-step" data-needs="library" data-what="results"><b>4.</b> Results — view piano roll</span>
       </span>
+      <span class="hint-off" data-testid="hint-off" hidden></span>
       <button id="hint-dismiss" type="button" aria-label="Dismiss">×</button>
     </div>
 

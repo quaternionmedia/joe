@@ -12,6 +12,7 @@ import { VoiceInstruct } from './components/VoiceInstruct.js';
 import { VoiceKeys }    from './components/VoiceKeys.js';
 import { VoiceTranscript } from './components/VoiceTranscript.js';
 import { TranscriptPane } from './components/TranscriptPane.js';
+import { Capabilities, adaptHint, markOff } from './components/Capabilities.js';
 import { PanelKeys }    from './components/PanelKeys.js';
 import { takeWords }      from './components/takeWords.js';
 import { setlist }      from './config/setlists.js';
@@ -196,7 +197,7 @@ startBtn.addEventListener('click', () => {
     _audioActive = true;
     startBtn.textContent = 'Joe, stop!';
     startBtn.classList.add('active');
-    liveToggle.disabled = false;
+    _syncLive();
     // Re-connect audio element to FFT if a file was loaded before audio started.
     // startAudio() calls AudioContext.resume() asynchronously, so defer briefly.
     if (_activeAudioName) {
@@ -217,6 +218,7 @@ startBtn.addEventListener('click', () => {
 // Group 2a — capture mode selector (browser mic vs backend sounddevice)
 captureMode.addEventListener('change', () => {
   capturePanel.setMode(captureMode.value);
+  _syncLive();
 });
 
 // Group 2b — live record toggle
@@ -275,6 +277,29 @@ document.getElementById('results-toggle')
   .addEventListener('click', () => resultsPanel.toggle());
 // L the Library, A the Results, Esc closes them and the transcript (T is the pane's own).
 new PanelKeys({ library: capturePanel, results: resultsPanel, transcript: transcriptPane }).mount();
+
+// ─── What this joe serves ─────────────────────────────────────────────────────
+// Read once from /api/health. A control whose capability is off is greyed, its
+// tooltip naming the setting; Library and Transcript still open, to say so, and
+// the first-run hint keeps the steps that work.
+const capabilities = new Capabilities();
+
+// Live keeps its take in the library; Backend records with joe's microphone.
+function _syncLive() {
+  const off = capabilities.off(...(captureMode.value === 'backend' ? ['microphone', 'library'] : ['library']));
+  markOff(liveToggle, off);
+  if (!capturePanel.isRecording) liveToggle.disabled = !_audioActive || off.length > 0;
+}
+
+capabilities.load().then(() => {
+  markOff(document.getElementById('capture-toggle'), capabilities.off('library'));
+  markOff(document.getElementById('transcript-toggle'), capabilities.off('transcripts'));
+  const fetchLatest = document.querySelector('[data-testid="fetch-latest"]');
+  markOff(fetchLatest, capabilities.off('library'));
+  fetchLatest.disabled = capabilities.off('library').length > 0;
+  _syncLive();
+  adaptHint(document.getElementById('first-run-hint'), capabilities);
+});
 
 // ─── Frame pump — feeds sketch output into live analysis ─────────────────────
 sketchInstance.onFrame = (energies) => {

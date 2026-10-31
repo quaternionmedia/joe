@@ -197,6 +197,8 @@ button:hover { border-color: rgba(255, 255, 255, 0.7); }
 .hint-step { white-space: nowrap; }
 .hint-step b { color: rgba(0, 229, 255, 0.7); font-weight: normal; }
 .hint-sep { opacity: 0.25; }
+.hint-off { white-space: nowrap; color: rgba(255, 255, 255, 0.6); }
+.hint-off code { color: rgba(0, 229, 255, 0.7); font: inherit; }
 
 #hint-dismiss {
   border: none;
@@ -458,6 +460,7 @@ button:hover { border-color: rgba(255, 255, 255, 0.7); }
   opacity: 0.35;
   border: none;
 }
+.capture-library li.lib-off { opacity: 1; }
 
 .lib-name {
   flex: 1;
@@ -741,6 +744,11 @@ body.transcript-open #voice-panel { right: calc(var(--pane-w) + 12px); }
 .tp-fold-items { margin: 0; padding: 0 0 0 10px; list-style: none; }
 .tp-word.is-struck { text-decoration: line-through; color: #666; }
 .tp-word.is-pending { color: #8a8a8a; }
+
+/* ─── Off on this joe — a capability not served (docs/security.md) ─────────── */
+.is-off { opacity: 0.4; border-style: dashed; }
+.off-note { color: rgba(255, 255, 255, 0.7); line-height: 1.45; }
+.off-note a, .hint-off a { color: rgba(0, 229, 255, 0.8); }
 
 /* ─── Words lane tooltip — a clipped word, whole ─────────────────────────── */
 .lane-tip {

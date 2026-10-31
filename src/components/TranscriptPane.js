@@ -20,6 +20,8 @@
  *   const pane = new TranscriptPane(document.getElementById('transcript-pane'), voicePanel, { canvas: mainCanvas });
  *   pane.mount();
  */
+import { offNote } from './Capabilities.js';
+
 const OPEN_KEY = 'joe.transcript.open';
 // How close to the bottom counts as following the newest line, in pixels.
 const FOLLOW_PX = 48;
@@ -116,6 +118,8 @@ export class TranscriptPane {
   async refresh() {
     try {
       const res = await fetch(`${this._base}/history?limit=500`);
+      this._off = res.status === 403;   // a joe serving no transcripts
+      if (this._off) this.render();
       if (!res.ok) return;
       const body = await res.json();
       this._entries = merged(body.entries || [], this._entries);
@@ -130,7 +134,8 @@ export class TranscriptPane {
     this._list.replaceChildren(...this._lines(all));
     if (this._empty) {
       this._empty.hidden = all.length > 0;
-      this._empty.textContent = this._kept === false
+      if (this._off) this._empty.replaceChildren(offNote('transcripts'));
+      else this._empty.textContent = this._kept === false
         ? 'joe keeps no transcript while JOE_DATAPOINTS=0; this one starts now.'
         : 'Nothing said yet. What is asked and what is heard appears here.';
     }
