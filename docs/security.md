@@ -1,21 +1,19 @@
 # joe's security
 
-> **joe has no authentication.** Whatever can reach its port is answered,
-> with the rights of the account joe runs as. It is meant for **one machine
-> its owner trusts, listening on loopback** (`127.0.0.1`). Listening on any
-> other address hands every capability that is on to whatever can reach that
-> address -- the other machines on the network, and the internet if a router
-> forwards the port.
+> **joe has no authentication.** Whatever reaches its port is answered with
+> the rights of the account joe runs as. It is meant for **one machine its
+> owner trusts, listening on loopback** (`127.0.0.1`). On any other address,
+> every capability that is on is open to whatever reaches that address: other
+> machines on the network, and the internet if a router forwards the port.
 >
 > **A fresh joe serves the media API alone.** Everything that records from
 > the microphone or hands data back out -- recordings, transcripts, the audio
-> library -- is off until a setting turns it on, and each one on is announced
-> with a warning when the server starts. `joe dev`, for working on joe on this
-> machine, turns every one on, listening on loopback alone.
+> library -- is off until a setting turns it on, and the server warns at
+> startup for each one on. `joe dev`, for working on joe on this machine,
+> turns every one on, on loopback alone.
 
-This page is the threat model and the findings of a security review of joe's
-API, its page, its dependencies and its CI. The code that enforces what it
-describes is `Modules/Access.py`.
+This page is joe's threat model, and the findings of a security review of its
+API, page, dependencies and CI. `Modules/Access.py` enforces what it describes.
 
 - [The capabilities and their settings](#the-capabilities-and-their-settings)
 - [Which settings each consumer needs](#which-settings-each-consumer-needs)
@@ -31,11 +29,10 @@ describes is `Modules/Access.py`.
 
 ## The capabilities and their settings
 
-Each route but the health check, the vocabulary and FastAPI's own
-`/openapi.json`, `/docs` and `/redoc` belongs to one capability. A capability is
-a setting, `1` or `0`, read from the environment the API runs in; a route of one
-that is off answers `403` naming the setting, before it judges anything it was
-asked.
+Every route but the health check, the vocabulary and FastAPI's own
+`/openapi.json`, `/docs` and `/redoc` belongs to one capability: a setting, `1`
+or `0`, in the API's environment. A route whose capability is off answers `403`
+naming the setting, before judging anything it was asked.
 
 | Capability | Setting | Fresh joe | What it serves | Turned on, whatever reaches the port... |
 | --- | --- | --- | --- | --- |
@@ -46,19 +43,19 @@ asked.
 
 `1`, `true`, `yes` and `on` turn one on; `0`, `false`, `no`, `off` and empty
 turn it off. A `JOE_ALLOW_` setting joe cannot read, or one naming no
-capability -- `JOE_ALLOW_MICROPONE=1` -- is printed and **the server does not
+capability (`JOE_ALLOW_MICROPONE=1`), is printed and **the server does not
 start**: a misspelt setting is never quietly off. `GET /api/health` says
 which capabilities are on.
 
-Two more settings widen what joe answers to (see
-[Requests from a browser](#requests-from-a-browser)):
+Two more settings widen what joe answers to
+([Requests from a browser](#requests-from-a-browser)):
 
 | Setting | Default | What it adds |
 | --- | --- | --- |
 | `JOE_ALLOWED_HOSTS` | none | Host names joe answers to besides loopback names, IP addresses and `host.docker.internal`, comma-separated, without a port: a name it is reached by on a network, or a container's service name |
 | `JOE_ALLOWED_ORIGINS` | none | Pages, as `scheme://host[:port]`, that may send state-changing requests and read the answers, besides joe's own |
 
-**Turning one on.** Run with uvicorn, set it in the environment:
+**Turning one on.** Under uvicorn, set it in the environment:
 
 ```powershell
 $env:JOE_ALLOW_MICROPHONE = "1"
@@ -69,14 +66,14 @@ uv run uvicorn api:app --port 8010
 JOE_ALLOW_MICROPHONE=1 uv run uvicorn api:app --port 8010
 ```
 
-Run with the CLI, name it: `uv run joe backend --allow microphone`; `--allow
+Under the CLI, name it: `uv run joe backend --allow microphone`; `--allow
 all` turns every one on. `uv run joe dev` turns every one on unasked, on
-loopback, keeping any setting the environment already has; given `--allow`,
-it serves what `backend` would, and `--allow media` serves the media API
-alone. The CLI sets the same variables for the API process alone.
+loopback, keeping any setting already in the environment; given `--allow`, it
+serves what `backend` would, and `--allow media` the media API alone. The CLI
+sets the same variables, for the API process alone.
 
-**What the server says as it starts.** Before it takes a request -- a fresh
-joe, as `uvicorn api:app` prints it:
+**What the server prints as it starts**, before it takes a request (a fresh
+joe under `uvicorn api:app`):
 
 ```text
 joe: NO AUTHENTICATION. Whatever can reach this port is answered, with this account's rights.
@@ -87,13 +84,13 @@ joe: off  transcripts  serves what was said and heard: the conversation as it ha
 joe: off  library      Data/Audio/: lists, serves and takes recordings, transcribes them and Data/Voice/'s by name, and runs the pipeline on them (JOE_ALLOW_LIBRARY=1 turns it on)
 ```
 
-and, for each capability turned on, a line such as
+and, for each capability on, a line such as
 
 ```text
 joe: !!! WARNING: JOE_ALLOW_TRANSCRIPTS=1. Whatever can reach this port can read every conversation joe has heard, as it happens and from the start.
 ```
 
-The first request from each address that is not this machine's loopback is
+The first request from each address other than this machine's loopback is
 announced too, once:
 
 ```text
@@ -106,7 +103,7 @@ joe: !!! WARNING: answering 192.168.1.20, which is not this machine's loopback. 
 
 | Consumer | What it asks joe | Set on joe |
 | --- | --- | --- |
-| **alfred**, through `vox.media` (`alfred/core/utils/audio_engine.py`) | `GET /api/media/capabilities`, `POST /api/media`, `POST /api/media/{id}/transcribe`, `POST /api/media/{id}/analyze`, `DELETE /api/media/{id}` | **Nothing.** `media` is on in a fresh joe. alfred's containers reach joe as `host.docker.internal` on Docker Desktop and as docker0's address on Linux; joe answers to both. On Linux, listening on docker0's address is a choice of its own ([media.md](media.md)) |
+| **alfred**, through `vox.media` (`alfred/core/utils/audio_engine.py`) | `GET /api/media/capabilities`, `POST /api/media`, `POST /api/media/{id}/transcribe`, `POST /api/media/{id}/analyze`, `DELETE /api/media/{id}` | **Nothing**: `media` is on in a fresh joe. alfred's containers reach joe as `host.docker.internal` on Docker Desktop and as docker0's address on Linux; joe answers to both. On Linux, listening on docker0's address is a separate choice ([media.md](media.md)) |
 | **qmcp's voice loop**: `qmcp human voice`, `qmcp serve --converse`, and joe's page's **Answer by voice** and **Instruct by voice**, which start it | `GET /api/health`, `POST /api/voice/listen`, `POST /api/voice/watch`, `POST /api/voice/unwatch`, `GET /api/voice/control`, `POST /api/voice/conversation` | `JOE_ALLOW_MICROPHONE=1` |
 | ...and joe's page showing that conversation (the voice panel, the transcript pane) | `GET /api/voice/conversation` (events), `GET /api/voice/history`, `GET /api/voice/vocabulary`, and `GET /api/voice/takes/{take}/audio` for a take shown on the visualiser; the page's keys and buttons post `answer`, `hold` and `strike` | `JOE_ALLOW_TRANSCRIPTS=1` as well |
 | **vox's voice loop**, against a running joe: `vox doctor`, `vox self-report` (live) | `GET /api/health`, `GET /api/voice/devices`, `POST /api/voice/listen` | `JOE_ALLOW_MICROPHONE=1` |
@@ -114,13 +111,12 @@ joe: !!! WARNING: answering 192.168.1.20, which is not this machine's loopback. 
 | **The family hub**: the performing family's demo, which starts joe with `joe serve` and checks it with `joe check` (joe's `feat/family-control`, not on this branch) | joe's page through Vite: the library, the pipeline and its results; and the hub's `POST /family/cue` and `GET /family/state`, which that branch adds | `JOE_ALLOW_LIBRARY=1`. The `/family` routes write into the library and run the pipeline, and have no capability yet: when that branch lands they belong to `library` or to one of their own |
 | **joe's own page** (`joe dev`) | **Library**, **Process**, **Results → Fetch Latest**, playing a recording: `library`. **joe's mic** capture: `microphone` (and `library` to play it back). The voice panel and the transcript pane: `transcripts`. Answering by key or button, holding the talk key, striking a word: `microphone` | `uv run joe dev`, which turns every one on; `--allow` names fewer. With one off, its button is greyed, its tooltip naming the setting; the Library, the transcript pane and Results say it is off and link this page; the first-run hint keeps the steps that work |
 
-Without its setting, a consumer meets the 403 where it first asks: alfred
-never does. Two report it less plainly than they could, and both are for
-their own repositories to change: `vox doctor` reads the 403 from
-`/api/voice/devices` as "none found on the engine's machine", and qmcp's
-voice preflight asks only `/api/health`, so it speaks its question before
-the listen is refused. `/api/health`'s `allowed.microphone` is what either
-can check first.
+Without its setting, a consumer meets the 403 at its first request; alfred
+never does. Two report it vaguely ([F18](#findings)), for their own
+repositories to change: `vox doctor` reads the 403 from `/api/voice/devices`
+as "none found on the engine's machine", and qmcp's voice preflight asks
+only `/api/health`, so it speaks its question before the listen is refused.
+Either can check `/api/health`'s `allowed.microphone` first.
 
 ---
 
@@ -128,13 +124,13 @@ can check first.
 
 ### What is worth protecting
 
-- **The microphone** of the machine joe runs on: whatever the room says.
+- **The microphone** of joe's machine: whatever the room says.
 - **What was said and heard**: every take's WAV segments and transcript under
   `Data/Voice/` (kept until deleted, unless `JOE_DATAPOINTS=0`), the
-  conversation as it happens, and the questions asked -- among them qmcp's
-  human-in-the-loop questions and the answers to them.
-- **Decisions made by voice.** An answer joe takes -- spoken, or posted as if
-  by key -- is what qmcp acts on: "approve" to a request waiting on a person.
+  conversation as it happens, and the questions asked, qmcp's
+  human-in-the-loop questions and their answers among them.
+- **Decisions made by voice.** qmcp acts on the answer joe takes, spoken or
+  posted as if by key: "approve" to a request waiting on a person.
 - **The audio library** (`Data/Audio/`) and the pipeline's output
   (`Data/Output/`).
 - **Uploaded media**: alfred's clips and timeline mixes, kept privately under
@@ -146,7 +142,7 @@ can check first.
 
 | Who | Reaches joe | Stopped by |
 | --- | --- | --- |
-| Programs on this machine, under any account | Always, on any binding: loopback is shared by every user of the machine | Nothing in joe. On a machine shared with people you do not trust, turn nothing on |
+| Programs on this machine, under any account | Always, on any binding: every user of the machine shares loopback | Nothing in joe. On a machine shared with people you do not trust, turn nothing on |
 | Pages open in a browser on this machine | By making the browser send requests to loopback, and by DNS rebinding | The guard ([Requests from a browser](#requests-from-a-browser)) |
 | Containers on this machine | Docker Desktop hands their connections to loopback; on Linux, only when joe listens on docker0's address | The binding |
 | Other machines on the network | Only when joe listens beyond loopback | The binding; a host firewall |
@@ -162,10 +158,9 @@ can check first.
 | docker0's address, `172.17.0.1` by default -- for alfred on a Linux Docker host | This machine and its containers -- and a neighbour that routes that address through this machine, unless a firewall says otherwise |
 | `0.0.0.0` | Everything that can reach this machine on that port: every device on its network, and the internet if a router forwards the port. A firewall rule admitting the Docker subnets alone narrows it to this machine and its containers |
 
-Every route of a capability that is on is reachable by everyone in the
-binding's row; a route of a capability that is off, by no one. joe cannot
-tell those callers apart: binding and the capabilities are the whole of its
-access control.
+Every route of a capability that is on is open to everyone in the binding's
+row; a route of one that is off, to no one. joe cannot tell those callers
+apart: the binding and the capabilities are its whole access control.
 
 **Out of scope:** someone with this account on this machine. They can read
 `Data/`, the model cache and joe's code directly, and run joe themselves.
@@ -215,23 +210,23 @@ without a capability fails it.
 
 A page on any site, open in a browser on this machine, can make the browser
 send requests to `127.0.0.1`. joe answers loopback, so the browser is the
-one route in that the binding does not close.
+one way in that the binding does not close.
 
 **CORS stops a page reading answers, not sending requests.** A form's POST,
 or a `fetch` with a body of type `text/plain`, `application/x-www-form-urlencoded`
 or `multipart/form-data` and no custom header, is sent without asking the
-server first. Before this review that was enough to answer a question qmcp
-was asking -- `POST /api/voice/answer` with a `text/plain` body holding
-`{"text": "approve"}`, which joe read as JSON whatever its type -- to post the
-dialog's state, to open a take, to start a recording, or to run the pipeline.
+server first. Unless joe refuses it, such a request can answer a question
+qmcp is asking -- a `text/plain` body holding `{"text": "approve"}`, posted
+to `/api/voice/answer` -- post the dialog's state, open a take, start a
+recording, or run the pipeline ([F2](#findings)).
 
 **DNS rebinding reads the answers too.** A page loaded from a name its owner
-controls can re-point that name at `127.0.0.1`; its requests are then
-same-origin to the browser, and every answer -- every transcript, every
+controls can re-point that name at `127.0.0.1`. Its requests are then
+same-origin to the browser, so every answer -- every transcript, every
 recording -- is the page's to read. They still carry the page's name in
 `Host`.
 
-**What joe refuses, before any route sees the request** (`Access.Guard`), as
+**What joe refuses before any route sees the request** (`Access.Guard`), as
 `{"detail": str}`:
 
 | Request | Answer | Why it is safe |
@@ -242,45 +237,46 @@ recording -- is the page's to read. They still carry the page's name in
 | A JSON route's body -- `answer`, `hold`, `strike`, the dialog's state -- not sent as `application/json` (or a `+json` type) | `415` | What a form or an unpreflighted `fetch` can send is never taken as JSON |
 
 Programs that are not browsers -- alfred through vox, qmcp, curl -- send no
-`Origin` and no `Sec-Fetch-Site`; only the Host rule applies to them, and the
-Hosts they use are answered.
+`Origin` and no `Sec-Fetch-Site`. Only the Host rule applies to them, and
+the Hosts they use are answered.
 
 **Reading answers.** CORS lets only the pages joe takes requests from read
 its answers: its dev page and `JOE_ALLOWED_ORIGINS`, with `GET` and `POST`,
 without credentials (`Access.PageCORS`, read on each request). A page from
-anywhere else gets the answer to a GET without the header that would let it
-read it.
+anywhere else gets a GET's answer without the header that would let it read
+it.
 
 **Private Network Access.** Recent Chromium versions ask before a public
 page reaches a private or loopback address: a preflight carrying
 `Access-Control-Request-Private-Network`, and, newer, a permission prompt.
 joe refuses every such preflight, even from a page it takes requests from.
-It does not rely on either: other browsers do not ask, and a person can
-click *Allow*.
+It relies on neither: other browsers do not ask, and a person can click
+*Allow*.
 
-**joe's own page.** The page `joe dev` serves is joe's own origin as far as
-the API knows, so what runs on it can use every capability that is on.
-What it shows from the API is text, never markup ([F4](#findings)); the two
-scripts it loads from a CDN are held to the bytes the lockfile installs
-([F7](#findings)). Vite, which serves it on port 3000, refuses Hosts it does
-not know by itself; its own advisories are [F8](#findings).
+**joe's own page.** The page `joe dev` serves is joe's own origin to the
+API, so what runs on it can use every capability that is on. It shows what
+the API returns as text, never markup ([F4](#findings)); its two CDN scripts
+are held to the bytes the lockfile installs ([F7](#findings)). Vite, serving
+it on port 3000, refuses Hosts it does not know by itself; its own
+advisories are [F8](#findings).
 
 ---
 
 ## Files, uploads and subprocesses
 
-**Names from a caller never become paths.** A filename -- `/api/audio/{filename}`,
-`/api/run/{filename}`, `/api/voice/transcribe` -- must be a bare name with no
-separator, no `..`, no NUL, and no trailing dot or space (which Windows
-strips, opening a file under a name no listing shows), and must resolve to a
-file inside `Data/Audio/` (or `Data/Voice/`), symlinks included; anything
-else is a 404, the same as a missing file. A media id must be 32 hexadecimal
-digits before it reaches the filesystem, and a take's id 6 to 32, and its recording is
-served only from under `Data/Voice/`, whatever its record names. joe makes every name it writes.
+**Names from a caller never become paths.** A filename (`/api/audio/{filename}`,
+`/api/run/{filename}`, `/api/voice/transcribe`) must be a bare name: no
+separator, no `..`, no NUL, and no trailing dot or space, which Windows
+strips, opening a file under a name no listing shows. It must resolve,
+symlinks included, to a file inside `Data/Audio/` (or `Data/Voice/`);
+anything else is a 404, like a missing file. A media id must be 32
+hexadecimal digits before it reaches the filesystem, and a take's id 6 to 32;
+a take's recording is served only from under `Data/Voice/`, whatever its
+record names. joe makes every name it writes.
 
 **Where files go.** Some of joe's folders under `Data/` resolve against the
-directory the API runs in and some against the checkout: run the API from
-the checkout, as every command here does, and they are one `Data/`.
+directory the API runs in, some against the checkout. Run the API from the
+checkout, as every command here does, and they are one `Data/`.
 
 **Uploads are capped, and judged before they are read.**
 
@@ -293,11 +289,11 @@ Nothing caps how many uploads are kept: a caller can keep a gigabyte an hour
 per request ([F11](#findings)).
 
 **Temporary files.** Each media upload is a directory named by its random
-id, made with mode `0700` (on Windows it takes `Data/`'s permissions); the
-upload itself is deleted as soon as ffmpeg has decoded its sound, and the
-rest when it expires or is deleted. A library upload's partial file is
-removed when it is refused. The voice datapoints -- every segment's WAV and
-a line of `segments.jsonl` for each -- are kept until someone deletes them;
+id, made with mode `0700` (on Windows it takes `Data/`'s permissions). The
+upload itself is deleted once ffmpeg has decoded its sound, and the rest
+when it expires or is deleted. A refused library upload's partial file is
+removed. The voice datapoints -- every segment's WAV and a line of
+`segments.jsonl` for each -- are kept until someone deletes them;
 `JOE_DATAPOINTS=0` writes none.
 
 **Subprocesses take no shell and no caller's words.**
@@ -307,17 +303,17 @@ a line of `segments.jsonl` for each -- are kept until someone deletes them;
   the demuxers of the formats joe takes (`-format_whitelist`) and only as a
   local file (`-protocol_whitelist file`), so a playlist or concat script
   sent as audio cannot read other files into the answer; stopped after 600
-  s. ffmpeg is the largest parser of untrusted input here: keep the one
+  s. It is the largest parser of untrusted input here: keep the one
   `JOE_FFMPEG` names, or the one on `PATH`, current.
-- **The pipeline** is `python main.py` with a fixed path, the file to process
-  passed as a resolved path in `JOE_AUDIO_FILE`, stopped after 120 s. Nothing
-  limits how many run at once ([F11](#findings)).
-- **The CLI** starts npm, uvicorn and, on Windows, `taskkill` with fixed
+- **The pipeline** is `python main.py` at a fixed path, given the file as a
+  resolved path in `JOE_AUDIO_FILE`, stopped after 120 s. Nothing limits how
+  many run at once ([F11](#findings)).
+- **The CLI** starts npm, uvicorn and, on Windows, `taskkill`, with fixed
   arguments.
 
-**What an error says.** A media route's unforeseen failure answers `500` with
-the exception's message, and `/api/run` answers the pipeline's output, each
-of which can name paths on this machine ([F12](#findings)).
+**What an error says.** A media route's unforeseen failure answers `500`
+with the exception's message, and `/api/run` answers the pipeline's output;
+either can name paths on this machine ([F12](#findings)).
 
 ---
 
@@ -327,9 +323,9 @@ of which can name paths on this machine ([F12](#findings)).
 --frozen` installs exactly those, in CI as here. Among them at this review:
 FastAPI 0.135.1, Starlette 0.52.1, uvicorn 0.41.0 (h11 0.16.0),
 openai-whisper 20250625, torch 2.14.0, librosa 0.11.0. Dependabot does not
-watch them, and no vulnerability audit of them was run for this review
-([F15](#findings)). pytest, pytest-sugar and nox are among the dependencies
-the server installs.
+watch them, and this review ran no vulnerability audit of them
+([F15](#findings)). The server's dependencies include pytest, pytest-sugar
+and nox.
 
 **The whisper model** is downloaded on first use from
 `openaipublic.azureedge.net` into `~/.cache/whisper/`, checked by whisper
@@ -343,7 +339,7 @@ advisories, all in Vite's dev server and its build-time dependencies
 runs ([F8](#findings)).
 
 **Scripts from a CDN.** The page loads p5 and p5.sound from
-`cdn.jsdelivr.net`, now with `integrity` hashes of the files the lockfile
+`cdn.jsdelivr.net` with `integrity` hashes of the files the lockfile
 installs ([F7](#findings)). FastAPI's `/docs` and `/redoc` load Swagger UI
 and ReDoc from the same CDN by major version, without integrity, into joe's
 own origin ([F13](#findings)).
@@ -357,21 +353,22 @@ not by commit; Dependabot proposes their updates every week
 
 ## The deploy workflow
 
-`deploy.yml` builds the page and publishes it to the `gh-pages` branch.
+`deploy.yml` builds the page and publishes it to the `gh-pages` branch, in
+two jobs:
 
-**It published every PR.** Nothing guarded the deploy step, so a PR from a
-branch of this repository put its build on GitHub Pages before it was
-merged, and the whole job -- `npm ci`, every dependency's install scripts,
-the project's build -- ran with `contents: write`.
+| Job | Runs | Token | Does |
+| --- | --- | --- | --- |
+| `build` | On every PR into `main`, every push to `main`, and by hand | Read-only, and a checkout that keeps no credentials | `npm ci` and the build, so a PR still shows whether the page builds |
+| `deploy` | Only when the ref is `refs/heads/main` and the event is a push or a run by hand | `contents: write`, the only job that can write | Publishes the build `build` kept; runs no project code |
 
-**Now** it is two jobs. `build` runs on every PR into `main`, every push to
-`main` and by hand, with a read-only token and a checkout that keeps no
-credentials, so a PR still shows whether the page builds. `deploy` runs only
-when the ref is `refs/heads/main` and the event is a push or a run by hand;
-it alone can write, and it runs no project code: it publishes the build
-`build` kept. A PR from a fork gets a read-only token whatever the workflow
-says. `tests.yml` and `e2e.yml` declare read-only tokens too.
+A PR from a fork gets a read-only token whatever the workflow says.
+`tests.yml` and `e2e.yml` declare read-only tokens too.
 `tests/test_workflows.py` holds all of it.
+
+[F5](#findings) was one unguarded job: a PR from a branch of this repository
+put its build on GitHub Pages before it was merged, and the whole job --
+`npm ci`, every dependency's install scripts, the project's build -- ran
+with `contents: write`.
 
 ---
 
