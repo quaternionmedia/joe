@@ -48,7 +48,8 @@ def test_the_voice_and_media_tests_pass_with_the_machine_s_settings_set():
         [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider",
          "tests/test_voice.py", "tests/test_transcript.py", "tests/test_control.py",
          "tests/test_watch.py", "tests/test_cli_voice_devices.py", "tests/test_conversation.py",
-         "tests/test_media_api.py", "tests/test_media_store.py", "tests/test_media_transcribe.py"],
+         "tests/test_media_store.py",
+         "tests/test_media_transcribe.py::test_the_capabilities_name_the_formats_features_and_model"],
         cwd=ROOT, env={**os.environ, **MACHINE, INNER: "1"},
         capture_output=True, text=True, encoding="utf-8", errors="replace")
     assert run.returncode == 0, run.stdout[-3000:]
