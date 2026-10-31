@@ -25,6 +25,13 @@ async function serve(page, allowed) {
     route.fulfill({ json: { requests: [], count: 0 } }));
 }
 
+// Nothing is greyed until /api/health has answered, so a spec that expects
+// nothing greyed waits for the page to have read it: the page marks the
+// Library button, greyed or not, once it has.
+async function pageHasRead(page) {
+  await expect(page.getByTestId('capture-toggle')).toHaveAttribute('data-own-title', /.*/);
+}
+
 test('a joe serving the media API alone greys Library, Transcript and Live, each naming its setting', { tag: '@music-page' }, async ({ page }) => {
   await serve(page, FRESH);
   await page.goto('/');
@@ -49,6 +56,7 @@ test('a joe serving the media API alone greys Library, Transcript and Live, each
 test('a joe serving everything greys nothing, and Live opens once audio starts', { tag: '@music-page' }, async ({ page }) => {
   await serve(page, ALL);
   await page.goto('/');
+  await pageHasRead(page);
   await expect.poll(() => page.evaluate(() => document.querySelectorAll('[data-off]').length)).toBe(0);
 
   await expect(page.getByTestId('transcript-toggle')).toHaveAttribute('title', 'Transcript: the whole spoken exchange (T)');
@@ -118,6 +126,7 @@ test('the first-run hint keeps the steps that work and says what --allow turns o
 test('on a joe serving everything the first-run hint keeps all four steps', { tag: '@music-page' }, async ({ page }) => {
   await serve(page, ALL);
   await page.goto('/');
+  await pageHasRead(page);
   await expect.poll(() => page.evaluate(() => document.querySelectorAll('[data-off]').length)).toBe(0);
 
   await expect(page.locator('#first-run-hint .hint-step')).toHaveCount(4);

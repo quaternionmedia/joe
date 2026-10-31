@@ -4,7 +4,7 @@ const { test, expect } = require('@playwright/test');
 // the piano roll's timeline. History and recording are scripted.
 function sse(events) {
   return events.map((e, i) =>
-    `id: ${i + 1}\ndata: ${JSON.stringify({ seq: i + 1, text: '', ...e })}\n\n`).join('');
+    `id: ${i + 1}\ndata: ${JSON.stringify({ seq: i + 1, text: '', at: 2000 + i, ...e })}\n\n`).join('');
 }
 
 // Two seconds of silence as a WAV, so the audio element learns a duration.

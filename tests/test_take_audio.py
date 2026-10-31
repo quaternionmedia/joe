@@ -1,11 +1,30 @@
 """One take's recording, served for the visualiser by the take's id."""
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 from scipy.io import wavfile
 
 import api
+from Modules.Voice import Voice
+
+
+@pytest.fixture(autouse=True)
+def _the_voice_folder_is_the_test_s_own(monkeypatch):
+    """The route serves from the datapoints' folder and from `Voice`'s capture
+    folder, which is the checkout's `Data/Voice` unless it is named."""
+    original = Voice.__init__
+
+    def init(self, model_size="base", capture_dir=None):
+        original(self, model_size, capture_dir or str(api.datapoints.root))
+
+    monkeypatch.setattr(Voice, "__init__", init)
+
+
+def test_the_voice_folder_these_tests_serve_from_is_the_test_s_own():
+    assert Path(Voice().capture_dir).resolve() == api.datapoints.root.resolve()
 
 
 def _recording(path):

@@ -15,9 +15,10 @@ directly when both servers are running via `joe dev`.
 
 ## Capabilities
 
-Every route but the health check and the vocabulary belongs to a **capability**, named
-under its heading below. A route whose capability is off answers `403`, with a `detail`
-naming the setting that turns it on, before judging anything it was asked:
+Every route but the health check, the vocabulary and FastAPI's own `/openapi.json`,
+`/docs` and `/redoc` belongs to a **capability**, named under its heading below. A
+route whose capability is off answers `403`, with a `detail` naming the setting that
+turns it on, before judging anything it was asked:
 
 ```json
 {"detail": "the audio library is off on this joe: JOE_ALLOW_LIBRARY=1 turns it on, for whatever can reach this port -- joe has no authentication (docs/security.md)"}
@@ -41,9 +42,12 @@ Whatever is on, joe refuses what a page on another site can make a browser send
 
 | Status | When |
 | --- | --- |
-| `400` | The `Host` is not `localhost`, an IP address, `host.docker.internal`, or a name in `JOE_ALLOWED_HOSTS` |
+| `400` | The `Host` is not `localhost`, a `*.localhost` name, an IP address, `host.docker.internal`, or a name in `JOE_ALLOWED_HOSTS` |
 | `403` | A POST or DELETE whose `Origin` is not the page joe served, its dev page on port 3000, or one in `JOE_ALLOWED_ORIGINS`; or anything marked `Sec-Fetch-Site: cross-site` but following a link |
 | `415` | A body sent to `answer`, `hold`, `strike` or `POST /api/voice/conversation` whose `Content-Type` is not `application/json` |
+
+A page in `JOE_ALLOWED_ORIGINS` may `GET` and `POST` and read the answers; the browser's
+preflight of its `DELETE` is refused ([security.md](security.md#requests-from-a-browser)).
 
 curl, vox and alfred send none of those headers, and reach joe at names it answers to.
 
@@ -648,7 +652,9 @@ The whole transcript, oldest first, read from the datapoints:
 "reason", "at"}` for a sentence the program asking said, or `{"kind": "take",
 "take", "text", "source", "confidence", "audio", "over_question", "at",
 "segments": [{"index", "words", "struck", "start", "end"}], "label",
-"outcome"}` for a take joe heard. A take whose recording never ended -- a watch
+"outcome"}` for a take joe heard. A take's `audio` is its recording's path relative
+to `Data/Voice/`, so the folder can be moved or copied whole; a record kept before
+names the path it was written at. A take whose recording never ended -- a watch
 closed before anyone spoke -- is no entry, and a line cut short is skipped.
 `limit` (default 200, at most 2000) keeps the last entries. `kept` is false
 under `JOE_DATAPOINTS=0`, when nothing is written to read back.
@@ -659,8 +665,9 @@ under `JOE_DATAPOINTS=0`, when nothing is written to read back.
 
 One take's recording, `audio/wav`, by the take's hex id, for the visualiser to
 play with the take's words on its timeline. Only a recording under joe's own
-voice folder is served, whatever the take's record names. `400` for an id that
-is not hex, `404` for a take with no recording kept.
+voice folder is served, whatever the take's record names; a record that names
+where the folder was before it moved is found by its file name there. `400` for an
+id that is not hex, `404` for a take with no recording kept.
 
 ### `GET /api/voice/vocabulary`
 
@@ -752,7 +759,7 @@ uv run joe dev --allow library --allow microphone
 
 # 2a. Record from the browser
 #     Open http://localhost:3000/joe
-#     Click "Joe, go!" -> select "Browser" -> click "Live" -> speak -> click "Stop"
+#     Click "Joe, go!" -> select "Browser mic" -> click "Live" -> speak -> click "Stop"
 #     Recording auto-loads into the transport bar; open "Library" -> click "Process"
 
 # 2b. Record from the backend
