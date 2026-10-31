@@ -559,7 +559,9 @@ The whole transcript, oldest first, read from the datapoints:
 "reason", "at"}` for a sentence the program asking said, or `{"kind": "take",
 "take", "text", "source", "confidence", "audio", "over_question", "at",
 "segments": [{"index", "words", "struck", "start", "end"}], "label",
-"outcome"}` for a take joe heard. A take whose recording never ended -- a watch
+"outcome"}` for a take joe heard. A take's `audio` is its recording's path relative
+to `Data/Voice/`, so the folder can be moved or copied whole; a record kept before
+names the path it was written at. A take whose recording never ended -- a watch
 closed before anyone spoke -- is no entry, and a line cut short is skipped.
 `limit` (default 200, at most 2000) keeps the last entries. `kept` is false
 under `JOE_DATAPOINTS=0`, when nothing is written to read back.
@@ -568,8 +570,9 @@ under `JOE_DATAPOINTS=0`, when nothing is written to read back.
 
 One take's recording, `audio/wav`, by the take's hex id, for the visualiser to
 play with the take's words on its timeline. Only a recording under joe's own
-voice folder is served, whatever the take's record names. `400` for an id that
-is not hex, `404` for a take with no recording kept.
+voice folder is served, whatever the take's record names; a record that names
+where the folder was before it moved is found by its file name there. `400` for an
+id that is not hex, `404` for a take with no recording kept.
 
 ### `GET /api/voice/vocabulary`
 
