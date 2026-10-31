@@ -49,7 +49,7 @@ Each line is a step of a lane page in `docs/paths/`, with what checks it automat
 - [ ] **2.2** **Process** runs the pipeline on it, and its notes are drawn. -- 1 spec, 1 test
 - [ ] **2.3** A file the pipeline cannot read says why in the Library. -- 1 spec, 1 test
 - [ ] **2.4** **Play** loads it on the transport and plays it, its row highlighted, the playhead following the scrubber. -- 6 specs
-- [ ] **2.5** `uv run joe run` from a terminal, then **Results** (`A`) → **Fetch Latest** draws the newest result. Also `joe run NAME` and `joe run --all` (#55, in the sum). -- 4 specs; see finding 1
+- [ ] **2.5** `uv run joe run` from a terminal, then **Results** (`A`) → **Fetch Latest** draws the newest result. Also `joe run NAME` and `joe run --all` (#55, in the sum). -- 4 specs
 - [ ] **2.6** An earlier result, with no server: **Results** → **Load JSON**. -- 5 specs, 1 test
 - [ ] **2.7** `←` and `→` step through the setlist; the era panel shows genre, title, composer and year. -- 4 specs
 
@@ -155,5 +155,5 @@ lands); every link opens. Known and recorded already, so not new findings:
 
 | # | Where (lane step, doc, test) | Did | Saw | The step says | Owning PR | State |
 |---|---|---|---|---|---|---|
-| 1 | Music page 2.5, `docs/paths/music-page.md:105` | Read it against `cli.py`, `main.py` and the README in the sum | `uv run joe run` with no names analyses the newest recording; `NAME...` those named; `--all` every one (#55) | "`uv run joe run` analyses every file in `Data/Audio/`" | #52 (3ee6003, only on `docs/user-paths`) | Open: fix on #52 before its merge |
+| 1 | Music page 2.5, `docs/paths/music-page.md:105` | Read it against `cli.py`, `main.py` and the README in the sum | `uv run joe run` with no names analyses the newest recording; `NAME...` those named; `--all` every one (#55) | "`uv run joe run` analyses every file in `Data/Audio/`" | #52 (3ee6003, only on `docs/user-paths`) | Fixed on #52, 57b86ae |
 | 2 | | | | | | |
