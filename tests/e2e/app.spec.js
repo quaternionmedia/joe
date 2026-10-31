@@ -140,3 +140,23 @@ test('Canvas mode badge is empty on initial load', async ({ page }) => {
   // No recording or results — badge should be blank
   await expect(page.locator('#canvas-mode')).toHaveText('');
 });
+
+// ─── The transport's scrubber ────────────────────────────────────────────────
+
+for (const width of [1024, 1280]) {
+  test(`the scrubber's knob clears the time readout at ${width} px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 768 });
+    await page.goto('/');
+    const scrub = await page.getByTestId('transport-scrub').boundingBox();
+    const time = await page.getByTestId('transport-time').boundingBox();
+
+    expect(scrub.width).toBeGreaterThanOrEqual(60);
+    expect(scrub.x + scrub.width).toBeLessThanOrEqual(time.x);
+
+    // A loaded file's name gives way to the scrubber, and the bar stays within the window.
+    await page.getByTestId('transport-name').evaluate(el => { el.textContent = 'a-recording-with-a-long-name.wav'; });
+    const loaded = await page.getByTestId('transport-scrub').boundingBox();
+    expect(loaded.width).toBeGreaterThanOrEqual(60);
+    expect(await page.locator('#transport').evaluate(bar => bar.scrollWidth <= bar.clientWidth)).toBe(true);
+  });
+}

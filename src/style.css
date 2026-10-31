@@ -115,7 +115,7 @@ button:hover { border-color: rgba(255, 255, 255, 0.7); }
 /* Scrub range */
 #transport input[type="range"] {
   flex: 1;
-  min-width: 0;
+  min-width: 60px;   /* room for the knob, so it never sits on the time */
   accent-color: rgba(255, 255, 255, 0.5);
   cursor: pointer;
 }
