@@ -139,8 +139,8 @@ room for it.
 transport and the spectrum, and lays its words along the bottom of the piano
 roll at the times they were said, the word under the playhead lit and struck
 words crossed out. joe knows when each segment of a take began and ended, so a
-segment's words share its span evenly. Ejecting the recording, or loading a
-pipeline result, takes the words away.
+segment's words share its span evenly. Ejecting the recording, or a pipeline
+run finishing, takes the words away.
 
 **The transcript as it is written:** a take is transcribed piece by piece
 while it is spoken, and the panel shows the words as they arrive. Clicking a

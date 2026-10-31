@@ -46,3 +46,8 @@ include = ["Modules*"]
 
 [tool.pdm]
 distribution = true
+
+[tool.pytest.ini_options]
+markers = [
+    "local: opens this machine's audio through PortAudio; run on a person's machine, deselected on the hosted runners, which have no audio server",
+]

@@ -82,11 +82,11 @@ Joe, go!  ->  enables Live  ->  recording  ->  stop  ->  Library: Process  ->  R
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
 | `Live` button is greyed out | Web Audio not started | Click **Joe, go!** first |
-| **Library** is greyed and says "The library is off." | joe was started as `backend`, or `dev --allow` without `library` | `uv run joe dev`, or `--allow library` (`JOE_ALLOW_LIBRARY=1`); [security.md](security.md) says what each capability exposes |
+| **Library** is greyed and says "The library is off." | joe was started with `uv run joe backend`, or `dev --allow` without `library` | `uv run joe dev`, or `--allow library` (`JOE_ALLOW_LIBRARY=1`); [security.md](security.md) says what each capability exposes |
 | `Live` starts but no notes appear | Mic permission denied or wrong source | Check browser mic permissions; try **joe's mic** |
 | `Play` button is greyed out | Live recording is active | Click **Stop** to end recording first |
 | **Fetch Latest** returns 404 | No pipeline output yet | Run `uv run joe run` (or process a file via Library) |
-| Backend capture fails silently | `sounddevice` not installed or no device | Check `uv sync` completed; verify audio input device |
+| joe's mic capture fails silently | `sounddevice` not installed or no device | Check `uv sync` completed; verify audio input device |
 
 ---
 
@@ -106,8 +106,9 @@ Examples:
 
 ## Required Pre-PR Checks
 
-Run before opening a PR. `tests.yml` runs the same suite and `deploy.yml`
-the same build ([CI](#ci)):
+Run before opening a PR. `tests.yml` runs the same suite, less the test marked
+`local`, which opens this machine's audio and which the runners, with no audio
+server, leave out; `deploy.yml` runs the same build ([CI](#ci)):
 
 ```powershell
 uv run --frozen pytest tests/ -q
@@ -191,7 +192,7 @@ GitHub Actions runs three workflows, none of them filtered by path:
 
 | Workflow | When | Runs on | What it does |
 | --- | --- | --- | --- |
-| `tests.yml` | Every PR, and every push to `main` | `windows-latest` and `ubuntu-latest`, neither cancelled when the other fails | `uv sync --frozen`, then `uv run --frozen pytest tests/ -q`. Linux installs `libportaudio2` and `ffmpeg` first; Windows installs no ffmpeg, so the media tests that need one skip there |
+| `tests.yml` | Every PR, and every push to `main` | `windows-latest` and `ubuntu-latest`, neither cancelled when the other fails | `uv sync --frozen`, then `uv run --frozen pytest tests/ -q -m "not local"`. Linux installs `ffmpeg` first and no audio library; Windows installs no ffmpeg, so the media tests that need one skip there |
 | `e2e.yml` | Every PR, every push to `main`, and by hand | `windows-latest`, Node 22 | `npm ci`, `npx playwright install --with-deps chromium`, then `npm run test:e2e` |
 | `deploy.yml` | Every PR against `main`, every push to `main`, and by hand | `ubuntu-latest` | `npm ci` and `npm run build`; then, only for a push to `main` or a run by hand on `main`, publishes `dist/` to the `gh-pages` branch |
 

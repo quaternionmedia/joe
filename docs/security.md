@@ -29,10 +29,10 @@ API, page, dependencies and CI. `Modules/Access.py` enforces what it describes.
 
 ## The capabilities and their settings
 
-Every route but the health check and the vocabulary belongs to one
-capability: a setting, `1` or `0`, in the API's environment. A route whose
-capability is off answers `403` naming the setting, before judging anything
-it was asked.
+Every route but the health check, the vocabulary and FastAPI's own
+`/openapi.json`, `/docs` and `/redoc` belongs to one capability: a setting, `1`
+or `0`, in the API's environment. A route whose capability is off answers `403`
+naming the setting, before judging anything it was asked.
 
 | Capability | Setting | Fresh joe | What it serves | Turned on, whatever reaches the port... |
 | --- | --- | --- | --- | --- |
@@ -270,9 +270,9 @@ separator, no `..`, no NUL, and no trailing dot or space, which Windows
 strips, opening a file under a name no listing shows. It must resolve,
 symlinks included, to a file inside `Data/Audio/` (or `Data/Voice/`);
 anything else is a 404, like a missing file. A media id must be 32
-hexadecimal digits before it reaches the filesystem, and a take's id 6 to 32,
-and its recording is served only from under `Data/Voice/`, whatever its record
-names. joe makes every name it writes.
+hexadecimal digits before it reaches the filesystem, and a take's id 6 to 32;
+a take's recording is served only from under `Data/Voice/`, whatever its
+record names. joe makes every name it writes.
 
 **Where files go.** Some of joe's folders under `Data/` resolve against the
 directory the API runs in, some against the checkout. Run the API from the

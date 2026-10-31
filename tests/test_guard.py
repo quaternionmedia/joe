@@ -202,12 +202,14 @@ def test_a_request_the_browser_marks_cross_site_is_refused_without_an_origin(cli
     assert not answered()
 
 
-def test_another_site_cannot_embed_a_recording(client):
+@pytest.mark.parametrize("path", ["/api/audio/take.wav", "/api/voice/takes/0123abcd/audio"])
+def test_another_site_cannot_embed_a_recording(client, path):
     """`<audio src>` on another site's page: a cross-site GET that is no navigation."""
-    response = client.get("/api/voice/control", headers={
+    response = client.get(path, headers={
         "sec-fetch-site": "cross-site", "sec-fetch-mode": "no-cors", "sec-fetch-dest": "audio"})
 
     assert response.status_code == 403
+    assert "Sec-Fetch-Site" in response.json()["detail"]
 
 
 def test_following_a_link_from_another_site_is_answered(client):
