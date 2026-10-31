@@ -141,6 +141,23 @@ test('Canvas mode badge is empty on initial load', async ({ page }) => {
   await expect(page.locator('#canvas-mode')).toHaveText('');
 });
 
+// ─── The specs' own servers ──────────────────────────────────────────────────
+
+test("a spec's page reaches no backend the spec has not scripted", async ({ page }) => {
+  await page.goto('/');
+
+  // joe's API and qmcp's queue, through the page's own proxy: neither is a joe
+  // or a qmcp that happens to be running on this machine.
+  const answers = await page.evaluate(() => Promise.all(['/api/health', '/v1/human/requests'].map(async path => {
+    const res = await fetch(path);
+    return { path, status: res.status, text: await res.text() };
+  })));
+  for (const { path, status, text } of answers) {
+    expect(status, path).toBe(503);
+    expect(text, path).toContain('no backend in the specs');
+  }
+});
+
 // ─── Where Live records from ─────────────────────────────────────────────────
 
 test('the capture select says where Live records from, and what each choice is', async ({ page }) => {
