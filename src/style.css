@@ -115,7 +115,7 @@ button:hover { border-color: rgba(255, 255, 255, 0.7); }
 /* Scrub range */
 #transport input[type="range"] {
   flex: 1;
-  min-width: 0;
+  min-width: 60px;   /* room for the knob, so it never sits on the time */
   accent-color: rgba(255, 255, 255, 0.5);
   cursor: pointer;
 }
@@ -142,6 +142,15 @@ button:hover { border-color: rgba(255, 255, 255, 0.7); }
   flex: 0 1 180px;
   margin-left: 4px;
   transition: opacity 0.2s;
+}
+
+/* What the transport could not do: a recording that is not there */
+.transport-note {
+  font-size: 0.66rem;
+  color: #f5a623;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-left: 4px;
 }
 
 /* Eject button — shown only when a file is loaded */
@@ -293,6 +302,8 @@ button:hover { border-color: rgba(255, 255, 255, 0.7); }
 
 .results-header {
   display: flex;
+  flex-wrap: wrap;   /* the actions go beneath the heading rather than squeeze it */
+  gap: 8px;
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
@@ -636,6 +647,7 @@ button:hover { border-color: rgba(255, 255, 255, 0.7); }
 .voice-instruct-sep { margin: 0 4px; }
 #voice-instruct { border-color: #f5a623; color: #f5a623; }
 #voice-instruct:disabled { opacity: 0.4; cursor: default; }
+#voice-instruct.is-unreachable { opacity: 0.45; border-style: dashed; }
 
 /* ─── Transcript pane — the whole spoken exchange, docked right ────────────── */
 :root { --pane-w: min(380px, calc(100vw - 24px)); }
@@ -654,6 +666,8 @@ button:hover { border-color: rgba(255, 255, 255, 0.7); }
   font-size: 0.8rem;
 }
 #transcript-pane[hidden] { display: none; }
+/* The first-run hint, 28 px above the transport, is not drawn over the pane's last lines. */
+body:has(#first-run-hint:not(.hidden)) #transcript-pane { bottom: 76px; }
 body.transcript-open #voice-panel { right: calc(var(--pane-w) + 12px); }
 .tp-head {
   display: flex;
@@ -715,6 +729,19 @@ body.transcript-open #voice-panel { right: calc(var(--pane-w) + 12px); }
   cursor: pointer;
 }
 .tp-text { margin: 3px 0 0; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tp-fold { padding: 4px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.04); }
+.tp-fold-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #666;
+  font: inherit;
+  font-size: 0.7rem;
+  cursor: pointer;
+}
+.tp-fold-toggle::before { content: '▸ '; }
+.tp-fold-toggle[aria-expanded="true"]::before { content: '▾ '; }
+.tp-fold-items { margin: 0; padding: 0 0 0 10px; list-style: none; }
 .tp-word.is-struck { text-decoration: line-through; color: #666; }
 .tp-word.is-pending { color: #8a8a8a; }
 
@@ -722,3 +749,18 @@ body.transcript-open #voice-panel { right: calc(var(--pane-w) + 12px); }
 .is-off { opacity: 0.4; border-style: dashed; }
 .off-note { color: rgba(255, 255, 255, 0.7); line-height: 1.45; }
 .off-note a, .hint-off a { color: rgba(0, 229, 255, 0.8); }
+
+/* ─── Words lane tooltip — a clipped word, whole ─────────────────────────── */
+.lane-tip {
+  position: fixed;
+  z-index: 30;
+  transform: translateY(-100%);
+  padding: 2px 6px;
+  background: rgba(8, 8, 12, 0.92);
+  border: 1px solid rgba(123, 216, 143, 0.6);
+  border-radius: 3px;
+  color: #e6e6e6;
+  font: 12px sans-serif;
+  white-space: nowrap;
+  pointer-events: none;
+}

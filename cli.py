@@ -170,10 +170,19 @@ def dev(allow: Allow = None):
 
 
 @app.command()
-def run():
-    """Run the audio processing pipeline once (Data/Audio/ -> Data/Output/)."""
+def run(
+    names: list[str] = typer.Argument(None, help="Recordings in Data/Audio/ to analyse, by file name.",
+                                      show_default=False),
+    every: bool = typer.Option(False, "--all", help="Analyse every recording in Data/Audio/."),
+):
+    """Run the audio processing pipeline once (Data/Audio/ -> Data/Output/): on the
+    newest recording, those named, or every one with --all."""
+    names = names or []
+    if every and names:
+        _echo("Name recordings or ask for --all, not both.", err=True)
+        raise typer.Exit(2)
     _echo("Running pipeline...")
-    result = subprocess.run([sys.executable, "main.py"], check=False)
+    result = subprocess.run([sys.executable, "main.py", *(["--all"] if every else names)], check=False)
     if result.returncode == 0:
         _echo("Done. Load results with `joe backend` + Fetch Latest.")
     else:
@@ -192,8 +201,8 @@ def voice_devices():
         raise typer.Exit(1)
 
     # Host API in the line because the name is not unique: the same
-    # microphone appears once per API, and a list you cannot choose from is
-    # not a list.
+    # microphone appears once per API, and a listing by name alone cannot be
+    # chosen from.
     from Modules.Voice import saved_input_device
 
     saved = saved_input_device()

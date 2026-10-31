@@ -44,6 +44,12 @@ function merged(history, current) {
   return [...history, ...newer];
 }
 
+/** A take that heard nothing: no words in any segment, no text, and no longer being written. */
+function heardNothing(entry) {
+  return entry.kind === 'take' && !entry.live && !(entry.text || '').trim()
+    && !(entry.segments || []).some(segment => (segment.words || []).length);
+}
+
 function remembered(storage) {
   try { return storage?.getItem(OPEN_KEY) === '1'; } catch { return false; }
 }
@@ -77,6 +83,7 @@ export class TranscriptPane {
     this._empty   = el.querySelector('[data-testid="transcript-empty"]');
     this._entries = [];   // from the history, then live
     this._notes   = [];   // joe's notes, kept beside a refetched history
+    this._unfolded = new Set();   // runs of empty takes opened, by their first take
     this._onKey   = e => this._key(e);
     // Set by whatever shows a take elsewhere: called with the take's entry.
     this.onShow = null;
@@ -124,7 +131,7 @@ export class TranscriptPane {
   render() {
     const follow = this._following();
     const all = [...this._entries, ...this._notes].sort((a, b) => (a.at || 0) - (b.at || 0));
-    this._list.replaceChildren(...all.map(entry => this._line(entry)));
+    this._list.replaceChildren(...this._lines(all));
     if (this._empty) {
       this._empty.hidden = all.length > 0;
       if (this._off) this._empty.replaceChildren(offNote('transcripts'));
@@ -164,6 +171,50 @@ export class TranscriptPane {
       return;
     }
     this.render();
+  }
+
+  // ─── the lines, and the takes that heard nothing ──────────────────────────
+
+  /** One line an entry, except that takes in a row that heard nothing share one, folded. */
+  _lines(entries) {
+    const lines = [];
+    for (let i = 0; i < entries.length;) {
+      if (!heardNothing(entries[i])) {
+        lines.push(this._line(entries[i++]));
+        continue;
+      }
+      const run = [];
+      while (i < entries.length && heardNothing(entries[i])) run.push(entries[i++]);
+      lines.push(this._fold(run));
+    }
+    return lines;
+  }
+
+  _fold(run) {
+    const key = run[0].take;
+    const li = this._doc.createElement('li');
+    li.className = 'tp-fold';
+    const toggle = this._doc.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'tp-fold-toggle';
+    toggle.dataset.testid = 'transcript-fold';
+    toggle.textContent = `${run.length} ${run.length === 1 ? 'take' : 'takes'}, nothing heard`;
+    const items = this._doc.createElement('ol');
+    items.className = 'tp-fold-items';
+    items.append(...run.map(entry => this._line(entry)));
+    const show = open => {
+      items.hidden = !open;
+      toggle.setAttribute('aria-expanded', String(open));
+    };
+    show(this._unfolded.has(key));
+    toggle.addEventListener('click', () => {
+      const open = !this._unfolded.has(key);
+      if (open) this._unfolded.add(key);
+      else this._unfolded.delete(key);
+      show(open);
+    });
+    li.append(toggle, items);
+    return li;
   }
 
   // ─── one line ─────────────────────────────────────────────────────────────

@@ -6,7 +6,7 @@ capability in brackets, and answers 403 while it is off; a fresh joe has only
 [media] on (Modules/Access.py, docs/security.md):
     GET  /api/health                Health check, and which capabilities are on
     GET  /api/results/latest        Returns the most-recent Process_Data JSON  [library]
-    POST /api/run                   Runs the pipeline on Data/Audio/ (all files)  [library]
+    POST /api/run                   Runs the pipeline on Data/Audio/: the newest, ?files=, or ?all=true  [library]
     POST /api/capture/start         Start backend sounddevice recording  [microphone]
     POST /api/capture/stop          Stop recording, flush WAV, return filename  [microphone]
     POST /api/audio/upload          Receive audio blob from browser, save to Data/Audio/  [library]
@@ -27,6 +27,7 @@ capability in brackets, and answers 403 while it is off; a fresh joe has only
     POST /api/voice/unwatch         Closes a watch that will not be listened to  [microphone]
     GET  /api/voice/vocabulary      joe's own spoken words, and what each does
     GET  /api/voice/history         The whole transcript: every take heard and every sentence said  [transcripts]
+    GET  /api/voice/takes/{take}/audio  One take's recording, for the visualiser  [transcripts]
     POST /api/voice/strike          Strike or restore a word of the take being transcribed  [microphone]
     GET  /api/voice/transcript      The take being transcribed, or the last one, once  [transcripts]
     GET  /api/media/capabilities    What the media API takes and does (docs/media.md)  [media]
@@ -156,7 +157,7 @@ MAX_OPTIONS = 9
 ANSWER_CHARS = 100
 
 
-# ─── Existing endpoints ───────────────────────────────────────────────────────
+# ─── Health and results ───────────────────────────────────────────────────────
 
 @app.get("/api/health")
 def health():
@@ -191,20 +192,13 @@ def get_latest():
     return json.loads(files[0].read_text(encoding="utf-8"))
 
 
-@app.post("/api/run", dependencies=LIBRARY)
-async def run_pipeline():
-    """
-    Runs the pipeline on all files in Data/Audio/ and returns stdout/stderr.
-    Blocks until the pipeline completes.
-    """
-    # Strip any inherited JOE_AUDIO_FILE so the all-files route is never
-    # accidentally scoped to a single file from a previous request.
-    env = {k: v for k, v in os.environ.items() if k != "JOE_AUDIO_FILE"}
+async def _run_main(*args: str) -> dict:
+    """Run the pipeline, `main.py` with `args`, waiting for it, and say how it went."""
     try:
         proc = await asyncio.create_subprocess_exec(
             sys.executable,
             str(_MAIN_PY),
-            env=env,
+            *args,
             cwd=str(_PROJECT_ROOT),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -220,6 +214,24 @@ async def run_pipeline():
         "stdout": stdout.decode("utf-8", errors="replace"),
         "stderr": stderr.decode("utf-8", errors="replace"),
     }
+
+
+@app.post("/api/run", dependencies=LIBRARY)
+async def run_pipeline(files: list[str] = Query(default=[]), every: bool = Query(False, alias="all")):
+    """
+    Runs the pipeline on recordings in Data/Audio/ and returns stdout/stderr:
+    those named in `files`, every one with `all=true`, or else the newest.
+    Blocks until the pipeline completes.
+    """
+    if files and every:
+        raise HTTPException(status_code=400, detail="name files or ask for all, not both")
+    names = []
+    for name in files:
+        path = _audio_file(name)
+        if path.suffix.lower() not in PIPELINE_EXTENSIONS:
+            raise HTTPException(status_code=404, detail=f"No recording in Data/Audio/: {name}")
+        names.append(path.name)
+    return await _run_main(*(["--all"] if every else names))
 
 
 # ─── Backend capture ──────────────────────────────────────────────────────────
@@ -322,10 +334,8 @@ def _is_bare_filename(filename: str) -> bool:
     trailing dot or space (Windows strips those when opening, so `x.wav.`
     and `"x.wav "` open the file they alias under a name no listing shows).
 
-    Shared by every route that takes a name, because the two that existed
-    did not agree: `/api/audio/{filename}` refused all of this and
-    `/api/voice/transcribe` refused none of it, so one name was 404 on the
-    first and 200 on the second.
+    Shared by every route that takes a name, so one name gets the same
+    answer from each.
     """
     return not (
         not filename
@@ -374,8 +384,7 @@ PIPELINE_EXTENSIONS = {".wav", ".webm", ".mp3", ".ogg", ".flac"}
 @app.post("/api/run/{filename}", dependencies=LIBRARY)
 async def run_on_file(filename: str):
     """
-    Run the pipeline on a specific file in Data/Audio/.
-    Sets JOE_AUDIO_FILE env var so main.py processes only that file.
+    Run the pipeline on a specific file in Data/Audio/, named to main.py.
     """
     path = _audio_file(filename)
     if path.suffix.lower() not in PIPELINE_EXTENSIONS:
@@ -388,31 +397,15 @@ async def run_on_file(filename: str):
                 f"(WebM requires ffmpeg on PATH)"
             ),
         }
-    env = {**os.environ, "JOE_AUDIO_FILE": str(path)}
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            sys.executable,
-            str(_MAIN_PY),
-            env=env,
-            cwd=str(_PROJECT_ROOT),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
-    except asyncio.TimeoutError:
-        proc.kill()
-        return {"returncode": -1, "stdout": "", "stderr": "Pipeline timeout (120 s)"}
-    except Exception as exc:
-        return {"returncode": -1, "stdout": "", "stderr": f"Pipeline error: {exc}"}
-    return {
-        "returncode": proc.returncode,
-        "stdout": stdout.decode("utf-8", errors="replace"),
-        "stderr": stderr.decode("utf-8", errors="replace"),
-    }
+    return await _run_main(path.name)
 
 
 def _resolve_audio_path(filename: str) -> Path:
-    """Resolve `filename` to a real file under Data/Audio/ or Data/Voice/.
+    """Resolve `filename` to a real file under Data/Voice/ or Data/Audio/.
+
+    Data/Voice/ is looked in first: it is where voice tools write the files they
+    ask about (`vox loop` writes `said.wav` and `echo.wav` there), so a name in
+    both is the voice folder's, never a library recording of the same name.
 
     Holds the name to the same rule as `/api/audio/{filename}`: a bare
     filename, resolving inside one of the two directories. This is reachable
@@ -425,7 +418,7 @@ def _resolve_audio_path(filename: str) -> Path:
     )
     if not _is_bare_filename(filename):
         raise not_found
-    for base in (Path("Data/Audio"), Path("Data/Voice")):
+    for base in (Path("Data/Voice"), Path("Data/Audio")):
         try:
             candidate = (base / filename).resolve()
         except (OSError, RuntimeError):
@@ -471,7 +464,7 @@ def voice_listen(
     This is the human-facing seam, so the polite default lives here:
     `duration` is the cap, and the recording ends `silence_ms` after the
     speaker stops — a fixed window truncates a slow answer and keeps
-    recording after a quick one. `until_silence=false` restores the
+    recording after a quick one. `until_silence=false` records the
     exact-length window.
 
     `device` is an index or a name fragment; omitted, the server's default
@@ -701,6 +694,30 @@ def voice_history(limit: int = 200):
     from Modules import History
 
     return {"entries": History.read(datapoints.manifest, limit), "kept": datapoints.enabled}
+
+
+@app.get("/api/voice/takes/{take}/audio")
+def voice_take_audio(take: str):
+    """One take's recording, as joe wrote it, for the visualiser to play with
+    the take's words on its timeline. Only a recording under joe's own voice
+    folder is served, whatever the record names."""
+    import re
+
+    from Modules import History
+    from Modules.Voice import Voice
+
+    if not re.fullmatch(r"[0-9a-f]{6,32}", take):
+        raise HTTPException(status_code=400, detail="a take is named by its hex id")
+    entry = History.take(datapoints.manifest, take)
+    if entry is None or not entry.get("audio"):
+        raise HTTPException(status_code=404, detail=f"no recording kept for take {take}")
+    path = Path(entry["audio"])
+    path = path if path.is_absolute() else datapoints.root / path
+    path = path.resolve()
+    roots = {datapoints.root.resolve(), Path(Voice().capture_dir).resolve()}
+    if not any(path.is_relative_to(root) for root in roots) or not path.is_file():
+        raise HTTPException(status_code=404, detail=f"no recording kept for take {take}")
+    return FileResponse(str(path), media_type="audio/wav")
 
 
 @app.get("/api/voice/vocabulary")
