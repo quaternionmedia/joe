@@ -64,8 +64,20 @@ curl http://localhost:8000/api/results/latest
 
 ### `POST /api/run`
 
-Runs `python main.py` on all files in `Data/Audio/` and returns its output. Blocks until
-the pipeline completes (can take tens of seconds for large audio files).
+Runs the pipeline, `python main.py`, on recordings in `Data/Audio/` and returns its
+output: the newest, unless `files` names others or `all` asks for every one. Blocks
+until the pipeline completes (can take tens of seconds for large audio files).
+
+**Query params**
+
+| Name | Type | Default | Description |
+| --- | --- | --- | --- |
+| `files` | str, repeated | — | recordings in `Data/Audio/`, by file name, analysed in the order named |
+| `all` | bool | `false` | every recording in `Data/Audio/`, by name |
+
+A name that is not a recording in `Data/Audio/` -- absent, not audio, or not a bare
+file name -- is a `404`, and naming `files` with `all=true` a `400`, before anything
+runs.
 
 **Response** — `200 OK`
 
@@ -82,15 +94,16 @@ A non-zero `returncode` means the pipeline failed. Check `stderr` for the Python
 **curl**
 
 ```bash
-curl -X POST http://localhost:8000/api/run
+curl -X POST http://localhost:8000/api/run                                  # the newest
+curl -X POST "http://localhost:8000/api/run?files=a.wav&files=b.wav"        # those two
+curl -X POST "http://localhost:8000/api/run?all=true"                       # every one
 ```
 
 ---
 
 ### `POST /api/run/{filename}`
 
-Run the pipeline on a specific file in `Data/Audio/`. Sets the `JOE_AUDIO_FILE` env var so
-`main.py` processes only that file.
+Run the pipeline on one file in `Data/Audio/`, named to `main.py`.
 
 **Path parameter**
 
@@ -169,21 +182,25 @@ curl -X POST http://localhost:8000/api/capture/stop
 ### `POST /api/audio/upload`
 
 Accept a raw audio blob from the browser (recorded via `MediaRecorder`) and save it to
-`Data/Audio/`. Content-Type determines the file extension (`.wav` or `.webm`).
+`Data/Audio/`. Content-Type determines the file extension: `.wav`, `.webm`, `.mp3`, `.ogg`
+or `.flac`. The name carries the time to the microsecond, so two uploads never share one.
 
 **Request body** — raw audio bytes
 
 **Headers**
 
 ```http
-Content-Type: audio/wav   ->  saves as capture_<timestamp>.wav
-Content-Type: audio/webm  ->  saves as capture_<timestamp>.webm
+Content-Type: audio/wav or audio/wave  ->  saves as capture_<timestamp>.wav
+Content-Type: audio/webm               ->  saves as capture_<timestamp>.webm
+Content-Type: audio/mpeg               ->  saves as capture_<timestamp>.mp3
+Content-Type: audio/ogg                ->  saves as capture_<timestamp>.ogg
+Content-Type: audio/flac               ->  saves as capture_<timestamp>.flac
 ```
 
 **Response** — `200 OK`
 
 ```json
-{ "filename": "capture_20240101_120000.webm" }
+{ "filename": "capture_20240101_120000_123456.webm" }
 ```
 
 **curl**
@@ -277,9 +294,10 @@ curl http://localhost:8000/api/voice/devices
 
 ### `POST /api/voice/transcribe`
 
-Transcribes an audio file already present under `Data/Audio/` or `Data/Voice/` using
+Transcribes an audio file already present under `Data/Voice/` or `Data/Audio/` using
 whisper. `filename` is a name relative to one of those two directories — paths that
-resolve outside them are rejected.
+resolve outside them are rejected. `Data/Voice/` is looked in first, so a name in both
+is the voice folder's file: the one a voice tool such as `vox loop` wrote.
 
 **Query params**
 
@@ -313,10 +331,9 @@ Records `duration` seconds (default `5.0`, max `60`) from an input device,
 writes it to `Data/Voice/`, and transcribes the result.
 
 The device is opened at *its* native sample rate and channel count, and the
-audio is downmixed and resampled to 16 kHz mono afterwards. Asking a device
-to open at 16 kHz fails on most of them — one machine here has twenty inputs
-and every one refused, WASAPI saying "Invalid sample rate" and the others
-less.
+audio is downmixed and resampled to 16 kHz mono afterwards: many devices
+refuse to open at 16 kHz (WASAPI answers "Invalid sample rate").
+[modules.md](modules.md#voice) says how a device is chosen, opened and read.
 
 **Query params**
 
@@ -338,8 +355,10 @@ audio names every option, which a dialog reads as no match and asks again.
 **Response** — `200 OK`
 
 ```json
-{ "text": "...", "segments": [...], "language": "en", "audio_path": "Data/Voice/capture_...wav", "speech_detected": true }
+{ "text": "...", "segments": [...], "language": "en", "audio_path": "C:\\...\\Data\\Voice\\capture_...wav", "speech_detected": true }
 ```
+
+`audio_path` is the take's recording, the absolute path of a file under `Data/Voice/`.
 
 `confidence` says how sure the transcriber was, from 0 to 1: the lowest of its
 segments' mean token probabilities (whisper's `exp(avg_logprob)`), struck
@@ -356,7 +375,7 @@ fixed one. When the endpointer heard no speech, the transcriber is not run and
 
 | Status | Reason |
 | --- | --- |
-| `400` | `duration` outside `0 < duration <= 60`, or a `hint` over 500 characters |
+| `400` | `duration` outside `0 < duration <= 60`, `silence_ms` outside `100..5000`, or a `hint` over 500 characters |
 | `503` | No microphone available, no device matching `device`, several devices matching it, or a device that opened and returned samples outside `[-1, 1]` |
 
 **curl**
@@ -390,8 +409,8 @@ and read the peaks.
 { "device": 12, "name": "USB Microphone", "peak": 0.0812, "rms": 0.0091, "silent": false }
 ```
 
-`silent` is the useful field: a device returning digital silence is either
-the wrong one or muted, and a device list cannot tell those apart.
+`silent` says whether anything arrived: a device returning digital silence
+is either the wrong one or muted, and a device list cannot tell those apart.
 
 **Errors**
 
@@ -421,7 +440,7 @@ through them:
 | `speaking` | the question is being asked; the microphone is closed | the dialog |
 | `listening` | the microphone is open; nobody has started talking | joe |
 | `holding` | a key is held: the turn stays open through pauses until it is released | joe |
-| `transcript` | the take as it is written: `take`, `segments` (`index`, `start`, `end`, `words`, `struck`, `pending`) and `text`; not a turn of its own | joe |
+| `transcript` | the take as it is written: `take`, `segments` (`index`, `start`, `end`, `text`, `words`, `struck`, `pending`) and `text`; not a turn of its own | joe |
 | `hearing` | speech is sustained; the listener does not interrupt | joe |
 | `pausing` | the speech stopped; the turn is held open a moment longer | joe |
 | `transcribing` | the turn has ended; the words are being read | joe |
@@ -474,7 +493,7 @@ the microphone, if it starts within fifteen seconds.
 
 **Body** — `{"text": "approve"}`, at most 100 characters.
 
-**Response** — `200 OK`, `{"held": false, "answer_waiting": true}`
+**Response** — `200 OK`, the control's state: `{"held": false, "answer_waiting": true, "interrupted": true}`
 
 ### `POST /api/voice/hold`
 
@@ -483,7 +502,7 @@ released. While held, a take neither ends on a pause nor at its `duration`
 (it may run to sixty seconds), and the release ends it as speech: the person
 said they were speaking. The take reports `holding` when it sees the hold.
 
-**Response** — `200 OK`, `{"held": true, "answer_waiting": false}`
+**Response** — `200 OK`, the control's state: `{"held": true, "answer_waiting": false, "interrupted": true}`
 
 ### `GET /api/voice/control`
 
@@ -545,6 +564,13 @@ closed before anyone spoke -- is no entry, and a line cut short is skipped.
 `limit` (default 200, at most 2000) keeps the last entries. `kept` is false
 under `JOE_DATAPOINTS=0`, when nothing is written to read back.
 
+### `GET /api/voice/takes/{take}/audio`
+
+One take's recording, `audio/wav`, by the take's hex id, for the visualiser to
+play with the take's words on its timeline. Only a recording under joe's own
+voice folder is served, whatever the take's record names. `400` for an id that
+is not hex, `404` for a take with no recording kept.
+
 ### `GET /api/voice/vocabulary`
 
 joe's own spoken words: `{"phrases": [{"key", "says", "phrases"}]}`.
@@ -563,14 +589,15 @@ The take being transcribed, or the last one: `{"take", "segments", "text"}`.
 
 ### Datapoints
 
-Every segment is written as `Data/Voice/segments/<take>/<index>.wav` and as a
+Every segment is written as `Data/Voice/segments/<take>/<index>.wav`, its index in three
+digits (`000.wav`), and as a
 line of `Data/Voice/segments.jsonl`, one JSON object per line with a `kind`:
 
 | `kind` | Carries |
 | --- | --- |
 | `segment` | `take`, `index`, `audio`, `start_s`, `end_s`, `duration_s`, `peak_rms`, `mean_rms`, `threshold`, `noise_floor`, `hint`, `prompt`, `model`, `language`, `beam_size`, `avg_logprob`, `no_speech_prob`, `compression_ratio`, `text`, `transcribe_s` |
 | `edit` | `take`, `index`, `word`, `text`, `action` (`strike` or `restore`) |
-| `take` | `take`, `audio`, `source` (`voice` or `key`), `hint`, `text`, `segments`, `struck`, `over_question` (said over the question, from a watch) |
+| `take` | `take`, `audio`, `source` (`voice` or `key`), `hint`, `text`, `confidence`, `segments`, `struck`, `over_question` (said over the question, from a watch) |
 | `outcome` | `take`, `state` (`recorded` or `gave_up`), `text` -- what the dialog asking made of the last take, from its post to the conversation route |
 | `label` | `take` (the take marked), `label` (`misheard` or `heard right`), `by` (the take that said so) -- the ground truth a tuning pass needs most |
 | `said` | `text`, `reason`, `options` -- a sentence the program asking said, from its `speaking` post, so the transcript read back holds both sides |
@@ -627,7 +654,7 @@ uv run joe dev
 
 # 2a. Record from the browser
 #     Open http://localhost:3000/joe
-#     Click "Joe, go!" -> select "Browser" -> click "Live" -> speak -> click "Stop"
+#     Click "Joe, go!" -> select "Browser mic" -> click "Live" -> speak -> click "Stop"
 #     Recording auto-loads into the transport bar; open "Library" -> click "Process"
 
 # 2b. Record from the backend
@@ -641,6 +668,6 @@ curl -X POST http://localhost:8000/api/run/capture_20240101_120000.wav
 # 4. View results — "Results" -> "Fetch Latest"
 #    (auto-opens after clicking "Process" in the Library panel)
 
-# 5. Drop audio into Data/Audio/ and run the full pipeline
-curl -X POST http://localhost:8000/api/run
+# 5. Drop audio into Data/Audio/ and run the pipeline on every recording there
+curl -X POST "http://localhost:8000/api/run?all=true"
 ```

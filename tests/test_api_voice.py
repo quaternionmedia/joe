@@ -1,8 +1,8 @@
 """Tests for the /api/voice/devices and /api/voice/listen endpoints.
 
-No httpx in this environment, so these call the FastAPI route functions
-directly rather than through TestClient — still real coverage of the
-endpoint logic (path resolution, status codes), just not over HTTP.
+These call the FastAPI route functions directly rather than through
+TestClient: the endpoint logic (path resolution, status codes), not the HTTP
+layer.
 """
 
 import sys
@@ -46,10 +46,10 @@ def test_voice_listen_returns_503_when_no_microphone(monkeypatch):
     assert exc_info.value.status_code == 503
 
 
-def test_voice_listen_endpoints_by_default():
+def test_voice_listen_ends_on_silence_by_default():
     """The HTTP route is the human-facing seam, so the polite default lives
     here: duration is the cap, and the recording ends when the speaker
-    does. `until_silence=false` restores the fixed window."""
+    does. `until_silence=false` records the fixed window."""
     with patch("api.Voice") as fake_voice_cls:
         fake_voice_cls.return_value.listen.return_value = {"text": "ok"}
         api.voice_listen(duration=6.0)
