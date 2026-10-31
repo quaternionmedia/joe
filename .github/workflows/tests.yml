@@ -1,9 +1,7 @@
 name: tests
 
-# The Python suite ran nowhere until this existed. The application and the
-# only workflow reaching it lived on two branches that diverged on
-# 2024-04-19 and were reconciled on 2026-09-27; `deploy.yml` builds and
-# publishes the frontend and reads no Python at all.
+# The Python suite, on both platforms. `deploy.yml` builds and publishes the
+# frontend and reads no Python at all.
 
 on:
   push:
@@ -13,11 +11,11 @@ on:
 jobs:
   pytest:
     # Both platforms: Modules/utilities.py composes paths with pathlib, so
-    # the suite discriminates on each. Linux needs `libportaudio2` because
-    # sounddevice binds the native PortAudio library, its Windows wheel
-    # bundles it and its Linux wheel does not, and capture.py imports
-    # sounddevice at module scope while api.py imports capture -- without
-    # it both API test modules fail at collection before a single test runs.
+    # the suite discriminates on each. No audio library is installed: every
+    # test replaces sounddevice, and the API imports it only to record. The
+    # `local` tests open the machine's own audio -- on Linux through a
+    # PulseAudio server, which no hosted runner has -- and run on a person's
+    # machine, so the runners deselect them.
     strategy:
       fail-fast: false
       matrix:
@@ -29,19 +27,15 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Native audio library
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libportaudio2
-
-      # --frozen, per the commit that regenerated the lock: it changes only
-      # when a dependency edit calls for it, never as a side effect of a run.
-      # This also installs torch and the CUDA subtree, which arrived with
-      # openai-whisper and is the bulk of the wall-clock here.
+      # --frozen: the lock changes only when a dependency edit calls for it,
+      # never as a side effect of a run. This also installs torch and the CUDA
+      # subtree, which openai-whisper pulls in and which is the bulk of the
+      # wall-clock here.
       - name: Install through the lock
         run: uv sync --frozen
 
       - name: Run the suite
-        run: uv run --frozen pytest tests/ -q
+        run: uv run --frozen pytest tests/ -q -m "not local"
 
   # The Playwright specs under tests/e2e/ run in e2e.yml on the same
   # triggers as this suite; playwright.config.js starts the dev server
