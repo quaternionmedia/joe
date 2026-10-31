@@ -74,7 +74,7 @@ test('answering asks qmcp once, waits for the run, then reads the queue again', 
 });
 
 test('a run that fails shows the command\'s own last words', async ({ page }) => {
-  const words = "No speech engine answers at http://127.0.0.1:8000. Start it in the engine's checkout: uv run joe backend";
+  const words = "No speech engine answers at http://127.0.0.1:1059. Start it in the engine's checkout: uv run joe backend";
   await script(page, {
     lists: [[LAUNCH]],
     runs: [{ running: false, exit_code: 1, output: ['Checking...', words] }],
