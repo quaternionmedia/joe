@@ -66,7 +66,7 @@ def test_a_held_take_still_arrives_in_pieces():
     assert len(got) == 2
 
 
-def test_a_watcher_that_raises_costs_the_take_nothing():
+def test_an_on_segment_that_raises_costs_the_take_nothing():
     from Modules.Voice import _capture_until_silence
 
     def broken(*a):

@@ -1,44 +1,26 @@
 """A take's transcript as it is written, and every segment of it kept.
 
-**WRITTEN WHILE IT IS SPOKEN.** A take is cut into segments at the short pauses
-inside it (`Modules.Voice.SEGMENT_PAUSE`), and each segment is transcribed as
-soon as it ends, by a worker beside the recording, with the take's earlier
-words as the transcriber's prompt. Every step is published as a `transcript`
-event, so the page shows the words while the person is still talking.
+A take is cut into segments at the short pauses inside it
+(`Modules.Voice.SEGMENT_PAUSE`), and each segment is transcribed as soon as it
+ends, by a worker beside the recording, with the take's earlier words as the
+transcriber's prompt. Every step is published as a `transcript` event, so the
+page shows the words while the person is still talking.
 
-**EARLIER WORDS CAN BE STRUCK.** A word struck from the page, the last word
-struck with Backspace, or a segment that says "scratch that" -- which strikes
-itself and the segment before -- is left out. The take's text is the segments'
-words in order, minus what was struck: what the page showed when it ended.
+Earlier words can be struck: from the page, the last one with Backspace, or by
+a segment saying one of joe's own phrases (`Modules/vocabulary.toml`), which is
+struck itself and acted on here -- "scratch that" strikes the segment before,
+"start over" the whole take so far, "flag that" and "that was right" label the
+take before this one, and "how loud am I" reports the voice's peak against its
+threshold. A label or a level is told to the page as a `note`. The take's text
+is the segments' words in order, minus what was struck: what the page showed
+when it ended.
 
-**EVERY SEGMENT IS A DATAPOINT.** Each is written as its own WAV under
-`Data/Voice/segments/<take>/` and as a line of `Data/Voice/segments.jsonl`,
-one JSON object per line with a `kind`:
-
-- `segment` -- its audio, where it falls in the take, its levels against the
-  threshold it was judged by, the hint and the prompt it was decoded with, the
-  decoding settings, whisper's own `avg_logprob`, `no_speech_prob` and
-  `compression_ratio`, the text, and how long transcribing took;
-- `edit` -- a word struck or restored;
-- `take` -- the take's recording, its segments, the text it came to and what
-  was struck;
-- `outcome` -- what the dialog asking made of the take (`recorded` with the
-  answer it accepted, or `gave_up`), posted to the conversation route;
-- `label` -- a take marked by voice as `misheard` or `heard right`, by the take
-  that said so: the ground truth a tuning pass needs most;
-- `said` -- a sentence the program asking said, from its `speaking` post, so
-  the transcript read back (`Modules.History`) holds both sides.
-
-**SOME WORDS ARE SAID TO JOE.** A segment saying one of joe's own phrases
-(`Modules/vocabulary.toml`) is struck and acted on here: "scratch that" strikes
-it and the segment before, "start over" strikes the whole take so far, "flag
-that" and "that was right" label the take before this one, and "how loud am
-I" shows the voice's peak against its threshold. A label or a level is told
-to the page as a `note`.
-
-So a later pass can tune the endpointer, the prompt or the model against what
-people actually said and what was accepted. `JOE_DATAPOINTS=0` writes none.
-Like the takes themselves, nothing here is deleted.
+Every segment is a datapoint: its own WAV under `Data/Voice/segments/<take>/`
+and a line of `Data/Voice/segments.jsonl`, beside `edit`, `take`, `outcome`,
+`label` and `said` records, so a later pass can tune the endpointer, the prompt
+or the model against what people said and what was accepted. `docs/api.md`
+(*Datapoints*) lists each record's fields. `JOE_DATAPOINTS=0` writes none, and
+nothing here is deleted.
 """
 
 from __future__ import annotations
