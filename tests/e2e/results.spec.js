@@ -244,3 +244,20 @@ test('Canvas mode badge shows RESULTS after loading notes from file input', asyn
 
   expect(errors).toHaveLength(0);
 });
+
+test("the panel's heading reads on one line, clear of its buttons", async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await page.goto('/');
+  await page.getByTestId('results-toggle').click();
+  const heading = page.locator('#results-panel h2');
+  await expect(heading).toBeVisible();
+
+  const box = await heading.boundingBox();
+  const line = await heading.evaluate(el => parseFloat(getComputedStyle(el).lineHeight)
+    || parseFloat(getComputedStyle(el).fontSize) * 1.4);
+  expect(box.height).toBeLessThan(line * 1.5);
+  const actions = await page.locator('.results-actions').boundingBox();
+  const overlap = box.x < actions.x + actions.width && actions.x < box.x + box.width
+    && box.y < actions.y + actions.height && actions.y < box.y + box.height;
+  expect(overlap).toBe(false);
+});

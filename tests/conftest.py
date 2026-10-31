@@ -19,6 +19,14 @@ def _none_of_the_machine_s_settings(monkeypatch, tmp_path):
     monkeypatch.setattr(Voice, "SAVED_DEVICE", tmp_path / "voice-device.json")
 
 
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "whisper_model: runs the real whisper model from this machine's cache; skipped when it "
+        "is not cached (nothing is downloaded), deselected with -m 'not whisper_model'",
+    )
+
+
 @pytest.fixture(autouse=True)
 def _no_cues(monkeypatch):
     """No test plays a tone through the machine's speakers. A test of the cues
@@ -35,3 +43,12 @@ def _datapoints_in_the_test_s_own_folder(monkeypatch, tmp_path):
     monkeypatch.setattr(api, "datapoints", Datapoints(root=tmp_path / "voice", enabled=True))
     monkeypatch.setattr(api, "transcript", None)
     monkeypatch.setattr(api, "last_take", None)
+
+
+@pytest.fixture(autouse=True)
+def _media_in_the_test_s_own_folder(monkeypatch, tmp_path):
+    """No test keeps uploads in the checkout's `Data/Media`."""
+    import api
+    from Modules.Media import MediaStore
+
+    monkeypatch.setattr(api, "media_store", MediaStore(root=tmp_path / "media", ttl_seconds=3600))
