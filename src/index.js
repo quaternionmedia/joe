@@ -12,6 +12,7 @@ import { VoiceInstruct } from './components/VoiceInstruct.js';
 import { VoiceKeys }    from './components/VoiceKeys.js';
 import { VoiceTranscript } from './components/VoiceTranscript.js';
 import { TranscriptPane } from './components/TranscriptPane.js';
+import { PanelKeys }    from './components/PanelKeys.js';
 import { takeWords }      from './components/takeWords.js';
 import { setlist }      from './config/setlists.js';
 
@@ -55,6 +56,12 @@ const voiceInstruct = new VoiceInstruct(
   voicePanel,
 );
 voiceInstruct.mount();
+// While qmcp cannot be reached, Instruct by voice says so quietly rather than the page failing loudly.
+document.addEventListener('joe:qmcp', e => {
+  const button = document.getElementById('voice-instruct');
+  button.classList.toggle('is-unreachable', !e.detail.reachable);
+  button.title = e.detail.reachable ? '' : 'qmcp is not reachable: start `qmcp serve`; QMCP_URL moves where the dev server looks';
+});
 const voiceKeys = new VoiceKeys(document.querySelector('#voice-panel .voice-controls'), voicePanel);
 voiceKeys.mount();
 const voiceTranscript = new VoiceTranscript(document.querySelector('#voice-panel .voice-transcript'), voicePanel);
@@ -266,6 +273,8 @@ document.getElementById('capture-toggle')
   .addEventListener('click', () => capturePanel.toggle());
 document.getElementById('results-toggle')
   .addEventListener('click', () => resultsPanel.toggle());
+// L the Library, A the Results, Esc closes them and the transcript (T is the pane's own).
+new PanelKeys({ library: capturePanel, results: resultsPanel, transcript: transcriptPane }).mount();
 
 // ─── Frame pump — feeds sketch output into live analysis ─────────────────────
 sketchInstance.onFrame = (energies) => {

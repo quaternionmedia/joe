@@ -103,3 +103,52 @@ test('Canvas mode badge is empty on initial load', async ({ page }) => {
   // No recording or results — badge should be blank
   await expect(page.locator('#canvas-mode')).toHaveText('');
 });
+
+// ─── The specs' own servers ──────────────────────────────────────────────────
+
+test("a spec's page reaches no backend the spec has not scripted", async ({ page }) => {
+  await page.goto('/');
+
+  // joe's API and qmcp's queue, through the page's own proxy: neither is a joe
+  // or a qmcp that happens to be running on this machine.
+  const answers = await page.evaluate(() => Promise.all(['/api/health', '/v1/human/requests'].map(async path => {
+    const res = await fetch(path);
+    return { path, status: res.status, text: await res.text() };
+  })));
+  for (const { path, status, text } of answers) {
+    expect(status, path).toBe(503);
+    expect(text, path).toContain('no backend in the specs');
+  }
+});
+
+// ─── Where Live records from ─────────────────────────────────────────────────
+
+test('the capture select says where Live records from, and what each choice is', async ({ page }) => {
+  await page.goto('/');
+  const select = page.getByRole('combobox', { name: 'Live records from' });
+  await expect(select).toHaveAttribute('title', 'Where Live records from');
+  await expect(select.locator('option')).toHaveText(['Browser mic', "joe's mic"]);
+  await expect(select.locator('option[value="browser"]')).toHaveAttribute('title', /This browser's microphone/);
+  await expect(select.locator('option[value="backend"]')).toHaveAttribute('title', /machine joe runs on/);
+  await expect(page.locator('#first-run-hint')).toContainText("Browser mic or joe's mic + Live — record");
+});
+
+// ─── The transport's scrubber ────────────────────────────────────────────────
+
+for (const width of [1024, 1280]) {
+  test(`the scrubber's knob clears the time readout at ${width} px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 768 });
+    await page.goto('/');
+    const scrub = await page.getByTestId('transport-scrub').boundingBox();
+    const time = await page.getByTestId('transport-time').boundingBox();
+
+    expect(scrub.width).toBeGreaterThanOrEqual(60);
+    expect(scrub.x + scrub.width).toBeLessThanOrEqual(time.x);
+
+    // A loaded file's name gives way to the scrubber, and the bar stays within the window.
+    await page.getByTestId('transport-name').evaluate(el => { el.textContent = 'a-recording-with-a-long-name.wav'; });
+    const loaded = await page.getByTestId('transport-scrub').boundingBox();
+    expect(loaded.width).toBeGreaterThanOrEqual(60);
+    expect(await page.locator('#transport').evaluate(bar => bar.scrollWidth <= bar.clientWidth)).toBe(true);
+  });
+}

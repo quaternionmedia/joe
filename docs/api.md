@@ -1,7 +1,8 @@
 # Joe API Reference
 
 The Joe FastAPI server (`api.py`) provides endpoints for pipeline results, audio capture,
-the audio library, and speech analysis.
+the audio library, and speech analysis -- and, under `/api/media`, the media API a video
+editor uses for captions and analysis, documented in [media.md](media.md).
 
 **Base URL (local dev):** `http://localhost:8000`
 
@@ -276,9 +277,10 @@ curl http://localhost:8000/api/voice/devices
 
 ### `POST /api/voice/transcribe`
 
-Transcribes an audio file already present under `Data/Audio/` or `Data/Voice/` using
+Transcribes an audio file already present under `Data/Voice/` or `Data/Audio/` using
 whisper. `filename` is a name relative to one of those two directories — paths that
-resolve outside them are rejected.
+resolve outside them are rejected. `Data/Voice/` is looked in first, so a name in both
+is the voice folder's file: the one a voice tool such as `vox loop` wrote.
 
 **Query params**
 
@@ -596,6 +598,25 @@ is skipped. They play on the default output unless `JOE_OUTPUT_DEVICE`, or
 listed under several host APIs, MME's is played to, and a fragment naming two
 different outputs is refused.
 
+### Media for the video pipeline
+
+Audio or video uploaded once, then transcribed and analysed by id -- a video
+editor's captions, beats and waveforms. Its own page, [media.md](media.md), is
+the reference; in short:
+
+| Route | Answers |
+| --- | --- |
+| `GET /api/media/capabilities` | `{"formats", "features", "speech_model", "word_timestamps", "max_bytes", "max_seconds", "ttl_seconds"}` |
+| `POST /api/media` | Raw audio or video body, typed by `Content-Type` -> `201 {"media_id", "duration", "sample_rate", "channels", "has_audio"}`; `415`, `413`, `422`, `503` |
+| `POST /api/media/{media_id}/transcribe?language=&words=true` | `{"text", "language", "segments": [{"start", "end", "text", "words"}], "info"}` |
+| `POST /api/media/{media_id}/analyze?features=...` | `{"duration", "tempo", "beats", "onsets", "loudness", "silences", "peaks"}` |
+| `DELETE /api/media/{media_id}` | `204`; `404` for one that is not here |
+
+Every failure there is `{"detail": str}`. Uploads are kept privately under
+`Data/Media/` and removed `JOE_MEDIA_TTL` seconds (an hour) after their last
+use. ffmpeg is required (`JOE_FFMPEG`, or on PATH). Beside alfred, which has
+port 8000, run the API alone: `uv run uvicorn api:app --port 8010`.
+
 ---
 
 ## Interactive docs
@@ -613,7 +634,7 @@ uv run joe dev
 
 # 2a. Record from the browser
 #     Open http://localhost:3000/joe
-#     Click "Joe, go!" -> select "Browser" -> click "Live" -> speak -> click "Stop"
+#     Click "Joe, go!" -> select "Browser mic" -> click "Live" -> speak -> click "Stop"
 #     Recording auto-loads into the transport bar; open "Library" -> click "Process"
 
 # 2b. Record from the backend

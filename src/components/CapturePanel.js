@@ -60,6 +60,7 @@ export class CapturePanel {
   toggle() { this._el.classList.toggle('open'); }
   open()   { this._el.classList.add('open'); }
   close()  { this._el.classList.remove('open'); }
+  get isOpen() { return this._el.classList.contains('open'); }
 
   /** Called by the bottom-bar Live toggle button. */
   async toggleRecord() {
