@@ -254,3 +254,36 @@ test('a long question shows three lines until opened, and stays open', async ({ 
   await expect(page.getByTestId('transcript-more')).toHaveText('less');
   expect(await asks.first().locator('.tp-text').evaluate(clipped)).toBe(false);
 });
+
+test('the transcript names each day where it changes: today, yesterday, then the date', async ({ page }) => {
+  const now = Date.now() / 1000;
+  const history = { kept: true, entries: [
+    { kind: 'said', text: 'Two days ago.', at: now - 2 * 86400 },
+    { kind: 'said', text: 'Again two days ago.', at: now - 2 * 86400 + 5 },
+    { kind: 'said', text: 'Yesterday.', at: now - 86400 },
+    { ...QUIET, take: 'q1', at: now - 86400 + 5 },
+    { kind: 'said', text: 'A minute ago.', at: now - 60 },
+  ] };
+  await script(page, { history });
+  await page.goto('/');
+  await page.keyboard.press('t');
+
+  const older = await page.evaluate(at => new Date(at * 1000).toLocaleDateString([],
+    { weekday: 'short', day: 'numeric', month: 'short' }), now - 2 * 86400);
+  const lines = page.getByTestId('transcript-entries').locator(':scope > li');
+  await expect(lines).toHaveClass([/tp-day/, /tp-said/, /tp-said/, /tp-day/, /tp-said/, /tp-fold/, /tp-day/, /tp-said/]);
+  await expect(page.getByTestId('transcript-day')).toHaveText([older, 'Yesterday', 'Today']);
+});
+
+test('a day this year is named without its year, and one in another year with it', async ({ page }) => {
+  await page.goto('/');
+  const said = await page.evaluate(async () => {
+    const { dayLabel } = await import('/joe/components/TranscriptPane.js');
+    const now = new Date(2026, 0, 2, 9);
+    return [dayLabel(new Date(2026, 0, 2, 0, 1), now), dayLabel(new Date(2026, 0, 1, 23, 59), now),
+            dayLabel(new Date(2025, 11, 31, 12), now).includes('2025'),
+            dayLabel(new Date(2026, 0, 2, 9), new Date(2026, 2, 1, 9)).includes('2026')];
+  });
+
+  expect(said).toEqual(['Today', 'Yesterday', true, false]);
+});
