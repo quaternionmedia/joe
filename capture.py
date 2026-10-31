@@ -1,9 +1,9 @@
 """
 AudioCapture — backend audio recording via sounddevice + soundfile.
 
-Pattern from notebooks/meetbot.ipynb: sounddevice InputStream callback pushes
-frames into a queue; a background thread drains the queue and writes to disk.
-This decouples the real-time audio callback from I/O, preventing dropouts.
+A sounddevice InputStream callback pushes frames into a queue, and a
+background thread drains the queue to disk, as notebooks/meetbot.ipynb does:
+the real-time audio callback never waits on I/O, which prevents dropouts.
 
 Usage (via api.py):
     capture = AudioCapture()
@@ -16,7 +16,6 @@ import queue
 import threading
 from pathlib import Path
 
-import sounddevice as sd
 import soundfile as sf
 
 AUDIO_DIR = Path("Data/Audio")
@@ -33,6 +32,10 @@ class AudioCapture:
         self.q.put(indata.copy())
 
     def _record(self, filename: str, samplerate: int = 44100, channels: int = 1):
+        # Imported here: importing sounddevice starts PortAudio, which fails on
+        # a machine with no audio server, and the API imports this module.
+        import sounddevice as sd
+
         AUDIO_DIR.mkdir(parents=True, exist_ok=True)
         path = AUDIO_DIR / filename
         with sf.SoundFile(str(path), mode="w", samplerate=samplerate,
