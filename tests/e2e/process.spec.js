@@ -224,3 +224,47 @@ test('Library panel closes on second toggle click', async ({ page }) => {
   await page.waitForTimeout(300);
   await expect(panel).not.toHaveClass(/open/);
 });
+
+// ─── What the Library list shows ──────────────────────────────────────────────
+
+test('A file name is shown as text, never as markup', async ({ page }) => {
+  // A name is whatever Data/Audio/ holds; this page can drive joe's API.
+  const errors = [];
+  page.on('pageerror', err => errors.push(err.message));
+  const name = '<img src=x onerror="window.__ran=1">"quoted".wav';
+
+  await mockApi(page, { filename: name });
+  await page.goto('/');
+  await page.waitForSelector('canvas');
+  await page.getByTestId('capture-toggle').click();
+  await page.waitForSelector('[data-action="play"]', { timeout: 3000 });
+
+  const list = page.getByTestId('capture-file-list');
+  await expect(list.locator('.lib-name')).toHaveText(name);
+  await expect(list.locator('img')).toHaveCount(0);
+  expect(await page.evaluate(() => window.__ran)).toBeUndefined();
+  // The buttons carry the name itself, as the API needs it back.
+  expect(await list.locator('[data-action="play"]').getAttribute('data-name')).toBe(name);
+  expect(errors).toHaveLength(0);
+});
+
+test('A library joe does not serve says so, and what turning it on exposes', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', err => errors.push(err.message));
+  const detail = 'the audio library is off on this joe: JOE_ALLOW_LIBRARY=1 turns it on, for '
+    + 'whatever can reach this port -- joe has no authentication (docs/security.md)';
+
+  await page.route('**/api/audio/files', route => route.fulfill({
+    status:      403,
+    contentType: 'application/json',
+    body:        JSON.stringify({ detail }),
+  }));
+  await page.goto('/');
+  await page.waitForSelector('canvas');
+  await page.getByTestId('capture-toggle').click();
+
+  await expect(page.getByTestId('capture-file-list')).toHaveText('The library is off. Turning it on lets '
+    + 'anything that reaches this port read and add recordings. docs/security.md');
+  await expect(page.locator('[data-action="play"]')).toHaveCount(0);
+  expect(errors).toHaveLength(0);
+});

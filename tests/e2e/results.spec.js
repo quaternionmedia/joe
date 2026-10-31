@@ -201,6 +201,33 @@ test('Canvas mode badge shows RESULTS after loading notes from file input', asyn
   expect(errors).toHaveLength(0);
 });
 
+// ─── What the meta shows ──────────────────────────────────────────────────────
+
+test('A track named with markup is shown as text', async ({ page }) => {
+  // A track is named after its file, which is whatever Data/Audio/ held.
+  const errors = [];
+  page.on('pageerror', err => errors.push(err.message));
+  const track = '<img src=x onerror="window.__ran=1">.wav';
+  const [first] = Object.values(fixtureJson.audio);
+  const named = { ...fixtureJson, audio: { [track]: first } };
+
+  await page.route('**/api/results/latest', route => route.fulfill({
+    status:      200,
+    contentType: 'application/json',
+    body:        JSON.stringify(named),
+  }));
+  await page.goto('/');
+  await page.waitForSelector('canvas');
+  await openResultsPanel(page);
+  await page.getByTestId('fetch-latest').click();
+
+  const meta = page.getByTestId('results-meta');
+  await expect(meta).toContainText(`Track: ${track}`);
+  await expect(meta.locator('img')).toHaveCount(0);
+  expect(await page.evaluate(() => window.__ran)).toBeUndefined();
+  expect(errors).toHaveLength(0);
+});
+
 test("the panel's heading reads on one line, clear of its buttons", async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 768 });
   await page.goto('/');

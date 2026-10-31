@@ -108,6 +108,23 @@ The other voice modules, each documented through the routes that use it in
 After outputs are generated, `utilities.save_json()` writes process metadata and note details to:
 - `Data/Output/<timestamp>/Process_Data_<timestamp>.json`
 
+## Access (who may ask for what)
+
+joe has no authentication; `Access` stands in for it ([security.md](security.md)):
+
+- **Capabilities.** Every route of `api.py` but the health check and the
+  vocabulary belongs to `media`, `microphone`, `transcripts` or `library`,
+  turned on by `JOE_ALLOW_<NAME>`. A fresh joe has `media` alone; a route
+  whose capability is off answers 403 naming its setting. `banner` is what
+  the server prints as it starts, warning for each one on; `problems` stops
+  it starting on a setting it cannot read.
+- **The guard.** `Guard`, the API's outermost middleware, refuses a `Host`
+  joe does not answer to (DNS rebinding), a state-changing request from
+  another site's page (`Origin`), and anything a browser marks cross-site
+  except a followed link. It announces each address beyond loopback it
+  answers. `PageCORS` lets the pages joe takes requests from read the
+  answers.
+
 ## Media and Analysis (the video pipeline's audio engine)
 
 Beside the pipeline above, two modules answer a video editor over `/api/media`
@@ -115,15 +132,15 @@ Beside the pipeline above, two modules answer a video editor over `/api/media`
 
 `api.py /api/media` -> `Media.extract` (ffmpeg) -> `MediaStore` -> `Media.transcribe` (whisper) | `Analysis.analyze` (librosa, ffmpeg)
 
-- `Media` takes an upload in, decodes its first audio stream once with ffmpeg
-  into three WAVs -- the sound at its own rate and channels, 16 kHz mono for
-  whisper, 22050 Hz mono for librosa -- and keeps them in a private directory
-  under `Data/Media/` named by a random id (`MediaStore`), until `JOE_MEDIA_TTL`
+- `Media` decodes an upload's first audio stream once with ffmpeg into three
+  WAVs -- the sound at its own rate and channels, 16 kHz mono for whisper,
+  22050 Hz mono for librosa -- and keeps them in a private directory under
+  `Data/Media/` named by a random id (`MediaStore`), until `JOE_MEDIA_TTL`
   seconds after their last use. It transcribes with segment and word times on
-  a whisper model of its own (`MediaSpeech`), loaded through
-  `Voice._load_model` but never shared with the voice loop.
+  its own whisper model (`MediaSpeech`), loaded through `Voice._load_model`
+  but never shared with the voice loop.
 - `Analysis` measures tempo, beats and onsets (librosa's beat tracker and onset
-  detector), the RMS and peak level and the integrated LUFS (ffmpeg's
-  `ebur128`), silent spans and a waveform's peaks -- a block at a time, so an
-  hour of sound is never held whole, with the results librosa gives on the
+  detector), RMS and peak level and integrated LUFS (ffmpeg's `ebur128`),
+  silent spans and a waveform's peaks. It reads a block at a time, so an hour
+  of sound is never held whole, and gives the results librosa gives on the
   whole signal.

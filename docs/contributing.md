@@ -26,12 +26,12 @@ npx playwright install --with-deps chromium
 The `joe` CLI launches frontend and backend independently for easier troubleshooting:
 
 ```powershell
-# Start everything
+# Start everything, every capability on, on loopback (docs/security.md)
 uv run joe dev
 
 # Or start separately (useful for isolating issues):
-uv run joe frontend   # Vite only → http://localhost:3000/joe
-uv run joe backend    # API only  → http://localhost:8000/api/health
+uv run joe frontend                  # Vite only → http://localhost:3000/joe
+uv run joe backend --allow library   # API only  → http://localhost:8000/api/health
 
 # Run the pipeline
 uv run joe run
@@ -82,10 +82,11 @@ Joe, go!  ->  enables Live  ->  recording  ->  stop  ->  Library: Process  ->  R
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
 | `Live` button is greyed out | Web Audio not started | Click **Joe, go!** first |
+| **Library** is greyed and says "The library is off." | joe was started with `uv run joe backend`, or `dev --allow` without `library` | `uv run joe dev`, or `--allow library` (`JOE_ALLOW_LIBRARY=1`); [security.md](security.md) says what each capability exposes |
 | `Live` starts but no notes appear | Mic permission denied or wrong source | Check browser mic permissions; try **joe's mic** |
 | `Play` button is greyed out | Live recording is active | Click **Stop** to end recording first |
 | **Fetch Latest** returns 404 | No pipeline output yet | Run `uv run joe run` (or process a file via Library) |
-| Backend capture fails silently | `sounddevice` not installed or no device | Check `uv sync` completed; verify audio input device |
+| joe's mic capture fails silently | `sounddevice` not installed or no device | Check `uv sync` completed; verify audio input device |
 
 ---
 
@@ -105,29 +106,27 @@ Examples:
 
 ## Required Pre-PR Checks
 
-Run before opening a PR. The suite is what `tests.yml` runs on every PR,
-with one more test: the one marked `local` opens this machine's audio, and the
-hosted runners, which have no audio server, leave it out with `-m "not local"`.
-The build is what `deploy.yml` runs on every PR against `main`:
+Run before opening a PR. `tests.yml` runs the same suite, less the test marked
+`local`, which opens this machine's audio and which the runners, with no audio
+server, leave out; `deploy.yml` runs the same build ([CI](#ci)):
 
 ```powershell
 uv run --frozen pytest tests/ -q
 npm run build
 ```
 
-The media API's tests make their media with ffmpeg and skip without one. On
-a machine with none on `PATH`, name one with `JOE_FFMPEG` so they run here
-as they run in CI on Linux.
+The media tests skip without ffmpeg. With none on `PATH`, name one in
+`JOE_FFMPEG`, so they run here as they do in CI on Linux.
 
-If your change affects frontend behaviour, also run E2E tests, which CI runs
-on every PR as well:
+If your change affects frontend behaviour, also run the E2E tests, as CI
+does:
 
 ```powershell
 npm run test:e2e
 ```
 
-If your change affects runtime behaviour, also run the backend pipeline. No
-CI job runs it:
+If it affects runtime behaviour, also run the backend pipeline, which no CI
+job runs:
 
 ```powershell
 uv run python main.py
@@ -194,14 +193,16 @@ GitHub Actions runs three workflows, none of them filtered by path:
 | --- | --- | --- | --- |
 | `tests.yml` | Every PR, and every push to `main` | `windows-latest` and `ubuntu-latest`, neither cancelled when the other fails | `uv sync --frozen`, then `uv run --frozen pytest tests/ -q -m "not local"`. Linux installs `ffmpeg` first and no audio library; Windows installs no ffmpeg, so the media tests that need one skip there |
 | `e2e.yml` | Every PR, every push to `main`, and by hand | `windows-latest`, Node 22 | `npm ci`, `npx playwright install --with-deps chromium`, then `npm run test:e2e` |
-| `deploy.yml` | Every PR against `main`, every push to `main`, and by hand | `ubuntu-latest` | `npm ci` and `npm run build`, then publishes `dist/` to the `gh-pages` branch |
+| `deploy.yml` | Every PR against `main`, every push to `main`, and by hand | `ubuntu-latest` | `npm ci` and `npm run build`; then, only for a push to `main` or a run by hand on `main`, publishes `dist/` to the `gh-pages` branch |
 
-The deploy step runs on every event the workflow does, so a PR from a branch
-of this repository publishes its build to GitHub Pages before it is merged.
-No CI job runs `main.py`. No runner has the whisper model cached, so the one
-test that runs it, marked `whisper_model`, skips in CI.
+A PR's build is checked, never published. Only `deploy.yml`'s publish can
+write, and it runs no project code: `npm ci` and the project's scripts run
+in the first job, with a read-only token, and the publish takes its build
+([security.md](security.md#the-deploy-workflow); `tests/test_workflows.py`
+holds both). No CI job runs `main.py`. No runner has the whisper model
+cached, so the `whisper_model` test skips in CI.
 
 Dependabot opens update PRs every Wednesday for the workflows' actions and
-for npm packages, npm's minor and patch updates grouped into one PR for
-production dependencies and one for development dependencies. It does not
-watch Python dependencies: `uv.lock` changes only by hand.
+for npm packages. npm's minor and patch updates are grouped: one PR for
+production dependencies, one for development. It does not watch Python
+dependencies: `uv.lock` changes only by hand.

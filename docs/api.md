@@ -1,13 +1,55 @@
 # Joe API Reference
 
 The Joe FastAPI server (`api.py`) provides endpoints for pipeline results, audio capture,
-the audio library, and speech analysis -- and, under `/api/media`, the media API a video
-editor uses for captions and analysis, documented in [media.md](media.md).
+the audio library, and speech analysis. The media API a video editor uses for captions and
+analysis, under `/api/media`, has its own page: [media.md](media.md).
 
 **Base URL (local dev):** `http://localhost:8000`
 
 The Vite dev server proxies `/api/*` to this address, so the browser can call all endpoints
 directly when both servers are running via `joe dev`.
+
+> **joe has no authentication.** Whatever reaches its port can use every route that is
+> on: run it on loopback, on one machine you trust. [security.md](security.md) is the
+> threat model.
+
+## Capabilities
+
+Every route but the health check, the vocabulary and FastAPI's own `/openapi.json`,
+`/docs` and `/redoc` belongs to a **capability**, named under its heading below. A
+route whose capability is off answers `403`, with a `detail` naming the setting that
+turns it on, before judging anything it was asked:
+
+```json
+{"detail": "the audio library is off on this joe: JOE_ALLOW_LIBRARY=1 turns it on, for whatever can reach this port -- joe has no authentication (docs/security.md)"}
+```
+
+| Capability | Setting | In a fresh joe | Routes |
+| --- | --- | --- | --- |
+| `media` | `JOE_ALLOW_MEDIA` | on | `/api/media/*` ([media.md](media.md)) |
+| `microphone` | `JOE_ALLOW_MICROPHONE` | off | `/api/capture/*`, `/api/voice/devices`, `listen`, `watch`, `unwatch`, `level`, `answer`, `hold`, `strike`, `control`, and `POST /api/voice/conversation` |
+| `transcripts` | `JOE_ALLOW_TRANSCRIPTS` | off | `GET /api/voice/conversation`, `/conversation/state`, `/history`, `/transcript`, `/takes/{take}/audio` |
+| `library` | `JOE_ALLOW_LIBRARY` | off | `/api/audio/*`, `/api/voice/transcribe`, `/api/run`, `/api/run/{filename}`, `/api/results/latest` |
+
+Set them in the API's environment, or start it with `uv run joe backend --allow
+microphone` (`--allow all` for every one); `uv run joe dev` turns every one on unless
+`--allow` names fewer. The server lists what is on as it starts, warning for each.
+
+## Refused before routing
+
+Whatever is on, joe refuses what a page on another site can make a browser send
+([security.md](security.md#requests-from-a-browser)):
+
+| Status | When |
+| --- | --- |
+| `400` | The `Host` is not `localhost`, a `*.localhost` name, an IP address, `host.docker.internal`, or a name in `JOE_ALLOWED_HOSTS` |
+| `403` | A POST or DELETE whose `Origin` is not the page joe served, its dev page on port 3000, or one in `JOE_ALLOWED_ORIGINS`; or anything marked `Sec-Fetch-Site: cross-site` but following a link |
+| `415` | A body sent to `answer`, `hold`, `strike` or `POST /api/voice/conversation` whose `Content-Type` is not `application/json` |
+
+A page in `JOE_ALLOWED_ORIGINS` may `GET` and `POST` and read the answers; the browser's
+preflight of its `DELETE` is refused ([security.md](security.md#requests-from-a-browser)).
+
+curl, vox and alfred send none of those headers, and reach joe at names it answers to.
 
 ---
 
@@ -15,12 +57,13 @@ directly when both servers are running via `joe dev`.
 
 ### `GET /api/health`
 
-Returns `200 OK` when the server is up.
+Returns `200 OK` when the server is up, with which capabilities are on. Always served. joe's
+page reads it once to grey what is off.
 
 **Response**
 
 ```json
-{ "status": "ok" }
+{ "status": "ok", "allowed": { "media": true, "microphone": false, "transcripts": false, "library": false } }
 ```
 
 **curl**
@@ -32,6 +75,8 @@ curl http://localhost:8000/api/health
 ---
 
 ### `GET /api/results/latest`
+
+**Capability:** `library`.
 
 Returns the content of the most recently written `Process_Data_*.json` file from
 `Data/Output/`, sorted by file modification time.
@@ -63,6 +108,8 @@ curl http://localhost:8000/api/results/latest
 ---
 
 ### `POST /api/run`
+
+**Capability:** `library`.
 
 Runs the pipeline, `python main.py`, on recordings in `Data/Audio/` and returns its
 output: the newest, unless `files` names others or `all` asks for every one. Blocks
@@ -103,6 +150,8 @@ curl -X POST "http://localhost:8000/api/run?all=true"                       # ev
 
 ### `POST /api/run/{filename}`
 
+**Capability:** `library`.
+
 Run the pipeline on one file in `Data/Audio/`, named to `main.py`.
 
 **Path parameter**
@@ -132,6 +181,8 @@ curl -X POST http://localhost:8000/api/run/capture_20240101_120000.wav
 
 ### `POST /api/capture/start`
 
+**Capability:** `microphone`.
+
 Start recording from the default system audio input via sounddevice. The WAV file is written
 live to `Data/Audio/`.
 
@@ -157,6 +208,8 @@ curl -X POST http://localhost:8000/api/capture/start
 
 ### `POST /api/capture/stop`
 
+**Capability:** `microphone`.
+
 Stop the active backend recording and flush the WAV file to disk.
 
 **Response** — `200 OK`
@@ -181,9 +234,17 @@ curl -X POST http://localhost:8000/api/capture/stop
 
 ### `POST /api/audio/upload`
 
+**Capability:** `library`.
+
 Accept a raw audio blob from the browser (recorded via `MediaRecorder`) and save it to
 `Data/Audio/`. Content-Type determines the file extension: `.wav`, `.webm`, `.mp3`, `.ogg`
 or `.flac`. The name carries the time to the microsecond, so two uploads never share one.
+
+The headers are judged before the body is read: `415` for a `Content-Type` other than
+`audio/wav`, `audio/wave`, `audio/webm`, `audio/mpeg`, `audio/ogg` or `audio/flac`, then
+`413` for a declared `Content-Length` over 100 MB. The body is written as it arrives under
+`Data/Audio/.incoming/`, which no route reaches; it is refused (`413`) the moment it passes
+100 MB, and moved into the library only when whole.
 
 **Request body** — raw audio bytes
 
@@ -215,6 +276,8 @@ curl -X POST http://localhost:8000/api/audio/upload \
 
 ### `GET /api/audio/files`
 
+**Capability:** `library`.
+
 List all audio files in `Data/Audio/`, sorted by modification time (newest first).
 
 **Response** — `200 OK`
@@ -237,6 +300,8 @@ curl http://localhost:8000/api/audio/files
 ---
 
 ### `GET /api/audio/{filename}`
+
+**Capability:** `library`.
 
 Serve an audio file from `Data/Audio/` for browser playback. Returns the file with the
 appropriate `Content-Type` for the browser's `<audio>` element.
@@ -262,6 +327,8 @@ curl -o recording.wav http://localhost:8000/api/audio/capture_20240101_120000.wa
 ---
 
 ### `GET /api/voice/devices`
+
+**Capability:** `microphone`.
 
 Lists the audio input devices *the server's machine* can see, and which one
 is default. Query this before relying on `/api/voice/listen` — recording
@@ -293,6 +360,8 @@ curl http://localhost:8000/api/voice/devices
 ---
 
 ### `POST /api/voice/transcribe`
+
+**Capability:** `library`.
 
 Transcribes an audio file already present under `Data/Voice/` or `Data/Audio/` using
 whisper. `filename` is a name relative to one of those two directories — paths that
@@ -326,6 +395,8 @@ curl -X POST "http://localhost:8000/api/voice/transcribe?filename=clip.wav"
 ---
 
 ### `POST /api/voice/listen`
+
+**Capability:** `microphone`.
 
 Records `duration` seconds (default `5.0`, max `60`) from an input device,
 writes it to `Data/Voice/`, and transcribes the result.
@@ -389,6 +460,8 @@ curl -X POST "http://localhost:8000/api/voice/listen?duration=5&device=USB"
 
 ### `POST /api/voice/level`
 
+**Capability:** `microphone`.
+
 How loud one input device is right now. Records briefly and keeps nothing.
 
 This is the route for choosing between devices whose names do not
@@ -429,6 +502,8 @@ curl -X POST "http://localhost:8000/api/voice/level?device=12"
 
 ### `GET /api/voice/conversation`
 
+**Capability:** `transcripts`.
+
 The conversation's states as they happen, as server-sent events. The front
 end's voice panel reads this stream.
 
@@ -462,10 +537,14 @@ curl -N http://localhost:8000/api/voice/conversation
 
 ### `GET /api/voice/conversation/state`
 
+**Capability:** `transcripts`.
+
 The current state, the recent events and the level, once:
 `{"state", "events": [...], "level": {...}}`.
 
 ### `POST /api/voice/conversation`
+
+**Capability:** `microphone`.
 
 A dialog's own state, posted by the program asking the question.
 
@@ -482,8 +561,11 @@ button and a number key.
 | Status | Reason |
 | --- | --- |
 | `400` | A body that is not JSON, a state the dialog may not post, or `options` on another state, over nine, or not all non-empty strings |
+| `415` | A body not sent as `application/json` |
 
 ### `POST /api/voice/answer`
+
+**Capability:** `microphone`.
 
 An answer given without speaking -- a button or a key on the page -- taken as
 if it had been said. The take in progress ends at once and `/api/voice/listen`
@@ -491,11 +573,14 @@ returns the answer as its `text`, with `"source": "key"` and an empty
 `audio_path`; with no take in progress, the next one returns it without opening
 the microphone, if it starts within fifteen seconds.
 
-**Body** — `{"text": "approve"}`, at most 100 characters.
+**Body** — `{"text": "approve"}`, at most 100 characters, sent as `application/json`
+(`415` otherwise, as for `hold`, `strike` and `POST /api/voice/conversation`).
 
 **Response** — `200 OK`, the control's state: `{"held": false, "answer_waiting": true, "interrupted": true}`
 
 ### `POST /api/voice/hold`
+
+**Capability:** `microphone`.
 
 A held key. **Body** — `{"held": true}` when pressed, `{"held": false}` when
 released. While held, a take neither ends on a pause nor at its `duration`
@@ -506,11 +591,15 @@ said they were speaking. The take reports `holding` when it sees the hold.
 
 ### `GET /api/voice/control`
 
+**Capability:** `microphone`.
+
 `{"held", "answer_waiting", "interrupted"}`, once. `interrupted` is true while
 an answer is waiting, a key is held, or a watch has heard someone speak over
 the question: what a question being said asks, to stop.
 
 ### `POST /api/voice/watch`
+
+**Capability:** `microphone`.
 
 Opens a take while a question is still being asked, so a person who answers
 over it is heard from their first word. Takes `/api/voice/listen`'s parameters
@@ -526,6 +615,8 @@ last. `JOE_BARGE_IN=0` leaves only the keys to interrupt, and the response says
 `/api/voice/listen`'s bounds.
 
 ### `POST /api/voice/unwatch`
+
+**Capability:** `microphone`.
 
 Closes a watch that will not be listened to, begun or not. `{"watching": false}`.
 
@@ -554,6 +645,8 @@ the page.
 
 ### `GET /api/voice/history`
 
+**Capability:** `transcripts`.
+
 The whole transcript, oldest first, read from the datapoints:
 `{"entries": [...], "kept": true}`. An entry is `{"kind": "said", "text",
 "reason", "at"}` for a sentence the program asking said, or `{"kind": "take",
@@ -568,6 +661,8 @@ under `JOE_DATAPOINTS=0`, when nothing is written to read back.
 
 ### `GET /api/voice/takes/{take}/audio`
 
+**Capability:** `transcripts`.
+
 One take's recording, `audio/wav`, by the take's hex id, for the visualiser to
 play with the take's words on its timeline. Only a recording under joe's own
 voice folder is served, whatever the take's record names; a record that names
@@ -576,9 +671,13 @@ id that is not hex, `404` for a take with no recording kept.
 
 ### `GET /api/voice/vocabulary`
 
+Always served.
+
 joe's own spoken words: `{"phrases": [{"key", "says", "phrases"}]}`.
 
 ### `POST /api/voice/strike`
+
+**Capability:** `microphone`.
 
 Strike a word of the take being transcribed, or restore a struck one.
 **Body** -- `{"take": "...", "segment": 0, "word": 2}`, or `{"take": "...",
@@ -587,6 +686,8 @@ transcript. `400` for a malformed body, `404` for no such word, `409` for a take
 that is no longer the current one.
 
 ### `GET /api/voice/transcript`
+
+**Capability:** `transcripts`.
 
 The take being transcribed, or the last one: `{"take", "segments", "text"}`.
 
@@ -623,9 +724,9 @@ different outputs is refused.
 
 ### Media for the video pipeline
 
-Audio or video uploaded once, then transcribed and analysed by id -- a video
-editor's captions, beats and waveforms. Its own page, [media.md](media.md), is
-the reference; in short:
+Audio or video uploaded once, then transcribed and analysed by id: a video
+editor's captions, beats and waveforms. [media.md](media.md) is the reference;
+in short:
 
 | Route | Answers |
 | --- | --- |
@@ -635,16 +736,17 @@ the reference; in short:
 | `POST /api/media/{media_id}/analyze?features=...` | `{"duration", "tempo", "beats", "onsets", "loudness", "silences", "peaks"}` |
 | `DELETE /api/media/{media_id}` | `204`; `404` for one that is not here |
 
-Every failure there is `{"detail": str}`. Uploads are kept privately under
-`Data/Media/` and removed `JOE_MEDIA_TTL` seconds (an hour) after their last
-use. ffmpeg is required (`JOE_FFMPEG`, or on PATH). Beside alfred, which has
-port 8000, run the API alone: `uv run uvicorn api:app --port 8010`.
+Its capability is `media`, on in a fresh joe. Every failure there is `{"detail": str}`.
+It needs ffmpeg; [media.md](media.md#running-it-beside-alfred) has the settings and how
+to run it beside alfred.
 
 ---
 
 ## Interactive docs
 
-FastAPI auto-generates an interactive API explorer at:
+FastAPI auto-generates an interactive API explorer at the addresses below. Both load
+their scripts from a CDN into joe's own origin, so opening them trusts that CDN with
+whatever is on ([security.md](security.md#findings), F13):
 
 - Swagger UI: <http://localhost:8000/docs>
 - ReDoc:      <http://localhost:8000/redoc>
@@ -652,8 +754,8 @@ FastAPI auto-generates an interactive API explorer at:
 ## Typical workflows
 
 ```bash
-# 1. Start both servers
-uv run joe dev
+# 1. Start both servers, with the library -- and, for 2b, the microphone -- on
+uv run joe dev --allow library --allow microphone
 
 # 2a. Record from the browser
 #     Open http://localhost:3000/joe

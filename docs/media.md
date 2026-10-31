@@ -1,11 +1,15 @@
 # joe's media API
 
-joe is the audio engine of a video pipeline: a video editor (alfred) sends it a
-clip, or the mixed sound of a timeline, and asks what is said in it and when
-(captions), and how it moves -- tempo, beats, onsets, loudness, silences and a
-waveform. The routes live under `/api/media`, beside the voice API and
-independent of it. Nothing here changes `/api/audio/upload` or
-`/api/voice/transcribe`.
+> **joe has no authentication.** Whatever reaches its port can use every
+> route that is on. A fresh joe serves the media API alone, so a video editor
+> needs no setting. Run joe on loopback, on one machine you trust;
+> [security.md](security.md) is the threat model.
+
+joe is the audio engine of a video pipeline. A video editor (alfred) sends it a
+clip, or a timeline's mixed sound, and asks what is said in it and when
+(captions), and how it moves: tempo, beats, onsets, loudness, silences and a
+waveform. The routes live under `/api/media`, independent of the voice API,
+`/api/audio/upload` and `/api/voice/transcribe`.
 
 An upload is answered with an id; everything after is asked by that id:
 
@@ -17,38 +21,44 @@ DELETE /api/media/{media_id}             -> 204
 GET    /api/media/capabilities           -> {"formats", "features", "speech_model", "word_timestamps", ...}
 ```
 
-Every time joe answers is in seconds of the uploaded media. Every failure is
-`{"detail": str}` -- a sentence, never a list. That includes a failure of
-joe's own, on any of these routes: a `500` whose `detail` names the
-exception, with its traceback in the server's log.
+Times are in seconds of the uploaded media. Every failure is
+`{"detail": str}`, a sentence, never a list -- joe's own included: a `500`
+whose `detail` names the exception, with its traceback in the server's log.
 
 ## Running it beside alfred
 
-joe's CLI serves the API on port 8000, which is alfred's. Run the API alone on
-another port, from this checkout:
+joe's CLI serves on port 8000, which is alfred's. Run the API alone on another
+port, from this checkout:
 
 ```powershell
 uv run uvicorn api:app --port 8010
 ```
 
-and point alfred at `http://host.docker.internal:8010` (from its containers) or
-`http://localhost:8010`. `curl http://localhost:8010/openapi.json` names the
-server -- `Joe API` -- before you trust an answer from that port.
+Point alfred at `http://host.docker.internal:8010` (from its containers) or
+`http://localhost:8010`. Before you trust an answer from that port, check that
+`curl http://localhost:8010/openapi.json` names `Joe API`.
 
-That command listens on loopback, `127.0.0.1`, uvicorn's default. On Docker
-Desktop that is enough: it resolves `host.docker.internal` itself and hands
-a container's connection to the host's loopback, where joe sees it arrive
-from `127.0.0.1`. A Linux Docker host does neither; *On a Linux Docker host*,
-below, says what it takes there.
+This listens on loopback (`127.0.0.1`, uvicorn's default). That is enough on
+Docker Desktop, which resolves `host.docker.internal` itself and hands a
+container's connection to the host's loopback, where joe sees it arrive from
+`127.0.0.1`. A Linux Docker host does neither: see
+[On a Linux Docker host](#on-a-linux-docker-host).
 
-**ffmpeg is required.** joe decodes uploads with it, and measures LUFS with its
-`ebur128` filter. It is `JOE_FFMPEG` when set (a path to the binary), else
-`ffmpeg` on PATH. Without one, `GET /api/media/capabilities` lists no formats
-and an upload is a 503. On Windows any build will do -- one that comes with an
-editor such as Kdenlive (`C:\Program Files\kdenlive\bin\ffmpeg.exe`) works.
+From an alfred checkout, `./al family up` does all of this: it starts this joe
+on 8010 with nothing on beyond the media API, then alfred's dev stack pointed
+at it. The joe is the checkout beside alfred's, or the one `ALFRED_FAMILY_JOE`
+names. `./al family smoke` checks the path through to an analysis by this
+engine, and `./al family down` stops both. alfred's `docs/family.md` has the
+rest.
 
-**The speech model** is whisper `base`, the voice loop's own size, loaded from
-whisper's cache (`~/.cache/whisper/base.pt`; downloaded once if missing) the
+**ffmpeg is required**, to decode uploads and to measure LUFS (its `ebur128`
+filter). joe runs `JOE_FFMPEG` (a path to the binary) when set, else `ffmpeg`
+on PATH. Without one, `GET /api/media/capabilities` lists no formats and an
+upload is a 503. On Windows any build will do, such as the one that comes with
+Kdenlive (`C:\Program Files\kdenlive\bin\ffmpeg.exe`).
+
+**The speech model** is whisper `base`, the voice loop's size, loaded from
+whisper's cache (`~/.cache/whisper/base.pt`, downloaded once if missing) the
 first time something is transcribed. That first transcription also compiles
 whisper's word-timing code: on the machine these examples come from, four
 seconds of speech took eighteen seconds the first time and three after.
@@ -62,75 +72,73 @@ seconds of speech took eighteen seconds the first time and three after.
 | `JOE_MEDIA_TTL` | `3600` | Seconds an upload is kept after its last use |
 | `JOE_MEDIA_MAX_BYTES` | `1073741824` (1 GiB) | The largest upload taken |
 | `JOE_MEDIA_MAX_SECONDS` | `7200` (two hours) | The longest sound taken |
+| `JOE_ALLOW_MEDIA` | `1` | `0` turns the media API off: every route here answers `403` |
+| `JOE_ALLOWED_HOSTS` | none | Host names joe answers to besides loopback names, IP addresses and `host.docker.internal` -- a container's service name, say ([security.md](security.md)) |
 
 ### On a Linux Docker host
 
 Two things change when alfred's containers run on Docker Engine on Linux:
 
-- **`host.docker.internal` has to be mapped.** A container resolves it only
-  when it is started with the name mapped to the host gateway --
-  `extra_hosts: ["host.docker.internal:host-gateway"]` in compose,
-  `--add-host host.docker.internal:host-gateway` to `docker run` -- as
-  alfred's dev stack declares for its api and renderer. The name then
-  resolves to the default bridge's gateway, docker0's address: `172.17.0.1`
-  unless the daemon's `host-gateway-ip` says otherwise, and
-  `ip -4 addr show docker0` prints it.
-- **joe has to listen where that address arrives.** A connection to the
-  gateway address arrives at that address, not at loopback, so a joe on
-  `127.0.0.1` refuses it. Listen on the gateway address itself:
+- **Map `host.docker.internal`.** A container resolves it only when started
+  with the name mapped to the host gateway:
+  `extra_hosts: ["host.docker.internal:host-gateway"]` in compose, or
+  `--add-host host.docker.internal:host-gateway` to `docker run`. alfred's
+  dev stack declares it for its api and renderer. The name then resolves to
+  the default bridge's gateway, docker0's address: `172.17.0.1` unless the
+  daemon's `host-gateway-ip` says otherwise (`ip -4 addr show docker0`
+  prints it).
+- **Listen where that address arrives.** A connection to the gateway
+  address arrives there, not at loopback, so a joe on `127.0.0.1` refuses
+  it. Listen on the gateway address itself:
 
   ```sh
   uv run uvicorn api:app --host 172.17.0.1 --port 8010
   ```
 
-  It is then not on `localhost`: ask it who it is at that address,
+  It is then not on `localhost`; check who answers at that address with
   `curl http://172.17.0.1:8010/openapi.json`. Or listen on every address
   with `--host 0.0.0.0`, on a network you trust. A host firewall that
-  filters incoming connections, as ufw does by default, also has to let the
+  filters incoming connections, as ufw does by default, must also let the
   containers' subnets reach the port.
 
-**joe has no authentication.** Whatever reaches its port can use every route
-it serves, not only these: record from this machine's microphone, as a
-transcript (`/api/voice/listen`) or as a WAV it can then download
-(`/api/capture/start`, `/api/audio/{filename}`); answer a question being
-asked as if by key (`/api/voice/answer`); read the transcript of every
-conversation (`/api/voice/history`); list, download and add to the audio
-library; and upload media for this machine's CPU to transcribe. On loopback,
-that is this machine. On docker0's address, it is this machine and its
-containers -- and, unless a firewall says otherwise, a machine on the same
-network that routes that address through this one. On `0.0.0.0`, it is
+**What listening wider exposes.** joe has no authentication: whatever
+reaches the port can use every route that is on -- in a fresh joe, these
+alone, each upload reached only by its id. On docker0's address that is this
+machine, its containers and, unless a firewall says otherwise, a neighbour
+that routes that address through this machine. On `0.0.0.0` it is
 everything that can reach this machine on that port: every device on its
-network, and the internet if a router forwards the port. Use `0.0.0.0` only
-on a network you trust; a firewall rule admitting the port from the Docker
-subnets alone narrows it to this machine and its containers.
+network, and the internet if a router forwards the port. A firewall rule
+admitting the port from the Docker subnets alone narrows that to this
+machine and its containers. The server announces the first request from
+each address beyond loopback, once.
+[security.md](security.md#who-reaches-each-binding) has the rest.
 
 ## Uploads are private and kept for a while
 
-Each upload is a directory under `JOE_MEDIA_DIR`, named by a random 128-bit id
-that is the only way to reach it -- no route lists uploads. ffmpeg decodes the
-first audio stream once into three WAVs: the sound at its own rate and channel
-count (levels, silences, peaks), 16 kHz mono (whisper) and 22050 Hz mono
-(librosa's beat tracker). The upload itself is deleted as soon as its sound is
-out. Nothing is loudness-normalised: "normalised" means one format, never one
-level. A sound track that starts after its video does is padded with silence
-to its start, so its times are the video's.
+Each upload is a directory under `JOE_MEDIA_DIR`, named by a random 128-bit id,
+the only way to reach it: no route lists uploads. ffmpeg decodes the first
+audio stream once into three WAVs: the sound at its own rate and channel count
+(levels, silences, peaks), 16 kHz mono (whisper) and 22050 Hz mono (librosa's
+beat tracker). The upload itself is deleted as soon as its sound is out.
+Nothing is loudness-normalised: "normalised" means one format, never one
+level. A sound track that starts after its video is padded with silence to
+its start, so its times are the video's.
 
-An upload is kept `JOE_MEDIA_TTL` seconds after it was last used -- uploaded,
-transcribed or analysed -- and then removed by a sweep the server runs while it
-is up, and at every upload; asking for it after that is a 404. `DELETE` removes
-it at once. An upload being transcribed or analysed is never swept, and one
-deleted meanwhile goes when that ends.
+An upload is kept `JOE_MEDIA_TTL` seconds after its last use (upload,
+transcription or analysis), then removed by a sweep the server runs while it
+is up and at every upload; after that it is a 404. `DELETE` removes it at
+once. An upload being transcribed or analysed is never swept; one deleted
+meanwhile goes when that ends.
 
-**ffmpeg opens only media.** It may open an upload only with the demuxers of
-the formats below, and only as a local file: a playlist or a concat script
-sent as "audio" could otherwise read other files on this machine into the
-sound joe returns.
+**ffmpeg opens only media**: an upload only with the demuxers of the formats
+below, and only as a local file. Otherwise a playlist or concat script sent
+as "audio" could read other files on this machine into the sound joe returns.
 
 ---
 
 ## `GET /api/media/capabilities`
 
-What this engine takes and does. Check it before sending: the limits are here.
+What this engine takes and does, limits included. Check it before sending.
 
 ```bash
 curl http://localhost:8010/api/media/capabilities
@@ -151,13 +159,12 @@ curl http://localhost:8010/api/media/capabilities
 }
 ```
 
-`formats` is every `Content-Type` an upload may have, and is empty when there
-is no ffmpeg. `max_bytes`, `max_seconds` and `ttl_seconds` are the settings
-above.
+`formats` is every `Content-Type` an upload may have, empty without ffmpeg.
+`max_bytes`, `max_seconds` and `ttl_seconds` are the settings above.
 
 ## `POST /api/media`
 
-The file as the raw request body, its type in `Content-Type`:
+The file is the raw request body, its type in `Content-Type`:
 
 | Kind | Content types |
 | --- | --- |
@@ -253,17 +260,17 @@ curl -X POST "http://localhost:8010/api/media/278fe25bbd08c0ccaff9caa7b4184d10/t
 - `info` carries whisper's own confidence: the mean `avg_logprob` and the
   largest `no_speech_prob` and `compression_ratio` over the segments.
 
-Transcriptions take turns on a whisper model of the media API's own -- never
-the voice loop's, so a conversation is not kept waiting behind captions -- and
-a request waits its turn. An hour of speech takes minutes on a CPU; give the
-client's timeout room.
+Transcriptions take turns on the media API's own whisper model, never the
+voice loop's, so captions never keep a conversation waiting; a request waits
+its turn. An hour of speech takes minutes on a CPU: give the client's timeout
+room.
 
-**Errors:** `404` for an id that is not here; `422` for a `language` whisper
+**Errors:** `404` for an id that is not here. `422` for a `language` whisper
 does not know (`unknown language 'klingon'; give a code such as 'en' or a name
 such as 'English'`) or a `words` that is not a boolean
 (`words: Input should be a valid boolean, unable to interpret input`). `words`
 is judged before the id is looked up, so an unknown id with a bad `words` is
-a `422`; `language` is judged after it.
+a `422`; `language` is judged after.
 
 ## `POST /api/media/{media_id}/analyze`
 
@@ -296,8 +303,8 @@ curl -X POST "http://localhost:8010/api/media/f934079ba002a614c6a0e6d710ca124f/a
 }
 ```
 
-`duration` always comes first; after it, only the features asked for, in this
-order. `features=loudness,silence` answers `{"duration", "loudness",
+`duration` always comes first, then only the features asked for, in this
+order: `features=loudness,silence` answers `{"duration", "loudness",
 "silences"}`. The feature is `silence`; its answer is `silences`.
 
 | Key | What it is |
@@ -312,16 +319,16 @@ order. `features=loudness,silence` answers `{"duration", "loudness",
 | `peaks` | `{"rate", "values"}`: window `i` covers `[i/rate, (i+1)/rate)` seconds, and its value is the largest absolute sample in it over all channels, as a fraction of full scale -- absolute, not scaled to the loudest window, so a quiet clip draws quiet. `ceil(duration * rate)` values |
 
 Levels are floored at -120 dBFS, so digital silence reads `-120.0`, never
-minus infinity. LUFS is gated, as BS.1770 says: a second of tone between two
-of silence reads the tone's loudness, not a third of it.
+minus infinity. LUFS is gated, per BS.1770: a second of tone between two of
+silence reads the tone's loudness, not a third of it.
 
 Tempo, beats and onsets are read from the 22050 Hz mono copy with a 256-sample
 hop; levels, silences and peaks from the sound at its own rate, so a peak is a
 sample that was there. Nothing holds a whole signal in memory: an hour of 48
-kHz stereo is read in blocks, and the results are librosa's own on the whole
+kHz stereo is read in blocks, with the results librosa gives on the whole
 signal (`Modules/Analysis.py`).
 
-**Errors:** `404` for an id that is not here; `422` for an unknown feature
+**Errors:** `404` for an id that is not here. `422` for an unknown feature
 (`unknown feature 'pitch'; joe measures tempo, beats, onsets, loudness,
 silence, peaks`) or a parameter out of bounds (`peaks_rate: Input should be
 greater than or equal to 1`) or not a number (`peaks_rate: Input should be a
@@ -345,11 +352,13 @@ uploaded, expired, or already deleted:
 
 ## Testing
 
-`uv run pytest tests/` runs the media tests with the rest. They make their
-media at test time -- click tracks, a tone between silences, a quiet room with
-numpy; every container and codec with ffmpeg; nothing binary is committed --
-and skip what needs ffmpeg when there is none (`JOE_FFMPEG`). Whisper is a
-stand-in except in one test, marked `whisper_model`, which runs the real base
-model from this machine's cache (it skips rather than download) on a sentence
-said by the platform's own speech engine: Windows' SAPI voices, or espeak.
-`-m "not whisper_model"` leaves it out.
+`uv run pytest tests/` runs the media tests with the rest.
+
+- They make their media at test time: click tracks, a tone between silences
+  and a quiet room with numpy; every container and codec with ffmpeg. Nothing
+  binary is committed.
+- What needs ffmpeg skips when there is none (`JOE_FFMPEG`).
+- Whisper is a stand-in except in one test, marked `whisper_model`. It runs
+  the real base model from this machine's cache (skipping rather than
+  downloading) on a sentence said by the platform's own speech engine:
+  Windows' SAPI voices, or espeak. `-m "not whisper_model"` leaves it out.

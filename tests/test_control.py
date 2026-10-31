@@ -145,7 +145,8 @@ def test_the_answer_route_takes_a_word_and_refuses_anything_else(fresh):
     assert fresh[0].take_answer() == "approve"
     for bad in ({"text": ""}, {"text": "x" * 101}, {"text": 3}, ["approve"]):
         assert client.post("/api/voice/answer", json=bad).status_code == 400
-    assert client.post("/api/voice/answer", content=b"not json").status_code == 400
+    assert client.post("/api/voice/answer", content=b"not json",
+                       headers={"content-type": "application/json"}).status_code == 400
 
 
 def test_the_hold_route_sets_and_clears_the_hold(fresh):

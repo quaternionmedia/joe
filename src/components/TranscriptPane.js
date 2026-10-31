@@ -20,12 +20,17 @@
  *   const pane = new TranscriptPane(document.getElementById('transcript-pane'), voicePanel, { canvas: mainCanvas });
  *   pane.mount();
  */
+import { offNote } from './Capabilities.js';
+
 const OPEN_KEY = 'joe.transcript.open';
 // How close to the bottom counts as following the newest line, in pixels.
 const FOLLOW_PX = 48;
 
 // How far apart a sentence streamed and the same sentence kept may be stamped.
 const SAME_SECONDS = 30;
+
+// A question longer than this, in characters, is shown three lines deep until opened.
+const LONG_ASK = 240;
 
 /**
  * The history read from joe, with whatever streamed in that it does not hold
@@ -46,6 +51,20 @@ function merged(history, current) {
 function heardNothing(entry) {
   return entry.kind === 'take' && !entry.live && !(entry.text || '').trim()
     && !(entry.segments || []).some(segment => (segment.words || []).length);
+}
+
+/**
+ * How the transcript names the day `date` falls on, seen from `now`: "Today",
+ * "Yesterday", and before that the date, with its year when it is not this one.
+ */
+export function dayLabel(date, now) {
+  const start = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const days = Math.round((start(now) - start(date)) / 86400000);
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  const parts = { weekday: 'short', day: 'numeric', month: 'short' };
+  if (date.getFullYear() !== now.getFullYear()) parts.year = 'numeric';
+  return date.toLocaleDateString([], parts);
 }
 
 function remembered(storage) {
@@ -82,6 +101,7 @@ export class TranscriptPane {
     this._entries = [];   // from the history, then live
     this._notes   = [];   // joe's notes, kept beside a refetched history
     this._unfolded = new Set();   // runs of empty takes opened, by their first take
+    this._unclamped = new Set();  // long questions opened, by when and what was said
     this._onKey   = e => this._key(e);
     // Set by whatever shows a take elsewhere: called with the take's entry.
     this.onShow = null;
@@ -116,6 +136,8 @@ export class TranscriptPane {
   async refresh() {
     try {
       const res = await fetch(`${this._base}/history?limit=500`);
+      this._off = res.status === 403;   // a joe serving no transcripts
+      if (this._off) this.render();
       if (!res.ok) return;
       const body = await res.json();
       this._entries = merged(body.entries || [], this._entries);
@@ -130,7 +152,8 @@ export class TranscriptPane {
     this._list.replaceChildren(...this._lines(all));
     if (this._empty) {
       this._empty.hidden = all.length > 0;
-      this._empty.textContent = this._kept === false
+      if (this._off) this._empty.replaceChildren(offNote('transcripts'));
+      else this._empty.textContent = this._kept === false
         ? 'joe keeps no transcript while JOE_DATAPOINTS=0; this one starts now.'
         : 'Nothing said yet. What is asked and what is heard appears here.';
     }
@@ -170,10 +193,22 @@ export class TranscriptPane {
 
   // ─── the lines, and the takes that heard nothing ──────────────────────────
 
-  /** One line an entry, except that takes in a row that heard nothing share one, folded. */
+  /**
+   * One line an entry, except that takes in a row that heard nothing share one,
+   * folded; and a line naming the day wherever the day changes.
+   */
   _lines(entries) {
     const lines = [];
+    let day = null;
+    const dayOf = at => {
+      if (!at) return;
+      const date = new Date(at * 1000);
+      if (date.toDateString() === day) return;
+      day = date.toDateString();
+      lines.push(this._day(date));
+    };
     for (let i = 0; i < entries.length;) {
+      dayOf(entries[i].at);
       if (!heardNothing(entries[i])) {
         lines.push(this._line(entries[i++]));
         continue;
@@ -183,6 +218,14 @@ export class TranscriptPane {
       lines.push(this._fold(run));
     }
     return lines;
+  }
+
+  _day(date) {
+    const li = this._doc.createElement('li');
+    li.className = 'tp-day';
+    li.dataset.testid = 'transcript-day';
+    li.textContent = dayLabel(date, new Date());
+    return li;
   }
 
   _fold(run) {
@@ -245,8 +288,32 @@ export class TranscriptPane {
         meta.append(show);
       }
     }
-    li.append(meta, this._body(entry));
+    const body = this._body(entry);
+    li.append(meta, body);
+    if (entry.kind === 'said' && (entry.text || '').length > LONG_ASK) li.append(this._clamp(entry, body));
     return li;
+  }
+
+  /** A long question, three lines deep, and the button that opens it whole. */
+  _clamp(entry, body) {
+    const key = `${entry.at}|${entry.text.slice(0, 40)}`;
+    const more = this._doc.createElement('button');
+    more.type = 'button';
+    more.className = 'tp-more';
+    more.dataset.testid = 'transcript-more';
+    const show = open => {
+      body.classList.toggle('is-clamped', !open);
+      more.textContent = open ? 'less' : 'more';
+      more.setAttribute('aria-expanded', String(open));
+    };
+    show(this._unclamped.has(key));
+    more.addEventListener('click', () => {
+      const open = !this._unclamped.has(key);
+      if (open) this._unclamped.add(key);
+      else this._unclamped.delete(key);
+      show(open);
+    });
+    return more;
   }
 
   _body(entry) {
