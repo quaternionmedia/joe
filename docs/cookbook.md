@@ -163,6 +163,55 @@ with the piano roll aligned to the audio.
 
 ---
 
+## Recipe 10 — Caption and analyse a video for an editor
+
+**Goal:** Give a video editor (alfred) what joe hears in a clip: the words with
+their times, for captions, and its beats, loudness, silences and waveform, for
+cutting. No browser here — this is joe as an engine, over HTTP.
+
+1. Put ffmpeg where joe finds it: on PATH, or name it.
+
+   ```powershell
+   $env:JOE_FFMPEG = "C:\Program Files\kdenlive\bin\ffmpeg.exe"
+   ```
+
+2. Start the API alone on a port alfred does not use (alfred has 8000), and
+   check that it is joe answering there:
+
+   ```powershell
+   uv run uvicorn api:app --port 8010
+   curl http://localhost:8010/openapi.json   # "title": "Joe API"
+   ```
+
+3. Upload the clip. The answer's `media_id` is how you ask about it from here:
+
+   ```bash
+   curl -X POST http://localhost:8010/api/media \
+     -H "Content-Type: video/mp4" --data-binary @clip.mp4
+   # {"media_id": "323be26e5105eb0a57ca72d44566409b", "duration": 2.005,
+   #  "sample_rate": 48000, "channels": 1, "has_audio": true}
+   ```
+
+4. Ask for the words, each with its time, and for what the sound does:
+
+   ```bash
+   curl -X POST "http://localhost:8010/api/media/323be26e5105eb0a57ca72d44566409b/transcribe"
+   curl -X POST "http://localhost:8010/api/media/323be26e5105eb0a57ca72d44566409b/analyze?features=beats,loudness,silence"
+   ```
+
+5. Delete it when you are done, or leave it: an upload goes an hour after its
+   last use (`JOE_MEDIA_TTL`).
+
+   ```bash
+   curl -X DELETE http://localhost:8010/api/media/323be26e5105eb0a57ca72d44566409b
+   ```
+
+Every time in the answers is a time in the clip. A clip with no sound track is
+refused with a 422 rather than kept. [media.md](media.md) has every field, the
+settings and the errors.
+
+---
+
 ## How the bottom bar controls relate
 
 ```text
