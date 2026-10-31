@@ -3,7 +3,7 @@ Joe CLI - dev launcher for the Joe Audio Workbench.
 
 Usage (with uv):
     uv run joe frontend   # Vite dev server only  (localhost:3000)
-    uv run joe backend    # FastAPI server only    (localhost:8000)
+    uv run joe backend    # FastAPI server only    (127.0.0.1:1059)
     uv run joe dev        # Both servers together
     uv run joe run        # Run the pipeline once  (Data/Audio/ -> Data/Output/)
 
@@ -14,6 +14,11 @@ import subprocess
 import sys
 
 import typer
+
+# The API's port: 1059, the twelfth root of two (2^(1/12) = 1.0594...), one
+# semitone. qm's port allocation, in its ci/dashboard.py, gives each server the
+# first four digits of a constant.
+API_PORT = 1059
 
 
 def _echo(message: str = "", err: bool = False) -> None:
@@ -72,9 +77,9 @@ def frontend():
 
 @app.command()
 def backend():
-    """Start the FastAPI backend API server (localhost:8000)."""
+    """Start the FastAPI backend API server (127.0.0.1:1059)."""
     subprocess.run(
-        [sys.executable, "-m", "uvicorn", "api:app", "--reload", "--port", "8000"],
+        [sys.executable, "-m", "uvicorn", "api:app", "--reload", "--port", str(API_PORT)],
         check=False,
     )
 
@@ -83,12 +88,12 @@ def backend():
 def dev():
     """Start both frontend and backend dev servers. Ctrl+C stops both."""
     _echo("Starting Vite  -> http://localhost:3000/joe")
-    _echo("Starting API   -> http://localhost:8000/api/health")
+    _echo(f"Starting API   -> http://127.0.0.1:{API_PORT}/api/health")
     _echo("Ctrl+C to stop both.\n")
 
     fe = subprocess.Popen([_npm, "run", "dev"])
     be = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "api:app", "--reload", "--port", "8000"]
+        [sys.executable, "-m", "uvicorn", "api:app", "--reload", "--port", str(API_PORT)]
     )
 
     try:
