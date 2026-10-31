@@ -723,6 +723,19 @@ body.transcript-open #voice-panel { right: calc(var(--pane-w) + 12px); }
   cursor: pointer;
 }
 .tp-text { margin: 3px 0 0; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tp-fold { padding: 4px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.04); }
+.tp-fold-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #666;
+  font: inherit;
+  font-size: 0.7rem;
+  cursor: pointer;
+}
+.tp-fold-toggle::before { content: '▸ '; }
+.tp-fold-toggle[aria-expanded="true"]::before { content: '▾ '; }
+.tp-fold-items { margin: 0; padding: 0 0 0 10px; list-style: none; }
 .tp-word.is-struck { text-decoration: line-through; color: #666; }
 .tp-word.is-pending { color: #8a8a8a; }
 
