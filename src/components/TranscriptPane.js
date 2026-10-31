@@ -29,6 +29,9 @@ const FOLLOW_PX = 48;
 // How far apart a sentence streamed and the same sentence kept may be stamped.
 const SAME_SECONDS = 30;
 
+// A question longer than this, in characters, is shown three lines deep until opened.
+const LONG_ASK = 240;
+
 /**
  * The history read from joe, with whatever streamed in that it does not hold
  * yet: a history that arrives after the stream has begun must not take the
@@ -84,6 +87,7 @@ export class TranscriptPane {
     this._entries = [];   // from the history, then live
     this._notes   = [];   // joe's notes, kept beside a refetched history
     this._unfolded = new Set();   // runs of empty takes opened, by their first take
+    this._unclamped = new Set();  // long questions opened, by when and what was said
     this._onKey   = e => this._key(e);
     // Set by whatever shows a take elsewhere: called with the take's entry.
     this.onShow = null;
@@ -250,8 +254,32 @@ export class TranscriptPane {
         meta.append(show);
       }
     }
-    li.append(meta, this._body(entry));
+    const body = this._body(entry);
+    li.append(meta, body);
+    if (entry.kind === 'said' && (entry.text || '').length > LONG_ASK) li.append(this._clamp(entry, body));
     return li;
+  }
+
+  /** A long question, three lines deep, and the button that opens it whole. */
+  _clamp(entry, body) {
+    const key = `${entry.at}|${entry.text.slice(0, 40)}`;
+    const more = this._doc.createElement('button');
+    more.type = 'button';
+    more.className = 'tp-more';
+    more.dataset.testid = 'transcript-more';
+    const show = open => {
+      body.classList.toggle('is-clamped', !open);
+      more.textContent = open ? 'less' : 'more';
+      more.setAttribute('aria-expanded', String(open));
+    };
+    show(this._unclamped.has(key));
+    more.addEventListener('click', () => {
+      const open = !this._unclamped.has(key);
+      if (open) this._unclamped.add(key);
+      else this._unclamped.delete(key);
+      show(open);
+    });
+    return more;
   }
 
   _body(entry) {
