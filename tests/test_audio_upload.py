@@ -81,9 +81,13 @@ def test_a_body_that_passes_the_cap_as_it_arrives_is_refused_and_nothing_is_left
     assert incoming(library) == []
 
 
-def test_an_upload_on_its_way_in_is_not_served(client, library):
+@pytest.mark.parametrize("path", [
+    "/api/audio/capture_x.wav", "/api/audio/.incoming/capture_x.wav", "/api/audio/.incoming%2Fcapture_x.wav",
+    "/api/audio/.incoming%5Ccapture_x.wav", "/api/audio/.incoming",
+])
+def test_an_upload_on_its_way_in_is_not_served(client, library, path):
     (library / ".incoming").mkdir(parents=True)
     (library / ".incoming" / "capture_x.wav").write_bytes(b"RIFF")
 
-    assert client.get("/api/audio/.incoming").status_code == 404
+    assert client.get(path).status_code == 404
     assert client.get("/api/audio/files").json() == []

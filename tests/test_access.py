@@ -42,6 +42,7 @@ ROUTES = {
     ("GET", "/api/voice/conversation"): "transcripts",
     ("GET", "/api/voice/conversation/state"): "transcripts",
     ("GET", "/api/voice/history"): "transcripts",
+    ("GET", "/api/voice/takes/{take}/audio"): "transcripts",
     ("GET", "/api/voice/transcript"): "transcripts",
     ("GET", "/api/results/latest"): "library",
     ("POST", "/api/run"): "library",

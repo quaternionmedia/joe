@@ -10,6 +10,7 @@ import time
 
 import pytest
 
+from Modules import Media
 from Modules.Media import MediaError, MediaStore, Sound
 
 SOUND = Sound(duration=2.0, sample_rate=48000, channels=2)
@@ -77,6 +78,38 @@ def test_an_upload_expires_ttl_seconds_after_its_last_use(store, clock):
     assert gone.value.status == 404
     assert store.sweep() == [media_id]
     assert not (store.root / media_id).exists()
+
+
+def test_an_upload_is_kept_for_the_default_ttl_when_nothing_sets_one(tmp_path, clock, monkeypatch):
+    monkeypatch.delenv("JOE_MEDIA_TTL", raising=False)
+    store = MediaStore(root=tmp_path / "media", clock=clock)
+    media_id = upload(store)
+
+    assert store.ttl == Media.ttl() == Media.DEFAULT_TTL
+    clock.now += Media.DEFAULT_TTL - 1
+    assert store.sweep() == []
+    clock.now += 2
+    assert store.sweep() == [media_id]
+
+
+def test_joe_media_ttl_sets_how_long_an_upload_is_kept(tmp_path, clock, monkeypatch):
+    monkeypatch.setenv("JOE_MEDIA_TTL", "90")
+    store = MediaStore(root=tmp_path / "media", clock=clock)
+    media_id = upload(store)
+
+    assert store.ttl == Media.ttl() == 90.0
+    clock.now += 89
+    assert store.sweep() == []
+    clock.now += 2
+    assert store.sweep() == [media_id]
+
+
+@pytest.mark.parametrize("setting", ["0", "-5", "soon", "nan", "inf"])
+def test_a_joe_media_ttl_that_is_not_a_positive_number_is_refused(tmp_path, monkeypatch, setting):
+    monkeypatch.setenv("JOE_MEDIA_TTL", setting)
+
+    with pytest.raises(ValueError, match="JOE_MEDIA_TTL"):
+        MediaStore(root=tmp_path / "media")
 
 
 def test_an_upload_in_use_is_not_swept_however_old(store, clock):

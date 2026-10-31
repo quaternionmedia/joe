@@ -53,14 +53,15 @@ For practical end-to-end workflows, see [cookbook.md](cookbook.md).
 
 ## UI Control Groups
 
-The bottom transport bar has four groups, left to right:
+The bottom transport bar has five groups, left to right:
 
 | Group | Controls | Purpose |
 | --- | --- | --- |
 | **1. Audio context** | `Joe, go!` | Resumes the Web Audio context (required once per page load). Turns green when active. |
-| **2. Live capture** | `Browser\|Backend` select + `Live` button + red dot | Sets the capture source; `Live` starts/stops recording. Disabled until **Joe, go!** is clicked. |
+| **2. Live capture** | `Browser mic\|joe's mic` select + `Live` button + red dot | Sets where Live records from; `Live` starts/stops recording. Disabled until **Joe, go!** is clicked. |
 | **3. Transport** | `LIVE\|RESULTS` badge + `Play` + `Stop` + scrub + time + filename + `×` | Plays back a loaded audio file; badge shows canvas mode. Play/Stop disabled while recording. `×` ejects the current source. |
-| **4. Panels** | `Library` + `Results` | Slide-in panels for audio file management and analysis output. |
+| **4. Panels** | `Library` + `Results` + `Transcript` | Slide-in panels for audio file management and analysis output, and the transcript pane. |
+| **5. Voice** | `Instruct by voice` | One spoken instruction into qmcp's inbox; the outcome shows in the voice panel. |
 
 **Dependency chain:**
 
@@ -81,12 +82,11 @@ Joe, go!  ->  enables Live  ->  recording  ->  stop  ->  Library: Process  ->  R
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
 | `Live` button is greyed out | Web Audio not started | Click **Joe, go!** first |
-| **Library** is greyed and says "The library is off." | joe was started as `backend`, or `dev --allow` without `library` | `uv run joe dev`, or `--allow library` (`JOE_ALLOW_LIBRARY=1`); [security.md](security.md) says what each capability exposes |
-| `Live` starts but no notes appear | Mic permission denied or wrong source | Check browser mic permissions; try **Backend** mode |
+| **Library** is greyed and says "The library is off." | joe was started with `uv run joe backend`, or `dev --allow` without `library` | `uv run joe dev`, or `--allow library` (`JOE_ALLOW_LIBRARY=1`); [security.md](security.md) says what each capability exposes |
+| `Live` starts but no notes appear | Mic permission denied or wrong source | Check browser mic permissions; try **joe's mic** |
 | `Play` button is greyed out | Live recording is active | Click **Stop** to end recording first |
 | **Fetch Latest** returns 404 | No pipeline output yet | Run `uv run joe run` (or process a file via Library) |
-| Red dot pulses but canvas is blank | `Joe, go!` not clicked | Click **Joe, go!** — Web Audio must be started before FFT is active |
-| Backend capture fails silently | `sounddevice` not installed or no device | Check `uv sync` completed; verify audio input device |
+| joe's mic capture fails silently | `sounddevice` not installed or no device | Check `uv sync` completed; verify audio input device |
 
 ---
 
@@ -106,8 +106,9 @@ Examples:
 
 ## Required Pre-PR Checks
 
-Run before opening a PR. `tests.yml` runs the same suite and `deploy.yml`
-the same build ([CI](#ci)):
+Run before opening a PR. `tests.yml` runs the same suite, less the test marked
+`local`, which opens this machine's audio and which the runners, with no audio
+server, leave out; `deploy.yml` runs the same build ([CI](#ci)):
 
 ```powershell
 uv run --frozen pytest tests/ -q
@@ -141,7 +142,13 @@ reuses one already on port 3000.
 npm run test:e2e
 ```
 
-Reports are written to `playwright-report/` (git-ignored). To open the HTML report after a run:
+`playwright.config.js` starts the specs' own servers and never reuses one: the
+page on port 3100, and on 3199 a stand-in for joe's API and qmcp's queue
+(`tests/e2e/no-backend.mjs`) that answers every request a spec has not
+scripted with a 503. A joe, a qmcp or a dev page running on this machine never
+answers a spec, and the specs run beside them.
+
+Outside CI an HTML report is written to `playwright-report/` (git-ignored). To open it after a run:
 
 ```powershell
 npx playwright show-report
@@ -184,7 +191,7 @@ GitHub Actions runs three workflows, none of them filtered by path:
 
 | Workflow | When | Runs on | What it does |
 | --- | --- | --- | --- |
-| `tests.yml` | Every PR, and every push to `main` | `windows-latest` and `ubuntu-latest`, neither cancelled when the other fails | `uv sync --frozen`, then `uv run --frozen pytest tests/ -q`. Linux installs `libportaudio2` and `ffmpeg` first; Windows installs no ffmpeg, so the media tests that need one skip there |
+| `tests.yml` | Every PR, and every push to `main` | `windows-latest` and `ubuntu-latest`, neither cancelled when the other fails | `uv sync --frozen`, then `uv run --frozen pytest tests/ -q -m "not local"`. Linux installs `ffmpeg` first and no audio library; Windows installs no ffmpeg, so the media tests that need one skip there |
 | `e2e.yml` | Every PR, every push to `main`, and by hand | `windows-latest`, Node 22 | `npm ci`, `npx playwright install --with-deps chromium`, then `npm run test:e2e` |
 | `deploy.yml` | Every PR against `main`, every push to `main`, and by hand | `ubuntu-latest` | `npm ci` and `npm run build`; then, only for a push to `main` or a run by hand on `main`, publishes `dist/` to the `gh-pages` branch |
 
