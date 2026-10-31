@@ -106,7 +106,9 @@ Examples:
 ## Required Pre-PR Checks
 
 Run before opening a PR. The suite is what `tests.yml` runs on every PR,
-and the build what `deploy.yml` runs on every PR against `main`:
+with one more test: the one marked `local` opens this machine's audio, and the
+hosted runners, which have no audio server, leave it out with `-m "not local"`.
+The build is what `deploy.yml` runs on every PR against `main`:
 
 ```powershell
 uv run --frozen pytest tests/ -q
@@ -190,7 +192,7 @@ GitHub Actions runs three workflows, none of them filtered by path:
 
 | Workflow | When | Runs on | What it does |
 | --- | --- | --- | --- |
-| `tests.yml` | Every PR, and every push to `main` | `windows-latest` and `ubuntu-latest`, neither cancelled when the other fails | `uv sync --frozen`, then `uv run --frozen pytest tests/ -q`. Linux installs `libportaudio2` and `ffmpeg` first; Windows installs no ffmpeg, so the media tests that need one skip there |
+| `tests.yml` | Every PR, and every push to `main` | `windows-latest` and `ubuntu-latest`, neither cancelled when the other fails | `uv sync --frozen`, then `uv run --frozen pytest tests/ -q -m "not local"`. Linux installs `ffmpeg` first and no audio library; Windows installs no ffmpeg, so the media tests that need one skip there |
 | `e2e.yml` | Every PR, every push to `main`, and by hand | `windows-latest`, Node 22 | `npm ci`, `npx playwright install --with-deps chromium`, then `npm run test:e2e` |
 | `deploy.yml` | Every PR against `main`, every push to `main`, and by hand | `ubuntu-latest` | `npm ci` and `npm run build`, then publishes `dist/` to the `gh-pages` branch |
 
