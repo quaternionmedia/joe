@@ -1,4 +1,5 @@
 // p5 and p5.sound are CDN globals loaded in index.html
+import './layout/golden-layout.css';
 import './style.css';
 import { createSketch } from './sketch.js';
 import { EraPanel }     from './components/EraPanel.js';
@@ -13,16 +14,30 @@ import { VoiceKeys }    from './components/VoiceKeys.js';
 import { VoiceTranscript } from './components/VoiceTranscript.js';
 import { TranscriptPane } from './components/TranscriptPane.js';
 import { takeWords }      from './components/takeWords.js';
+import { Capabilities, adaptHint, markOff } from './components/Capabilities.js';
+import { PanelKeys }    from './components/PanelKeys.js';
 import { setlist }      from './config/setlists.js';
+import { Workspace }    from './layout/workspace.js';
+import { PanelsMenu }   from './layout/PanelsMenu.js';
 
 // Must match MainCanvas.js LABEL_W — used for p5 playhead pixel calculation.
 const LABEL_W = 28;
 
 const state = { current: 0 };
 
+// ─── The dock ────────────────────────────────────────────────────────────────
+// Built first: the visualiser's canvases take the size of the window it gives them.
+const workspace = new Workspace(document.getElementById('dock'), {
+  parked: document.getElementById('parked'),
+  note:   document.getElementById('layout-note'),
+});
+workspace.create();
+new PanelsMenu(document.getElementById('panels-button'), document.getElementById('panels-menu'), workspace).mount();
+
 // ─── p5 sketch ───────────────────────────────────────────────────────────────
+const sketchEl = document.getElementById('sketch');
 // eslint-disable-next-line no-undef
-const sketchInstance = new p5(createSketch(state), document.getElementById('sketch'));
+const sketchInstance = new p5(createSketch(state, sketchEl), sketchEl);
 
 // ─── Era panel ───────────────────────────────────────────────────────────────
 const eraPanel = new EraPanel(document.getElementById('era-panel'), state, setlist);
@@ -34,18 +49,20 @@ const transport  = new Transport(document.getElementById('transport'), mainCanva
 transport.mount();
 
 // ─── Results panel ───────────────────────────────────────────────────────────
-const resultsPanel = new ResultsPanel(document.getElementById('results-panel'), mainCanvas);
+const resultsPanel = new ResultsPanel(document.getElementById('results-panel'), mainCanvas,
+                                      workspace.window('results'));
 resultsPanel.mount();
 
 // ─── Capture / library panel ─────────────────────────────────────────────────
 const capturePanel = new CapturePanel(
   document.getElementById('capture-panel'),
   mainCanvas,
+  workspace.window('library'),
 );
 capturePanel.mount();
 
 // ─── Voice conversation ──────────────────────────────────────────────────────
-const voicePanel = new VoicePanel(document.getElementById('voice-panel'));
+const voicePanel = new VoicePanel(document.getElementById('voice-panel'), { window: workspace.window('voice') });
 voicePanel.mount();
 const voiceQueue = new VoiceQueue(document.querySelector('#voice-panel .voice-queue'), voicePanel);
 voiceQueue.mount();
@@ -55,20 +72,27 @@ const voiceInstruct = new VoiceInstruct(
   voicePanel,
 );
 voiceInstruct.mount();
+// While qmcp cannot be reached, Instruct by voice says so quietly rather than the page failing loudly.
+document.addEventListener('joe:qmcp', e => {
+  const button = document.getElementById('voice-instruct');
+  button.classList.toggle('is-unreachable', !e.detail.reachable);
+  button.title = e.detail.reachable ? '' : 'qmcp is not reachable: start `qmcp serve`; QMCP_URL moves where the dev server looks';
+});
 const voiceKeys = new VoiceKeys(document.querySelector('#voice-panel .voice-controls'), voicePanel);
 voiceKeys.mount();
 const voiceTranscript = new VoiceTranscript(document.querySelector('#voice-panel .voice-transcript'), voicePanel);
 voiceTranscript.mount();
-// The whole exchange, readable in full beside the piano roll (T).
+// The whole exchange, readable in full in a window beside the piano roll (T).
 const transcriptPane = new TranscriptPane(document.getElementById('transcript-pane'), voicePanel,
-                                          { canvas: mainCanvas });
+                                          { window: workspace.window('transcript') });
 // A take shown on the visualiser: its recording on the transport and the
 // spectrum, its words on the piano roll's timeline, played from the start.
 transcriptPane.onShow = entry => {
   const words = takeWords(entry);
   mainCanvas.clearNotes();
   mainCanvas.setWords(words, words.length ? words[words.length - 1].end : 0);
-  _activateAudio(`take ${entry.take}`, `/api/voice/takes/${encodeURIComponent(entry.take)}/audio`);
+  _activateAudio(`take ${entry.take}`, `/api/voice/takes/${encodeURIComponent(entry.take)}/audio`,
+                 { unavailable: 'recording not kept' });
   transport.play();
 };
 transcriptPane.mount();
@@ -81,12 +105,9 @@ document.getElementById('transcript-toggle')
   if (localStorage.getItem('joe-hint-dismissed')) {
     hintEl.classList.add('hidden');
   }
-  // The hint covers the bottom of the piano roll, where a take's words go.
-  mainCanvas.setBottomInset(hintEl.classList.contains('hidden') ? 0 : hintEl.offsetHeight);
   document.getElementById('hint-dismiss').addEventListener('click', () => {
     hintEl.classList.add('hidden');
     localStorage.setItem('joe-hint-dismissed', '1');
-    mainCanvas.setBottomInset(0);
   });
 }
 
@@ -114,7 +135,7 @@ function _startPlayheadSync() {
   const sync = () => {
     if (_hasResults && mainCanvas.totalDuration > 0) {
       const norm = transport.currentTime / mainCanvas.totalDuration;
-      sketchInstance.setPlayheadX(LABEL_W + norm * (window.innerWidth - LABEL_W));
+      sketchInstance.setPlayheadX(LABEL_W + norm * (sketchInstance.width - LABEL_W));
     }
     _syncRaf = requestAnimationFrame(sync);
   };
@@ -159,11 +180,12 @@ function _exitLiveScrubMode() {
  *
  * @param {string} name - display filename
  * @param {string} url  - audio source URL
+ * @param {object} [opts] - passed to Transport.setFile
  */
-function _activateAudio(name, url) {
+function _activateAudio(name, url, opts) {
   _activeAudioName = name;
   _exitLiveScrubMode();
-  transport.setFile(name, url);
+  transport.setFile(name, url, opts);
   // Connect audio element to p5 FFT (no-op if audio context not yet started;
   // the startBtn handler reconnects when the context resumes).
   if (_audioActive) sketchInstance.connectAudioSource(transport.audioElement);
@@ -187,7 +209,7 @@ startBtn.addEventListener('click', () => {
     _audioActive = true;
     startBtn.textContent = 'Joe, stop!';
     startBtn.classList.add('active');
-    liveToggle.disabled = false;
+    _syncLive();
     // Re-connect audio element to FFT if a file was loaded before audio started.
     // startAudio() calls AudioContext.resume() asynchronously, so defer briefly.
     if (_activeAudioName) {
@@ -208,6 +230,7 @@ startBtn.addEventListener('click', () => {
 // Group 2a — capture mode selector (browser mic vs backend sounddevice)
 captureMode.addEventListener('change', () => {
   capturePanel.setMode(captureMode.value);
+  _syncLive();
 });
 
 // Group 2b — live record toggle
@@ -264,6 +287,31 @@ document.getElementById('capture-toggle')
   .addEventListener('click', () => capturePanel.toggle());
 document.getElementById('results-toggle')
   .addEventListener('click', () => resultsPanel.toggle());
+// L the Library, A the Results, Esc closes them and the transcript (T is the pane's own).
+new PanelKeys({ library: capturePanel, results: resultsPanel, transcript: transcriptPane }).mount();
+
+// ─── What this joe serves ─────────────────────────────────────────────────────
+// Read once from /api/health. A control whose capability is off is greyed, its
+// tooltip naming the setting; Library and Transcript still open, to say so, and
+// the first-run hint keeps the steps that work.
+const capabilities = new Capabilities();
+
+// Live keeps its take in the library; Backend records with joe's microphone.
+function _syncLive() {
+  const off = capabilities.off(...(captureMode.value === 'backend' ? ['microphone', 'library'] : ['library']));
+  markOff(liveToggle, off);
+  if (!capturePanel.isRecording) liveToggle.disabled = !_audioActive || off.length > 0;
+}
+
+capabilities.load().then(() => {
+  markOff(document.getElementById('capture-toggle'), capabilities.off('library'));
+  markOff(document.getElementById('transcript-toggle'), capabilities.off('transcripts'));
+  const fetchLatest = document.querySelector('[data-testid="fetch-latest"]');
+  markOff(fetchLatest, capabilities.off('library'));
+  fetchLatest.disabled = capabilities.off('library').length > 0;
+  _syncLive();
+  adaptHint(document.getElementById('first-run-hint'), capabilities);
+});
 
 // ─── Frame pump — feeds sketch output into live analysis ─────────────────────
 sketchInstance.onFrame = (energies) => {

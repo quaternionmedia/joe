@@ -62,24 +62,27 @@ npx playwright install chromium
 uv run playwright install chromium
 ```
 
-On Linux, add `--with-deps` to both, and install PortAudio, which the
-backend's audio library binds and which its Linux wheel does not bundle:
+On Linux, add `--with-deps` to both. To record through joe's own microphone,
+also install PortAudio, which the audio library binds and which its Linux
+wheel does not bundle:
 
 ```sh
 sudo apt-get install -y libportaudio2
 ```
 
-Without it the next example fails with `OSError: PortAudio library not found`,
-because `capture.py` imports `sounddevice` at module scope and `api.py`
-imports `capture.py`:
+Nothing else waits on it. `capture.py` imports `sounddevice` only when it is
+asked to record, so the API imports on a machine with no audio library and no
+audio server, a hosted runner among them:
 
 ```python
->>> import sounddevice
 >>> import api
 >>> api.app.title
 'Joe API'
 
 ```
+
+`tests/test_audio_server.py` is the check that opens this machine's audio. It
+is marked `local`, and the runners leave it out.
 
 ## The `joe` command
 
@@ -141,18 +144,17 @@ npm run build
   (p5 comes from a CDN). It fails rather than skipping when any is missing.
   Name both directories: pytest ignores `testpaths` the moment it is handed a
   path, so `uv run pytest tests` alone runs none of these pages.
-- **`npm run test:e2e`** runs the Playwright specs with joe's API mocked
-  inside the browser. Outside CI it **reuses whatever is already listening on
-  port 3000**, so with a `joe dev` running from another checkout, the specs
-  test that checkout:
+- **`npm run test:e2e`** runs the Playwright specs with joe's API scripted
+  inside the browser, on servers of their own: the page, and a stand-in that
+  answers 503 to whatever a spec has not scripted. **Neither is reused**, so a
+  `joe dev` running from another checkout never answers a spec:
 
   ```python
-  >>> 'reuseExistingServer: !process.env.CI' in open('playwright.config.js', encoding='utf-8').read()
-  True
+  >>> config = open('playwright.config.js', encoding='utf-8').read()
+  >>> config.count('reuseExistingServer: false'), 'reuseExistingServer: !' in config
+  (2, False)
 
   ```
-
-  Stop any other dev server first.
 - **`npm run build`** warns that `outDir` is outside the project root. That is
   expected: Vite's root is `src/`.
 

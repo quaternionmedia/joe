@@ -1,10 +1,8 @@
+import argparse
 import os
+import sys
 from Modules.Audio import Audio
-from Modules.utilities import get_audio_files, save_json, make_directories
-
-# When set, process only this specific file instead of scanning Data/Audio/.
-# api.py sets this env var when calling POST /api/run/{filename}.
-_targeted_file = os.environ.get("JOE_AUDIO_FILE")
+from Modules.utilities import audio_files, save_json, make_directories
  
 n_chroma                        = 12    # number of chroma bins
 bins_per_octave                 = 12    # number of bins per octave
@@ -22,8 +20,7 @@ params:dict = {'chroma_threshold':chroma_threshold,
                'fft_sizes':fft_sizes,
                'overtone_weights':overtone_weights}
 
-# get the directory AudioToMidi.py is in 
-just_one_file: bool = True 
+# get the directory AudioToMidi.py is in
 current_path: str = os.path.dirname(os.path.abspath(__file__))
 directories: list[str] = make_directories(current_path)
 iteration: int = directories["iter"]
@@ -32,15 +29,11 @@ audio_dir: str = directories["audio_dir"]
 chroma_dir: str = directories["chroma_dir"]
 midi_dir: str = directories["midi_dir"]
 
-class AudioToMidi(): 
-    def __init__(self):
-        """ Initialize the audio to midi process \n """
-        # set title and subtitle
+class AudioToMidi():
+    def __init__(self, audio_files: list[str]):
+        """ Analyse `audio_files`, paths of recordings, into one iteration of Data/Output/. \n """
         self.audio: list[Audio] = []
-        if _targeted_file and os.path.isfile(_targeted_file):
-            self.audio_files = [_targeted_file]
-        else:
-            self.audio_files: list[str] = get_audio_files(audio_dir, just_one_file)
+        self.audio_files: list[str] = list(audio_files)
         self.chroma_threshold: float = chroma_threshold
         self.fft_sizes: list[float] = fft_sizes
         self.harmonic_threshold: float = harmonic_threshold
@@ -64,5 +57,26 @@ class AudioToMidi():
                                     self.overtone_weights, self.chroma_threshold, self.min_duration,
                                     self.harmonic_threshold))
         
+def chosen_files(argv: list[str] | None = None) -> list[str]:
+    """The recordings this run analyses, from its command line: those named,
+    every one with --all, or else the newest in Data/Audio/."""
+    parser = argparse.ArgumentParser(
+        prog="main.py",
+        description="Analyse recordings in Data/Audio/: the newest, those named, or --all.")
+    parser.add_argument("names", nargs="*", help="recordings in Data/Audio/, by file name")
+    parser.add_argument("--all", action="store_true", help="every recording in Data/Audio/")
+    args = parser.parse_args(argv)
+    if args.all and args.names:
+        parser.error("name recordings or ask for --all, not both")
+    try:
+        files = audio_files(audio_dir, names=args.names, every=args.all)
+    except ValueError as err:
+        parser.error(str(err))
+    if not files:
+        print("No audio files found, check directory.")
+        sys.exit(0)
+    return files
+
+
 if __name__ == "__main__":
-    AudioToMidi() 
+    AudioToMidi(chosen_files())

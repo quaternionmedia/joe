@@ -7,6 +7,10 @@
  * hears the answer, so the voice panel above shows the whole turn. Nothing is
  * spoken until the person presses the button.
  *
+ * Whether qmcp answers is told to the page once each time it changes, as a
+ * `joe:qmcp` event with `{ reachable }`. While the page is hidden nothing is
+ * asked; it asks again as soon as the page is shown.
+ *
  * Usage:
  *   const queue = new VoiceQueue(panelEl.querySelector('.voice-queue'), voicePanel);
  *   queue.mount();   // polls the queue, backing off while qmcp is not running
@@ -21,7 +25,7 @@ export class VoiceQueue {
    * @param {object} [opts]
    * @param {string} [opts.base] - where qmcp's API is reached
    */
-  constructor(el, panel, { base = '/v1' } = {}) {
+  constructor(el, panel, { base = '/v1', doc = document } = {}) {
     this._el      = el;
     this._panel   = panel;
     this._base    = base;
@@ -33,6 +37,8 @@ export class VoiceQueue {
     this.running  = false;
     this._retryMs = POLL_MS;
     this._timer   = null;
+    this._doc     = doc;
+    this.reachable = null;   // unknown until qmcp is first asked
   }
 
   mount() {
@@ -40,6 +46,11 @@ export class VoiceQueue {
     const prior = this._panel.keepOpen;
     this._panel.keepOpen = () => prior() || this.pending.length > 0 || this.running;
     this._button.addEventListener('click', () => this.answer());
+    this._doc.addEventListener('visibilitychange', () => {
+      if (this._doc.visibilityState !== 'visible') return;
+      clearTimeout(this._timer);
+      this._poll();
+    });
     this._poll();
   }
 
@@ -113,14 +124,25 @@ export class VoiceQueue {
   }
 
   async _poll() {
+    clearTimeout(this._timer);
+    // A page nobody can see asks nothing; showing it asks again (mount).
+    if (this._doc.visibilityState === 'hidden') return;
     try {
       if (!this.running) await this.refresh();
       this._retryMs = POLL_MS;
+      this._reach(true);
     } catch {
       // qmcp not running is a normal way to run joe. Back off rather than ask
       // every few seconds for as long as the page is open.
       this._retryMs = Math.min(this._retryMs * 2, 60000);
+      this._reach(false);
     }
     this._timer = setTimeout(() => this._poll(), this._retryMs);
+  }
+
+  _reach(reachable) {
+    if (reachable === this.reachable) return;
+    this.reachable = reachable;
+    this._doc.dispatchEvent(new CustomEvent('joe:qmcp', { detail: { reachable } }));
   }
 }

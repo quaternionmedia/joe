@@ -30,7 +30,7 @@ const WRITING = [
   ] },
 ];
 
-test('the take shows as it is written, a struck word crossed out and a pending segment marked', async ({ page }) => {
+test('the take shows as it is written, a struck word crossed out and a pending segment marked', { tag: '@voice-loop' }, async ({ page }) => {
   await script(page, WRITING);
   await page.goto('/');
 
@@ -43,7 +43,7 @@ test('the take shows as it is written, a struck word crossed out and a pending s
   await expect(page.getByTestId('voice-label')).toHaveText('Hearing you');
 });
 
-test('clicking a word strikes it, and Backspace strikes the last one standing', async ({ page }) => {
+test('clicking a word strikes it, and Backspace strikes the last one standing', { tag: '@voice-loop' }, async ({ page }) => {
   const strikes = await script(page, WRITING);
   await page.goto('/');
   await expect(page.getByTestId('voice-transcript').locator('.voice-word')).toHaveCount(4);
@@ -56,7 +56,7 @@ test('clicking a word strikes it, and Backspace strikes the last one standing', 
   ]);
 });
 
-test('Backspace typed into a field strikes nothing', async ({ page }) => {
+test('Backspace typed into a field strikes nothing', { tag: '@voice-loop' }, async ({ page }) => {
   const strikes = await script(page, WRITING);
   await page.goto('/');
   await expect(page.getByTestId('voice-transcript').locator('.voice-word')).toHaveCount(4);

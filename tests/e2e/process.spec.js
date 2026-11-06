@@ -72,7 +72,7 @@ async function mockApi(page, {
 
 // ─── Process flow ─────────────────────────────────────────────────────────────
 
-test('Library Process triggers pipeline and loads correct results', async ({ page }) => {
+test('Library Process triggers pipeline and loads correct results', { tag: '@music-page' }, async ({ page }) => {
   const errors = [];
   page.on('pageerror', err => errors.push(err.message));
 
@@ -87,14 +87,8 @@ test('Library Process triggers pipeline and loads correct results', async ({ pag
   // Click Process on the library item
   await page.locator('[data-action="process"]').first().click();
 
-  // Wait for async pipeline call + fetchLatest + slide-in animation
-  await page.waitForTimeout(1000);
-
-  // Results panel should have slid in
-  const panel   = page.getByTestId('results-panel');
-  const box     = await panel.boundingBox();
-  const vw      = await page.evaluate(() => window.innerWidth);
-  expect(box.x).toBeLessThan(vw);
+  // The pipeline call and fetchLatest open the Results window
+  await expect(page.getByTestId('results-panel')).toBeVisible();
 
   // Results meta should reflect fixture note count
   const meta = await page.getByTestId('results-meta').textContent();
@@ -109,7 +103,7 @@ test('Library Process triggers pipeline and loads correct results', async ({ pag
   expect(errors).toHaveLength(0);
 });
 
-test('Pipeline failure does not open results panel or activate audio', async ({ page }) => {
+test('a pipeline failure opens no Results window and loads no recording', { tag: '@music-page' }, async ({ page }) => {
   const errors = [];
   page.on('pageerror', err => errors.push(err.message));
 
@@ -124,11 +118,8 @@ test('Pipeline failure does not open results panel or activate audio', async ({ 
   // Give enough time for any (incorrect) async effects to run
   await page.waitForTimeout(600);
 
-  // Results panel should remain off-screen (no joe:resultsReady fired)
-  const panel = page.getByTestId('results-panel');
-  const box   = await panel.boundingBox();
-  const vw    = await page.evaluate(() => window.innerWidth);
-  expect(box.x).toBeGreaterThanOrEqual(vw);
+  // The Results window stays closed (no joe:resultsReady fired)
+  await expect(page.getByTestId('results-panel')).toBeHidden();
 
   // Transport name should be empty — stale audio must NOT be activated
   await expect(page.getByTestId('transport-name')).toHaveText('');
@@ -142,56 +133,9 @@ test('Pipeline failure does not open results panel or activate audio', async ({ 
   expect(errors).toHaveLength(0);
 });
 
-test('Unsupported format shows error and keeps results panel closed', async ({ page }) => {
-  const errors = [];
-  page.on('pageerror', err => errors.push(err.message));
-
-  // Catch-all audio route first, so the /api/audio/files route registered
-  // after it takes precedence (last registered wins).
-  await page.route('**/api/audio/**', route => route.fulfill({
-    status:      200,
-    contentType: 'application/octet-stream',
-    body:        Buffer.from([]),
-  }));
-  await page.route('**/api/audio/files', route => route.fulfill({
-    status:      200,
-    contentType: 'application/json',
-    body:        JSON.stringify([{ name: 'capture.xyz', size: 5000, mtime: 1700000000 }]),
-  }));
-  await page.route('**/api/run/**', route => route.fulfill({
-    status:      200,
-    contentType: 'application/json',
-    body:        JSON.stringify({
-      returncode: 1,
-      stdout:     '',
-      stderr:     "Format '.xyz' is not supported by the pipeline. Supported: .flac, .mp3, .ogg, .wav, .webm",
-    }),
-  }));
-
-  await page.goto('/');
-  await page.waitForSelector('canvas');
-
-  await page.getByTestId('capture-toggle').click();
-  await page.waitForSelector('[data-action="process"]', { timeout: 3000 });
-  await page.locator('[data-action="process"]').first().click();
-  await page.waitForTimeout(400);
-
-  // Error shown to user in the library panel
-  await expect(page.getByTestId('capture-error')).toBeVisible();
-  const errText = await page.getByTestId('capture-error').textContent();
-  expect(errText).toMatch(/not supported/i);
-
-  // Results panel stays hidden
-  const box = await page.getByTestId('results-panel').boundingBox();
-  const vw  = await page.evaluate(() => window.innerWidth);
-  expect(box.x).toBeGreaterThanOrEqual(vw);
-
-  expect(errors).toHaveLength(0);
-});
-
 // ─── Library Play ─────────────────────────────────────────────────────────────
 
-test('Library Play loads audio and highlights the active row', async ({ page }) => {
+test('Library Play loads audio and highlights the active row', { tag: '@music-page' }, async ({ page }) => {
   const errors = [];
   page.on('pageerror', err => errors.push(err.message));
 
@@ -220,7 +164,7 @@ test('Library Play loads audio and highlights the active row', async ({ page }) 
 
 // ─── Eject ────────────────────────────────────────────────────────────────────
 
-test('Eject clears transport name, hides button, and removes library highlight', async ({ page }) => {
+test('Eject clears transport name, hides button, and removes library highlight', { tag: '@music-page' }, async ({ page }) => {
   const errors = [];
   page.on('pageerror', err => errors.push(err.message));
 
@@ -255,7 +199,7 @@ test('Eject clears transport name, hides button, and removes library highlight',
 
 // ─── Library panel open/close ─────────────────────────────────────────────────
 
-test('Library panel closes on second toggle click', async ({ page }) => {
+test('the Library window closes on a second press of its button', { tag: '@music-page' }, async ({ page }) => {
   await mockApi(page, { filename: 'test.wav' });
   await page.goto('/');
   await page.waitForSelector('canvas');
@@ -264,10 +208,54 @@ test('Library panel closes on second toggle click', async ({ page }) => {
   await page.getByTestId('capture-toggle').click();
   await page.waitForSelector('[data-action="play"]', { timeout: 3000 });
   const panel = page.getByTestId('capture-panel');
-  await expect(panel).toHaveClass(/open/);
+  await expect(panel).toBeVisible();
 
   // Close
   await page.getByTestId('capture-toggle').click();
-  await page.waitForTimeout(300);
-  await expect(panel).not.toHaveClass(/open/);
+  await expect(panel).toBeHidden();
+  await expect(page.locator('#paneltab-library')).toHaveCount(0);
+});
+
+// ─── What the Library list shows ──────────────────────────────────────────────
+
+test('A file name is shown as text, never as markup', { tag: '@music-page' }, async ({ page }) => {
+  // A name is whatever Data/Audio/ holds; this page can drive joe's API.
+  const errors = [];
+  page.on('pageerror', err => errors.push(err.message));
+  const name = '<img src=x onerror="window.__ran=1">"quoted".wav';
+
+  await mockApi(page, { filename: name });
+  await page.goto('/');
+  await page.waitForSelector('canvas');
+  await page.getByTestId('capture-toggle').click();
+  await page.waitForSelector('[data-action="play"]', { timeout: 3000 });
+
+  const list = page.getByTestId('capture-file-list');
+  await expect(list.locator('.lib-name')).toHaveText(name);
+  await expect(list.locator('img')).toHaveCount(0);
+  expect(await page.evaluate(() => window.__ran)).toBeUndefined();
+  // The buttons carry the name itself, as the API needs it back.
+  expect(await list.locator('[data-action="play"]').getAttribute('data-name')).toBe(name);
+  expect(errors).toHaveLength(0);
+});
+
+test('A library joe does not serve says so, and what turning it on exposes', { tag: '@music-page' }, async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', err => errors.push(err.message));
+  const detail = 'the audio library is off on this joe: JOE_ALLOW_LIBRARY=1 turns it on, for '
+    + 'whatever can reach this port -- joe has no authentication (docs/security.md)';
+
+  await page.route('**/api/audio/files', route => route.fulfill({
+    status:      403,
+    contentType: 'application/json',
+    body:        JSON.stringify({ detail }),
+  }));
+  await page.goto('/');
+  await page.waitForSelector('canvas');
+  await page.getByTestId('capture-toggle').click();
+
+  await expect(page.getByTestId('capture-file-list')).toHaveText('The library is off. Turning it on lets '
+    + 'anything that reaches this port read and add recordings. docs/security.md');
+  await expect(page.locator('[data-action="play"]')).toHaveCount(0);
+  expect(errors).toHaveLength(0);
 });

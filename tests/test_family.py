@@ -170,8 +170,8 @@ def test_a_pipeline_that_fails_is_reported_and_keeps_the_last_good_take(client, 
 
 
 def test_the_pipeline_is_main_py_on_that_one_file_from_the_checkout(monkeypatch, tmp_path):
-    """As `POST /api/run/{filename}` runs it: with no JOE_AUDIO_FILE, main.py
-    would take whichever file in Data/Audio/ it listed first."""
+    """As `POST /api/run/{filename}` runs it, by the recording's name: with no
+    name, main.py would take the newest file in Data/Audio/, whoever made it."""
     calls = []
     monkeypatch.setattr(api.subprocess, "run", lambda argv, **kwargs: calls.append((argv, kwargs))
                         or subprocess.CompletedProcess(argv, 0))
@@ -180,8 +180,7 @@ def test_the_pipeline_is_main_py_on_that_one_file_from_the_checkout(monkeypatch,
     assert api._run_pipeline(recording) == 0
 
     ((argv, kwargs),) = calls
-    assert argv == [sys.executable, str(api._MAIN_PY)]
-    assert kwargs["env"]["JOE_AUDIO_FILE"] == str(recording)
+    assert argv == [sys.executable, str(api._MAIN_PY), "cue-3_x.wav"]
     assert kwargs["cwd"] == str(api._PROJECT_ROOT)
     assert api.family.output_dir == api._PROJECT_ROOT / "Data" / "Output"
 
@@ -274,7 +273,9 @@ def test_a_cue_s_take_runs_through_the_real_pipeline_and_is_reported(tmp_path):
     server = subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "api:app", "--host", "127.0.0.1", "--port", str(port),
          "--log-level", "warning"],
-        cwd=REPO, env={**os.environ, "JOE_CUES": "0", "JOE_DATAPOINTS": "0"},
+        cwd=REPO, env={**os.environ, "JOE_CUES": "0", "JOE_DATAPOINTS": "0",
+                       # The cue's own capability, and the library's for what the page reads.
+                       "JOE_ALLOW_FAMILY": "1", "JOE_ALLOW_LIBRARY": "1"},
         stdout=log, stderr=subprocess.STDOUT)
     try:
         deadline = time.monotonic() + STARTUP_TIMEOUT

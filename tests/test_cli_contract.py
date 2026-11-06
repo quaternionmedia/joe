@@ -8,6 +8,7 @@ check with nothing to check against says so rather than failing.
 from typer.testing import CliRunner
 
 import cli
+from Modules import Access
 
 runner = CliRunner()
 
@@ -43,6 +44,11 @@ def test_serve_starts_the_api_then_vite_on_the_ports_given(tmp_path, monkeypatch
     api, web = started
     assert api.argv[1:] == ["-m", "uvicorn", "api:app", "--host", "127.0.0.1", "--port", "18431"]
     assert api.kwargs["cwd"] == tmp_path
+    # As `joe dev`: the page needs every capability, and a hub's cue needs `family`.
+    assert all(Access.allowed_map(api.kwargs["env"]).values())
+    # ...and takes the requests of the page Vite serves on the port given.
+    assert api.kwargs["env"]["JOE_ALLOWED_ORIGINS"] == "http://127.0.0.1:18430"
+    assert "joe has no authentication" in result.output
     assert asked == ["http://127.0.0.1:18431/api/health"]  # Vite waits for the API
     assert web.argv == ["node", str(vite), "--host", "127.0.0.1", "--port", "18430", "--strictPort"]
     assert web.kwargs["env"]["JOE_API_URL"] == "http://127.0.0.1:18431"

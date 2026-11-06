@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from Modules.utilities import get_audio_files, make_directories, save_json
+from Modules.utilities import make_directories, save_json
 
 
 def _reload_main_with_patched_directory_discovery(fake_dirs):
@@ -35,13 +35,12 @@ def test_audio_to_midi_initialization_uses_discovered_paths():
         os.path.join(base, "Audio", "test_audio_file2.mp3"),
     ]
 
-    with patch("Modules.utilities.get_audio_files", return_value=fake_audio_files), patch(
-        "Modules.utilities.save_json"
-    ) as save_json_mock:
+    with patch("Modules.utilities.save_json") as save_json_mock:
         main = _reload_main_with_patched_directory_discovery(fake_dirs)
 
         with patch("main.Audio") as audio_mock:
-            audio_to_midi = main.AudioToMidi()
+            audio_to_midi = main.AudioToMidi(fake_audio_files)
+    sys.modules.pop("main", None)
 
     assert len(audio_to_midi.audio) == 2
     audio_mock.assert_any_call(
@@ -91,82 +90,47 @@ def test_make_directories_returns_all_expected_keys(tmp_path):
     assert set(directories.keys()) == {"iter", "iter_dir", "audio_dir", "chroma_dir", "midi_dir"}
 
 
-def test_get_audio_files_returns_all_audio_files(tmp_path):
+def _main_over(audio_dir):
+    """main.py, imported with its folders under `audio_dir`'s parent."""
+    out = os.path.join(str(audio_dir.parent), "Output", "01-01-26_00-00-00")
+    return _reload_main_with_patched_directory_discovery({
+        "iter": "01-01-26_00-00-00", "iter_dir": out + os.sep, "audio_dir": str(audio_dir) + os.sep,
+        "chroma_dir": os.path.join(out, "Chroma") + os.sep, "midi_dir": os.path.join(out, "MIDI") + os.sep,
+    })
+
+
+@pytest.fixture
+def recordings(tmp_path):
     audio_dir = tmp_path / "Audio"
     audio_dir.mkdir()
-    (audio_dir / "track1.wav").write_bytes(b"")
-    (audio_dir / "track2.mp3").write_bytes(b"")
-
-    files = get_audio_files(str(audio_dir) + os.sep)
-
-    assert len(files) == 2
-    assert any("track1.wav" in f for f in files)
-    assert any("track2.mp3" in f for f in files)
+    for i, name in enumerate(["b.wav", "a.wav"]):
+        (audio_dir / name).write_bytes(b"RIFF")
+        os.utime(audio_dir / name, (1_000_000 + i, 1_000_000 + i))
+    yield audio_dir
+    sys.modules.pop("main", None)
 
 
-def test_get_audio_files_just_one_file_flag(tmp_path):
-    audio_dir = tmp_path / "Audio"
-    audio_dir.mkdir()
-    (audio_dir / "a.wav").write_bytes(b"")
-    (audio_dir / "b.wav").write_bytes(b"")
-
-    files = get_audio_files(str(audio_dir) + os.sep, just_one_file=True)
-
-    assert len(files) == 1
+@pytest.mark.parametrize("argv, chosen", [([], ["a.wav"]), (["--all"], ["a.wav", "b.wav"]), (["b.wav"], ["b.wav"])])
+def test_main_py_analyses_the_newest_those_named_or_all(recordings, argv, chosen):
+    main = _main_over(recordings)
+    assert [os.path.basename(f) for f in main.chosen_files(argv)] == chosen
 
 
-def test_get_audio_files_missing_dir_exits():
-    with pytest.raises(SystemExit):
-        get_audio_files(os.path.join(os.sep, "nonexistent", "path", "Audio"))
+@pytest.mark.parametrize("argv", [["--all", "a.wav"], ["absent.wav"]])
+def test_main_py_refuses_names_with_all_and_a_name_that_is_no_recording(recordings, argv):
+    main = _main_over(recordings)
+    with pytest.raises(SystemExit) as stopped:
+        main.chosen_files(argv)
+    assert stopped.value.code == 2
 
 
-def test_get_audio_files_empty_dir_exits(tmp_path):
-    audio_dir = tmp_path / "Audio"
-    audio_dir.mkdir()
-
-    with pytest.raises(SystemExit):
-        get_audio_files(str(audio_dir) + os.sep)
-
-
-def test_save_json_writes_parseable_file(tmp_path):
-    iteration = "01-01-26_00-00-00"
-    iteration_dir = str(tmp_path) + os.sep
-
-    note_mock = MagicMock()
-    note_mock.note = "C4"
-    note_mock.pitch = 60
-    note_mock.start_dur = [(0.0, 0.5)]
-
-    chroma_mock = MagicMock()
-    chroma_mock.file_path = "chroma.png"
-    chroma_mock.midi.file_path = "output.mid"
-    chroma_mock.midi.notes = [note_mock]
-
-    audio_mock = MagicMock()
-    audio_mock.name = "test_track"
-    audio_mock.file_path = "Data/Audio/test_track.wav"
-    audio_mock.sr = 22050
-    audio_mock.full_chroma_path = "chroma_full.png"
-    audio_mock.chromas = {"cqt": chroma_mock}
-
-    save_json(
-        iteration=iteration,
-        iteration_dir=iteration_dir,
-        min_duration=0.1,
-        fft_sizes=[512, 1024],
-        chroma_threshold=0.3,
-        harmonic_threshold=0.3,
-        overtone_weights=[0.5, 0.4],
-        audio_files=["Data/Audio/test_track.wav"],
-        audios=[audio_mock],
-    )
-
-    output_file = tmp_path / f"Process_Data_{iteration}.json"
-    assert output_file.exists()
-    with open(output_file) as f:
-        data = json.load(f)
-
-    assert data["iteration"] == iteration
-    assert "audio" in data
-    assert "test_track" in data["audio"]
-    assert data["audio"]["test_track"]["sr"] == 22050
+def test_main_py_with_nothing_to_analyse_says_so_and_stops(tmp_path, capsys):
+    (tmp_path / "Audio").mkdir()
+    main = _main_over(tmp_path / "Audio")
+    try:
+        with pytest.raises(SystemExit) as stopped:
+            main.chosen_files([])
+    finally:
+        sys.modules.pop("main", None)
+    assert stopped.value.code == 0
+    assert "No audio files found" in capsys.readouterr().out

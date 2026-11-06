@@ -64,3 +64,6 @@ dev = [
 # page show the shape of a value that carries a timestamp.
 pythonpath = ["."]
 doctest_optionflags = ["NORMALIZE_WHITESPACE", "ELLIPSIS"]
+markers = [
+    "local: opens this machine's audio through PortAudio; run on a person's machine, deselected on the hosted runners, which have no audio server",
+]

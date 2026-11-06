@@ -5,20 +5,20 @@
 
 For somebody already set up. `01-onboarding.md` is the other document, and they
 stay separate on purpose: one page trying to be both serves neither.
-`docs/cookbook.md` holds the longer step-by-step recipes.
+`docs/paths/` holds each user path, step by step.
 
 ## Commands
 
 | Command | Does |
 | --- | --- |
 | `uv run pytest tests walkthrough --doctest-glob=*.md` | The suite and every walkthrough page. Run it before a pull request: it also redraws `walkthrough/media/`, and a picture that changed is committed with the change that changed it |
-| `npm run test:e2e` | The Playwright specs under `tests/e2e/`, with joe's API mocked in the browser |
+| `npm run test:e2e` | The Playwright specs under `tests/e2e/`, on servers of their own, with joe's API scripted in the browser |
 | `npm run build` | The frontend, built into `dist/` |
-| `uv run joe dev` | Vite on `localhost:3000` and the API on `localhost:8000`; Ctrl+C stops both |
+| `uv run joe dev` | Vite on `localhost:3000` and the API on `localhost:8000`, every capability on; Ctrl+C stops both |
 | `uv run joe frontend` | Vite alone |
-| `uv run joe backend` | The API alone |
-| `uv run joe run` | The pipeline once, on the first file in `Data/Audio/` |
-| `uv run joe serve --host H --port P --api-port A --state DIR` | `joe dev` on the addresses given: the API on `A`, then Vite on `P` with `--strictPort`. Data stays in this checkout's `Data/` |
+| `uv run joe backend` | The API alone, serving the media API and nothing else until `--allow` names a capability (`docs/security.md`) |
+| `uv run joe run` | The pipeline once, on the newest recording in `Data/Audio/`, those named, or every one with `--all` |
+| `uv run joe serve --host H --port P --api-port A --state DIR` | `joe dev` on the addresses given: the API on `A`, every capability on, then Vite on `P` with `--strictPort`. Data stays in this checkout's `Data/` |
 | `uv run joe check --url U --shots DIR` | `03-in-the-browser` against the joe already serving `U`, with its pictures written to `DIR` |
 | `uv run joe voice setup` | Find the microphone while you talk, save it, and prove it with a transcribed sentence |
 | `uv run joe voice listen` | Record until you stop talking, then transcribe |
@@ -51,15 +51,17 @@ grows and this page does not name is a failing build:
 
 ## Routes
 
-`docs/api.md` is the API's reference, with a `curl` for each route. Each
-route has a heading there of the form ``### `GET /api/health` ``, and the
-headings and the routes the app serves are the same set, by method and path:
+`docs/api.md` is the API's reference, with a `curl` for each route, and
+`docs/media.md` is the media API's. Each route has a heading in one of them
+of the form ``### `GET /api/health` ``, and the headings and the routes the
+app serves are the same set, by method and path:
 
 ```python
 >>> import api, re
 >>> served = {(method, route.path) for route in api.app.routes
 ...           if route.path.startswith(('/api/', '/family/')) for method in route.methods}
->>> reference = Path('docs/api.md').read_text(encoding='utf-8')
+>>> reference = ''.join(Path(name).read_text(encoding='utf-8')
+...                     for name in ('docs/api.md', 'docs/media.md'))
 >>> headed = set(re.findall(r'^#{2,4} `([A-Z]+) (/(?:api|family)/[^`]+)`', reference, flags=re.M))
 >>> sorted(served - headed), sorted(headed - served)
 ([], [])
@@ -85,8 +87,11 @@ proxy them:
 | `POST /family/cue` | `{"cue": {...}, "action": {"take": {"notes": ["C4", "E4"], "seconds_per_note": 0.5}}}`: synthesizes the notes into `Data/Audio/` and runs the pipeline on them. `202` with the state at once; `422 {"ok": false, "error": ...}` for anything else, changing nothing |
 | `GET /family/state` | `{"member": "joe", "cue": <the last cue accepted>, "state": {"latest": {"file", "events"} or null, "busy", "error"}}` |
 
-`tests/test_family.py` holds both to those answers, and runs one take through
-the real API and the real pipeline. `docs/api.md` has the details.
+Both belong to the `family` capability, off in a fresh joe: `joe serve` turns
+it on with the rest, and `JOE_ALLOW_FAMILY=1` or `joe backend --allow family`
+does for an API started alone. `tests/test_family.py` holds both to those
+answers, and runs one take through the real API and the real pipeline.
+`docs/api.md` has the details.
 
 ## Environment
 
@@ -94,7 +99,14 @@ the real API and the real pipeline. `docs/api.md` has the details.
 | --- | --- | --- |
 | `JOE_API_URL` | `vite.config.js` | Where the dev server sends `/api`; `http://localhost:8000` unless set |
 | `QMCP_URL` | `vite.config.js` | Where the dev server sends `/v1`, qmcp's API; `http://localhost:3141` unless set |
-| `JOE_AUDIO_FILE` | `main.py` | One file for the pipeline to process; `POST /api/run/{filename}` sets it |
+| `JOE_ALLOW_` and a capability's name | `Modules/Access.py` | `1` turns that capability of the API on and `0` off: `JOE_ALLOW_MEDIA`, `_MICROPHONE`, `_TRANSCRIPTS`, `_LIBRARY`, `_FAMILY` (`docs/security.md`) |
+| `JOE_ALLOWED_HOSTS` | `Modules/Access.py` | Host names joe answers to besides loopback names, IP addresses and `host.docker.internal` |
+| `JOE_ALLOWED_ORIGINS` | `Modules/Access.py` | Pages, besides joe's own, that may send state-changing requests and read the answers |
+| `JOE_FFMPEG` | `Modules/Media.py` | The ffmpeg binary, when it is not the one on `PATH` |
+| `JOE_MEDIA_DIR` | `Modules/Media.py` | Where uploads to the media API are kept; `Data/Media/` unless set |
+| `JOE_MEDIA_TTL` | `Modules/Media.py` | Seconds an upload is kept after its last use |
+| `JOE_MEDIA_MAX_BYTES` | `Modules/Media.py` | The largest upload taken |
+| `JOE_MEDIA_MAX_SECONDS` | `Modules/Media.py` | The longest sound taken |
 | `JOE_INPUT_DEVICE` | `Modules/Voice.py` | The microphone, overriding the one `joe voice setup` saved |
 | `JOE_LANGUAGE` | `Modules/Voice.py` | The language a take is decoded as; `en` unless set, `auto` to detect |
 | `JOE_CUES` | `Modules/Cue.py` | `0` silences the turn tones |
@@ -108,7 +120,8 @@ the real API and the real pipeline. `docs/api.md` has the details.
 | `JOE_WALKTHROUGH_SHOTS` | `walkthrough/support.py` | Where the browser page writes its pictures instead of `walkthrough/media/`; `joe check` sets it |
 
 Every variable the code reads is in that table, and every one in the table is
-read somewhere:
+read somewhere. A capability's setting is made from its name, so the one row
+stands for each of them:
 
 ```python
 >>> import subprocess
@@ -118,6 +131,7 @@ read somewhere:
 >>> read = set()
 >>> for name in sources:
 ...     read |= set(re.findall(r'\b(?:JOE|VOX|QMCP)_[A-Z_]+\b', Path(name).read_text(encoding='utf-8')))
+>>> read = {'JOE_ALLOW_' if name.startswith('JOE_ALLOW_') else name for name in read}
 >>> tabled = set(re.findall(r'^\| `((?:JOE|VOX|QMCP)_[A-Z_]+)`', page, flags=re.M))
 >>> sorted(read - tabled), sorted(tabled - read)
 ([], [])

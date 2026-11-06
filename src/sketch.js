@@ -20,8 +20,9 @@ const STAFF_LINES = new Set([4, 16, 28, 40, 52, 64, 76]);
  *      m=HIST_SIZE   → x = LABEL_W                  (left label margin)
  *
  * @param {Object} state - Shared mutable state: { current: number }
+ * @param {HTMLElement} box - The element the canvas fills, and follows the size of
  */
-export function createSketch(state) {
+export function createSketch(state, box) {
   return (p) => {
     let fft, mic;
     let _audioSrcNode = null;   // MediaElementAudioSourceNode for playback FFT
@@ -31,7 +32,8 @@ export function createSketch(state) {
     let _playheadX = -1;   // pixel X of playhead hairline; -1 = hidden
 
     p.setup = () => {
-      p.createCanvas(p.windowWidth, p.windowHeight);
+      p.createCanvas(Math.max(1, box.clientWidth), Math.max(1, box.clientHeight));
+      new ResizeObserver(() => p.resizeCanvas(Math.max(1, box.clientWidth), Math.max(1, box.clientHeight))).observe(box);
       pmap = new Float32Array(pnoDist(88, 12, 440));
     };
 
@@ -89,10 +91,6 @@ export function createSketch(state) {
         p.noFill();
         p.line(_playheadX, 0, _playheadX, drawBottom);
       }
-    };
-
-    p.windowResized = () => {
-      p.resizeCanvas(p.windowWidth, p.windowHeight);
     };
 
     /**

@@ -10,24 +10,20 @@ const fixtureBuffer = Buffer.from(JSON.stringify(fixtureJson));
 // Helper: open the results panel via the toggle button
 async function openResultsPanel(page) {
   await page.getByTestId('results-toggle').click();
-  await page.waitForTimeout(400); // allow slide-in animation
+  await expect(page.getByTestId('results-panel')).toBeVisible();
 }
 
 // ─── Results panel visibility ─────────────────────────────────────────────────
 
-test('results panel is off-screen on load', async ({ page }) => {
+test('the Results window is closed on load', { tag: '@music-page' }, async ({ page }) => {
   await page.goto('/');
   await page.waitForSelector('canvas');
 
-  const panel = page.getByTestId('results-panel');
-  const box   = await panel.boundingBox();
-  const vw    = await page.evaluate(() => window.innerWidth);
-
-  // Panel should be translated fully off the right edge
-  expect(box.x).toBeGreaterThanOrEqual(vw);
+  await expect(page.getByTestId('results-panel')).toBeHidden();
+  await expect(page.locator('#paneltab-results')).toHaveCount(0);
 });
 
-test('results toggle button opens the results panel', async ({ page }) => {
+test('the Results button opens the Results window', { tag: '@music-page' }, async ({ page }) => {
   const errors = [];
   page.on('pageerror', (err) => errors.push(err.message));
 
@@ -35,29 +31,21 @@ test('results toggle button opens the results panel', async ({ page }) => {
   await page.waitForSelector('canvas');
   await openResultsPanel(page);
 
-  const panel = page.getByTestId('results-panel');
-  const box   = await panel.boundingBox();
-  const vw    = await page.evaluate(() => window.innerWidth);
-
-  // Panel should now be on-screen
-  expect(box.x).toBeLessThan(vw);
+  await expect(page.locator('#paneltab-results')).toBeVisible();
   expect(errors).toHaveLength(0);
 });
 
-test('file input is present inside the open results panel', async ({ page }) => {
+test('the file input is inside the open Results window', { tag: '@music-page' }, async ({ page }) => {
   await page.goto('/');
   await page.waitForSelector('canvas');
   await openResultsPanel(page);
 
-  await expect(page.getByTestId('file-input')).toBeAttached();
+  await expect(page.locator('#panelbody-results [data-testid="file-input"]')).toBeAttached();
 });
 
 // ─── JSON loading + piano roll ────────────────────────────────────────────────
 
-test('loading a valid JSON file renders the piano roll canvas', async ({ page }) => {
-  const errors = [];
-  page.on('pageerror', (err) => errors.push(err.message));
-
+test('results meta shows note count after load', { tag: '@music-page' }, async ({ page }) => {
   await page.goto('/');
   await page.waitForSelector('canvas');
   await openResultsPanel(page);
@@ -68,53 +56,14 @@ test('loading a valid JSON file renders the piano roll canvas', async ({ page })
     buffer:   fixtureBuffer,
   });
 
-  // Piano roll canvas should become visible
-  await expect(page.getByTestId('piano-roll-canvas')).toBeVisible({ timeout: 3000 });
-  expect(errors).toHaveLength(0);
-});
-
-test('piano roll canvas has non-zero dimensions after JSON load', async ({ page }) => {
-  await page.goto('/');
-  await page.waitForSelector('canvas');
-  await openResultsPanel(page);
-
-  await page.getByTestId('file-input').setInputFiles({
-    name:     'Process_Data_fixture.json',
-    mimeType: 'application/json',
-    buffer:   fixtureBuffer,
-  });
-
-  await page.waitForTimeout(500); // allow render + opacity animation
-
-  const dims = await page.evaluate(() => {
-    const c = document.getElementById('piano-roll-canvas');
-    return { width: c.width, height: c.height };
-  });
-
-  expect(dims.width).toBeGreaterThan(0);
-  expect(dims.height).toBeGreaterThan(0);
-});
-
-test('results meta shows note count after load', async ({ page }) => {
-  await page.goto('/');
-  await page.waitForSelector('canvas');
-  await openResultsPanel(page);
-
-  await page.getByTestId('file-input').setInputFiles({
-    name:     'Process_Data_fixture.json',
-    mimeType: 'application/json',
-    buffer:   fixtureBuffer,
-  });
-
-  await page.waitForTimeout(300);
-  const meta = await page.getByTestId('results-meta').textContent();
-  expect(meta).toMatch(/Notes:/);
-  expect(meta).toMatch(/Iteration:/);
+  const meta = page.getByTestId('results-meta');
+  await expect(meta).toContainText('Notes:');
+  await expect(meta).toContainText('Iteration:');
 });
 
 // ─── Error handling ───────────────────────────────────────────────────────────
 
-test('malformed JSON shows load-error element and does not crash', async ({ page }) => {
+test('malformed JSON shows load-error element and does not crash', { tag: '@music-page' }, async ({ page }) => {
   const errors = [];
   page.on('pageerror', (err) => errors.push(err.message));
 
@@ -134,7 +83,7 @@ test('malformed JSON shows load-error element and does not crash', async ({ page
 
 // ─── Era panel ────────────────────────────────────────────────────────────────
 
-test('era panel shows correct genre after first ArrowRight', async ({ page }) => {
+test('era panel shows correct genre after first ArrowRight', { tag: '@music-page' }, async ({ page }) => {
   const errors = [];
   page.on('pageerror', (err) => errors.push(err.message));
 
@@ -148,7 +97,7 @@ test('era panel shows correct genre after first ArrowRight', async ({ page }) =>
   expect(errors).toHaveLength(0);
 });
 
-test('era panel genre updates on second ArrowRight', async ({ page }) => {
+test('era panel genre updates on second ArrowRight', { tag: '@music-page' }, async ({ page }) => {
   await page.goto('/');
   await page.waitForSelector('canvas');
 
@@ -160,7 +109,7 @@ test('era panel genre updates on second ArrowRight', async ({ page }) => {
   await expect(page.getByTestId('era-genre')).toHaveText('Classical');
 });
 
-test('era panel clamps at index 0 on repeated ArrowLeft', async ({ page }) => {
+test('era panel clamps at index 0 on repeated ArrowLeft', { tag: '@music-page' }, async ({ page }) => {
   await page.goto('/');
   await page.waitForSelector('canvas');
 
@@ -175,7 +124,7 @@ test('era panel clamps at index 0 on repeated ArrowLeft', async ({ page }) => {
 
 // ─── Panel close ─────────────────────────────────────────────────────────────
 
-test('results panel closes on second toggle click', async ({ page }) => {
+test('the Results window closes on a second press of its button', { tag: '@music-page' }, async ({ page }) => {
   await page.goto('/');
   await page.waitForSelector('canvas');
 
@@ -183,16 +132,14 @@ test('results panel closes on second toggle click', async ({ page }) => {
 
   // Click again to close
   await page.getByTestId('results-toggle').click();
-  await page.waitForTimeout(400);
 
-  const box = await page.getByTestId('results-panel').boundingBox();
-  const vw  = await page.evaluate(() => window.innerWidth);
-  expect(box.x).toBeGreaterThanOrEqual(vw);
+  await expect(page.getByTestId('results-panel')).toBeHidden();
+  await expect(page.locator('#paneltab-results')).toHaveCount(0);
 });
 
 // ─── Fetch Latest ─────────────────────────────────────────────────────────────
 
-test('Fetch Latest button loads results and shows note count', async ({ page }) => {
+test('Fetch Latest button loads results and shows note count', { tag: '@music-page' }, async ({ page }) => {
   const errors = [];
   page.on('pageerror', err => errors.push(err.message));
 
@@ -208,11 +155,9 @@ test('Fetch Latest button loads results and shows note count', async ({ page }) 
   await openResultsPanel(page);
 
   await page.getByTestId('fetch-latest').click();
-  await page.waitForTimeout(500);
 
   // Results meta should show note count
-  const meta = await page.getByTestId('results-meta').textContent();
-  expect(meta).toMatch(/Notes:/);
+  await expect(page.getByTestId('results-meta')).toContainText('Notes:');
 
   // Piano roll canvas should be visible
   await expect(page.getByTestId('piano-roll-canvas')).toBeVisible();
@@ -222,7 +167,7 @@ test('Fetch Latest button loads results and shows note count', async ({ page }) 
 
 // ─── Canvas mode badge ────────────────────────────────────────────────────────
 
-test('Canvas mode badge shows RESULTS after loading notes from file input', async ({ page }) => {
+test('Canvas mode badge shows RESULTS after loading notes from file input', { tag: '@music-page' }, async ({ page }) => {
   const errors = [];
   page.on('pageerror', err => errors.push(err.message));
 
@@ -243,4 +188,48 @@ test('Canvas mode badge shows RESULTS after loading notes from file input', asyn
   await expect(badge).toHaveText('RESULTS', { timeout: 2000 });
 
   expect(errors).toHaveLength(0);
+});
+
+// ─── What the meta shows ──────────────────────────────────────────────────────
+
+test('A track named with markup is shown as text', { tag: '@music-page' }, async ({ page }) => {
+  // A track is named after its file, which is whatever Data/Audio/ held.
+  const errors = [];
+  page.on('pageerror', err => errors.push(err.message));
+  const track = '<img src=x onerror="window.__ran=1">.wav';
+  const [first] = Object.values(fixtureJson.audio);
+  const named = { ...fixtureJson, audio: { [track]: first } };
+
+  await page.route('**/api/results/latest', route => route.fulfill({
+    status:      200,
+    contentType: 'application/json',
+    body:        JSON.stringify(named),
+  }));
+  await page.goto('/');
+  await page.waitForSelector('canvas');
+  await openResultsPanel(page);
+  await page.getByTestId('fetch-latest').click();
+
+  const meta = page.getByTestId('results-meta');
+  await expect(meta).toContainText(`Track: ${track}`);
+  await expect(meta.locator('img')).toHaveCount(0);
+  expect(await page.evaluate(() => window.__ran)).toBeUndefined();
+  expect(errors).toHaveLength(0);
+});
+
+test("the panel's heading reads on one line, clear of its buttons", { tag: '@music-page' }, async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await page.goto('/');
+  await page.getByTestId('results-toggle').click();
+  const heading = page.locator('#results-panel h2');
+  await expect(heading).toBeVisible();
+
+  const box = await heading.boundingBox();
+  const line = await heading.evaluate(el => parseFloat(getComputedStyle(el).lineHeight)
+    || parseFloat(getComputedStyle(el).fontSize) * 1.4);
+  expect(box.height).toBeLessThan(line * 1.5);
+  const actions = await page.locator('.results-actions').boundingBox();
+  const overlap = box.x < actions.x + actions.width && actions.x < box.x + box.width
+    && box.y < actions.y + actions.height && actions.y < box.y + box.height;
+  expect(overlap).toBe(false);
 });

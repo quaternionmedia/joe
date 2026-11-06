@@ -1,7 +1,7 @@
-import { animate } from 'animejs';
+import { offNote } from './Capabilities.js';
 
 /**
- * ResultsPanel — slide-in right panel for backend JSON output.
+ * ResultsPanel — the Results window: the pipeline's JSON output.
  *
  * Parsing and note rendering are delegated to MainCanvas.
  * This panel handles only metadata display and file/fetch controls.
@@ -11,13 +11,14 @@ export class ResultsPanel {
    * @param {HTMLElement} el         - #results-panel container
    * @param {MainCanvas}  mainCanvas
    */
-  constructor(el, mainCanvas) {
+  constructor(el, mainCanvas, window) {
     this._el         = el;
     this._mainCanvas = mainCanvas;
+    this._window     = window;
     this._fileInput  = el.querySelector('[data-testid="file-input"]');
     this._errorEl    = el.querySelector('[data-testid="load-error"]');
+    this._parseError = this._errorEl?.textContent || '';
     this._metaEl     = el.querySelector('[data-testid="results-meta"]');
-    this._isOpen     = false;
     this._onFileChange = this._onFileChange.bind(this);
   }
 
@@ -27,23 +28,22 @@ export class ResultsPanel {
     if (fetchBtn) fetchBtn.addEventListener('click', () => this.fetchLatest());
   }
 
-  toggle() { this._isOpen ? this.close() : this.open(); }
+  toggle() { this._window.toggle(); }
 
-  /** Animation A — slide in */
-  open() {
-    this._isOpen = true;
-    animate(this._el, { translateX: ['100%', '0%'], duration: 320, ease: 'outQuart' });
-  }
+  get isOpen() { return this._window.isOpen; }
 
-  /** Animation B — slide out */
-  close() {
-    this._isOpen = false;
-    animate(this._el, { translateX: ['0%', '100%'], duration: 280, ease: 'inQuart' });
-  }
+  /** The Results window, opened or brought to the front. */
+  open() { this._window.show(); }
+
+  close() { this._window.close(); }
 
   async fetchLatest() {
     try {
       const res = await fetch('/api/results/latest', { cache: 'no-store' });
+      if (res.status === 403) {
+        this._showError(offNote('library'));
+        return;
+      }
       if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
       const data = await res.json();
       this._clearError();
@@ -107,14 +107,23 @@ export class ResultsPanel {
   _renderMeta(data, notes) {
     const tracks = Object.keys(data.audio || {});
     const types  = [...new Set(notes.map(n => n.type))];
-    this._metaEl.innerHTML = `
-      <div>Iteration: ${data.iteration || '—'}</div>
-      <div>Track${tracks.length !== 1 ? 's' : ''}: ${tracks.join(', ') || '—'}</div>
-      <div>Notes: ${notes.length} events across ${types.join(', ')}</div>
-    `;
+    // A track is named after its file, which is whatever Data/Audio/ held:
+    // text, never markup, on a page that can drive joe's API.
+    const line = text => {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div;
+    };
+    this._metaEl.replaceChildren(
+      line(`Iteration: ${data.iteration || '—'}`),
+      line(`Track${tracks.length !== 1 ? 's' : ''}: ${tracks.join(', ') || '—'}`),
+      line(`Notes: ${notes.length} events across ${types.join(', ')}`),
+    );
   }
 
-  _showError() {
+  /** Show `said` where results would be: by default, that the file did not parse. */
+  _showError(said = this._parseError) {
+    this._errorEl.replaceChildren(said);
     this._errorEl.hidden = false;
     this._metaEl.innerHTML = '';
     this._mainCanvas.clearNotes();

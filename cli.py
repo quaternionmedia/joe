@@ -3,9 +3,15 @@ Joe CLI - dev launcher for the Joe Audio Workbench.
 
 Usage (with uv):
     uv run joe frontend   # Vite dev server only  (localhost:3000)
-    uv run joe backend    # FastAPI server only    (localhost:8000)
-    uv run joe dev        # Both servers together
+    uv run joe backend    # FastAPI server only    (127.0.0.1:8000): the media API alone
+    uv run joe dev        # Both servers together, every capability on, on loopback
     uv run joe run        # Run the pipeline once  (Data/Audio/ -> Data/Output/)
+
+joe has no authentication. `backend` serves the media API and nothing that
+records or hands data out until `--allow` turns it on: `--allow microphone`,
+`--allow transcripts`, `--allow library`, `--allow family`, or `--allow all`.
+`dev` is for working on joe on this machine: with no `--allow` it turns every
+capability on, and with one it serves what `backend` would (docs/security.md).
 
 After `uv tool install -e .` the bare `joe` command works everywhere.
 """
@@ -19,6 +25,7 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+from typing import Annotated
 
 import typer
 
@@ -59,6 +66,48 @@ def _kill(proc: subprocess.Popen) -> None:
     except subprocess.TimeoutExpired:
         proc.kill()
 
+Allow = Annotated[list[str] | None, typer.Option(
+    "--allow", metavar="CAPABILITY",
+    help="Turn a capability of the API on: media, microphone, transcripts, library, family, or all; "
+         "repeat for more. joe has no authentication: whatever reaches the port gets what is on "
+         "(docs/security.md).",
+)]
+
+
+def _api_env(allow: list[str] | None, everything: bool = False) -> dict[str, str]:
+    """The API's environment: this one, with `JOE_ALLOW_<NAME>=1` for each
+    capability `--allow` names, and every one for `all`. A name that is no
+    capability is a usage error, before anything starts. `everything` turns on
+    each capability this environment does not already set."""
+    from Modules import Access
+
+    env = dict(os.environ)
+    if everything:
+        for capability in Access.CAPABILITIES.values():
+            env.setdefault(capability.setting, "1")
+    for given in allow or []:
+        name = given.strip().lower()
+        if name == "all":
+            names = list(Access.CAPABILITIES)
+        elif name in Access.CAPABILITIES:
+            names = [name]
+        else:
+            raise typer.BadParameter(
+                f"{given!r} is no capability of joe's: there are {', '.join(Access.CAPABILITIES)}, "
+                f"and all", param_hint="--allow")
+        for each in names:
+            env[Access.CAPABILITIES[each].setting] = "1"
+    return env
+
+
+def _disclaim() -> None:
+    """What `backend` and `dev` say before anything starts."""
+    _echo("joe has no authentication: whatever can reach the API's port is answered, with this "
+          "account's rights.")
+    _echo("The API listens on loopback, 127.0.0.1:8000, for this machine alone, and lists what it "
+          "serves as it starts (docs/security.md).")
+
+
 app = typer.Typer(
     help="Joe Audio Workbench - dev CLI",
     no_args_is_help=True,
@@ -66,6 +115,10 @@ app = typer.Typer(
 
 voice_app = typer.Typer(help="Speech analysis: transcription and mic capture.", no_args_is_help=True)
 app.add_typer(voice_app, name="voice")
+
+# The API, on loopback alone: joe has no authentication.
+_UVICORN = [sys.executable, "-m", "uvicorn", "api:app", "--reload",
+            "--host", "127.0.0.1", "--port", "8000"]
 
 # npm is 'npm.cmd' on Windows when not in a shell
 _npm = "npm.cmd" if sys.platform == "win32" else "npm"
@@ -78,25 +131,40 @@ def frontend():
 
 
 @app.command()
-def backend():
-    """Start the FastAPI backend API server (localhost:8000)."""
+def backend(allow: Allow = None):
+    """Start the FastAPI backend API server (127.0.0.1:8000).
+
+    It serves the media API alone until `--allow` turns more on."""
+    env = _api_env(allow)
+    _disclaim()
     subprocess.run(
-        [sys.executable, "-m", "uvicorn", "api:app", "--reload", "--port", "8000"],
+        _UVICORN,
         check=False,
+        env=env,
     )
 
 
 @app.command()
-def dev():
-    """Start both frontend and backend dev servers. Ctrl+C stops both."""
+def dev(allow: Allow = None):
+    """Start both frontend and backend dev servers. Ctrl+C stops both.
+
+    With no `--allow`, the API serves every capability -- the page's Library
+    and Results need `library`, its joe's mic capture and voice keys
+    `microphone`, and its voice panel and transcript `transcripts` -- on
+    loopback alone. A setting already in the environment is kept. With
+    `--allow`, it serves what `backend` would: `--allow media` for the media
+    API alone."""
+    env = _api_env(allow, everything=allow is None)
+    _disclaim()
+    if allow is None:
+        _echo("joe dev turns every capability on: name fewer with --allow, or run joe backend "
+              "for the media API alone.")
     _echo("Starting Vite  -> http://localhost:3000/joe")
     _echo("Starting API   -> http://localhost:8000/api/health")
     _echo("Ctrl+C to stop both.\n")
 
     fe = subprocess.Popen([_npm, "run", "dev"])
-    be = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "api:app", "--reload", "--port", "8000"]
-    )
+    be = subprocess.Popen(_UVICORN, env=env)
 
     try:
         fe.wait()
@@ -140,12 +208,19 @@ def serve(
     state: Path = typer.Option(..., "--state", help="Scratch directory; see below."),
     qmcp_url: str = typer.Option(
         None, "--qmcp-url", help="Where the page's /v1 goes (QMCP_URL); unset keeps the default."),
+    allow: Allow = None,
 ):
     """Start the API and Vite on the ports given, Vite once the API answers.
 
     `joe dev` with every address named: the API on --api-port without
     --reload, and Vite on --port with --strictPort and JOE_API_URL pointing at
     that API. The page answers only once the API does. Ctrl+C stops both.
+
+    As with `joe dev`, the API serves every capability unless `--allow` names
+    fewer: the page needs them, and a hub's cue needs `family`. joe has no
+    authentication, so --host decides who that reaches (docs/security.md). The
+    API is told to take requests from the page at --host and --port, as it
+    takes them from `joe dev`'s on port 3000 (JOE_ALLOWED_ORIGINS).
 
     Recordings, the pipeline's output and the voice datapoints stay in this
     checkout's Data/, whatever --state says: the API resolves Data/ against its
@@ -157,12 +232,19 @@ def serve(
     if node is None or not vite.is_file():
         _echo("node and node_modules are needed: run `npm ci` first", err=True)
         raise typer.Exit(2)
+    api_env = _api_env(allow, everything=allow is None)
+    # Vite's proxy sends the page's requests on under the API's own Host with
+    # the page's Origin, which the API refuses from any page it was not told of.
+    api_env["JOE_ALLOWED_ORIGINS"] = ",".join(
+        filter(None, [api_env.get("JOE_ALLOWED_ORIGINS"), f"http://{host}:{port}"]))
     state.mkdir(parents=True, exist_ok=True)
     api = f"http://{host}:{api_port}"
+    _echo("joe has no authentication: whatever can reach the API's port is answered, with this "
+          "account's rights.")
     _echo(f"API  -> {api}/api/health")
     be = subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "api:app", "--host", host, "--port", str(api_port)],
-        cwd=ROOT)
+        cwd=ROOT, env=api_env)
     started = time.monotonic()
     while not _answers(f"{api}/api/health"):
         if be.poll() is not None or time.monotonic() - started > API_STARTUP:
@@ -237,12 +319,21 @@ def check(
 
 
 @app.command()
-def run():
-    """Run the audio processing pipeline once (Data/Audio/ -> Data/Output/)."""
+def run(
+    names: list[str] = typer.Argument(None, help="Recordings in Data/Audio/ to analyse, by file name.",
+                                      show_default=False),
+    every: bool = typer.Option(False, "--all", help="Analyse every recording in Data/Audio/."),
+):
+    """Run the audio processing pipeline once (Data/Audio/ -> Data/Output/): on the
+    newest recording, those named, or every one with --all."""
+    names = names or []
+    if every and names:
+        _echo("Name recordings or ask for --all, not both.", err=True)
+        raise typer.Exit(2)
     _echo("Running pipeline...")
-    result = subprocess.run([sys.executable, "main.py"], check=False)
+    result = subprocess.run([sys.executable, "main.py", *(["--all"] if every else names)], check=False)
     if result.returncode == 0:
-        _echo("Done. Load results with `joe backend` + Fetch Latest.")
+        _echo("Done. Load results with `joe backend --allow library` + Fetch Latest.")
     else:
         _echo(f"Pipeline exited with code {result.returncode}.", err=True)
         raise typer.Exit(result.returncode)
@@ -259,8 +350,8 @@ def voice_devices():
         raise typer.Exit(1)
 
     # Host API in the line because the name is not unique: the same
-    # microphone appears once per API, and a list you cannot choose from is
-    # not a list.
+    # microphone appears once per API, and a listing by name alone cannot be
+    # chosen from.
     from Modules.Voice import saved_input_device
 
     saved = saved_input_device()

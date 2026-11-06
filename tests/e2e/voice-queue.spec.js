@@ -28,15 +28,17 @@ async function script(page, { lists, post = { status: 202, body: { request_id: '
   return calls;
 }
 
-test('nothing waiting leaves the panel out of the way', async ({ page }) => {
-  await script(page, { lists: [[]] });
+test('nothing waiting leaves the Voice window closed', { tag: '@voice-loop' }, async ({ page }) => {
+  const calls = await script(page, { lists: [[]] });
   await page.goto('/');
   await page.waitForSelector('canvas');
+  await expect.poll(() => calls.lists).toBeGreaterThan(0);
 
+  await expect(page.locator('#paneltab-voice')).toHaveCount(0);
   await expect(page.getByTestId('voice-panel')).toBeHidden();
 });
 
-test('the oldest waiting request is offered with its options', async ({ page }) => {
+test('the oldest waiting request is offered with its options', { tag: '@voice-loop' }, async ({ page }) => {
   const calls = await script(page, { lists: [[LAUNCH, DEPLOY]] });
   await page.goto('/');
 
@@ -49,7 +51,7 @@ test('the oldest waiting request is offered with its options', async ({ page }) 
   expect(calls.listQueries[0].get('oldest_first')).toBe('true');
 });
 
-test('answering asks qmcp once, waits for the run, then reads the queue again', async ({ page }) => {
+test('answering asks qmcp once, waits for the run, then reads the queue again', { tag: '@voice-loop' }, async ({ page }) => {
   const calls = await script(page, {
     lists: [[LAUNCH], []],
     runs: [{ running: true }, { running: false, exit_code: 0, output: ["  demo answered 'approve' (by voice)."] }],
@@ -73,7 +75,7 @@ test('answering asks qmcp once, waits for the run, then reads the queue again', 
   expect(next[1] - calls.log[ended][1]).toBeLessThan(1500);
 });
 
-test('a run that fails shows the command\'s own last words', async ({ page }) => {
+test('a run that fails shows the command\'s own last words', { tag: '@voice-loop' }, async ({ page }) => {
   const words = "No speech engine answers at http://127.0.0.1:8000. Start it in the engine's checkout: uv run joe backend";
   await script(page, {
     lists: [[LAUNCH]],
@@ -86,11 +88,61 @@ test('a run that fails shows the command\'s own last words', async ({ page }) =>
   await expect(page.getByTestId('voice-answer')).toBeEnabled();
 });
 
-test('a refusal shows qmcp\'s reason', async ({ page }) => {
+test('a refusal of the answer shows qmcp\'s reason', { tag: '@voice-loop' }, async ({ page }) => {
   const detail = "A conversation is already running, for 'other'. One at a time: there is one microphone.";
   await script(page, { lists: [[LAUNCH]], post: { status: 409, body: { detail } } });
   await page.goto('/');
   await page.getByTestId('voice-answer').click();
 
   await expect(page.getByTestId('voice-queue-note')).toHaveText(detail);
+});
+
+// The page's visibility, as a browser sets it when the tab is hidden or shown.
+const showPage = (page, state) => page.evaluate(state => {
+  Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state });
+  document.dispatchEvent(new Event('visibilitychange'));
+}, state);
+
+test('while qmcp cannot be reached, Instruct by voice says so, and a hidden page asks nothing', { tag: '@voice-loop' }, async ({ page }) => {
+  let asked = 0;
+  await page.clock.install();
+  await page.route('**/api/voice/conversation', route =>
+    route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: '' }));
+  // What the dev proxy answers when nothing listens where qmcp should.
+  await page.route(url => url.pathname === '/v1/human/requests', route => {
+    asked += 1;
+    route.fulfill({ status: 500, body: '' });
+  });
+  await page.goto('/');
+
+  const instruct = page.getByTestId('voice-instruct');
+  await expect(instruct).toHaveClass(/is-unreachable/);
+  await expect(instruct).toHaveAttribute('title', /qmcp is not reachable/);
+  await expect.poll(() => asked).toBe(1);
+
+  await showPage(page, 'hidden');
+  await page.clock.fastForward(10 * 60_000);
+  await page.waitForTimeout(500);   // a request the timers started would have arrived by now
+  expect(asked).toBe(1);
+
+  await showPage(page, 'visible');
+  await expect.poll(() => asked).toBe(2);
+});
+
+test('once qmcp answers, Instruct by voice is itself again', { tag: '@voice-loop' }, async ({ page }) => {
+  let reachable = false;
+  await page.clock.install();
+  await page.route('**/api/voice/conversation', route =>
+    route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: '' }));
+  await page.route(url => url.pathname === '/v1/human/requests', route => reachable
+    ? route.fulfill({ json: { requests: [], count: 0 } })
+    : route.fulfill({ status: 500, body: '' }));
+  await page.goto('/');
+  const instruct = page.getByTestId('voice-instruct');
+  await expect(instruct).toHaveClass(/is-unreachable/);
+
+  reachable = true;
+  await page.clock.fastForward(60_000);
+  await expect(instruct).not.toHaveClass(/is-unreachable/);
+  await expect(instruct).toHaveAttribute('title', '');
 });

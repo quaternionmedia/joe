@@ -53,11 +53,13 @@ bottom of a page would be skipped by the run that most needs it.
 `app.open` waits for p5 to have drawn its canvas, which is the one thing on
 this page that comes from the network. Nothing is loaded yet, so the mode badge
 is empty and the piano roll has drawn nothing but its guide lines — which are
-faint, so none of its pixels is at full strength:
+faint, so none of its pixels is at full strength. No window is open beside the
+visualiser, so the roll is as wide as it gets:
 
 ```python
 >>> painted(page, 'a > 150')
 0
+>>> full = page.locator('#piano-roll-canvas').bounding_box()['width']
 >>> shots.take(page, 'boot')
 '03-in-the-browser-boot.png'
 
@@ -83,7 +85,7 @@ everything the pipeline writes for it, is removed when the run ends.
 
 **Library → Process** is the gesture: the Library lists the file, and Process
 runs the pipeline on it through `POST /api/run/{filename}`, which starts
-`main.py` with `JOE_AUDIO_FILE` naming the file:
+`main.py` on that one file, by name:
 
 ```python
 >>> page.get_by_test_id('capture-toggle').click()
@@ -125,9 +127,10 @@ True
 Every event the JSON holds is counted in the panel, and the transport has the
 recording loaded to play. The piano roll has drawn them, one colour per
 transform — white for Raw, cyan for Harmonic, orange for Percussive — read off
-the canvas itself rather than taken on trust. Both panels are then slid out of
-the way, and the picture waits until they have gone rather than for a number
-of milliseconds:
+the canvas itself rather than taken on trust. The Library and Results are
+windows docked beside the visualiser, and the roll narrowed to make room for
+them. Both are then closed, and the picture waits until the roll fills the dock
+again rather than for a number of milliseconds:
 
 ```python
 >>> painted(page, 'a > 150 && r > 200 && g > 200 && b > 200') > 0
@@ -136,12 +139,14 @@ True
 True
 >>> painted(page, 'a > 150 && r > 200 && g > 60 && g < 160 && b < 80') > 0
 True
+>>> page.locator('#piano-roll-canvas').bounding_box()['width'] < full - 100
+True
 >>> page.get_by_test_id('results-toggle').click()
 >>> page.get_by_test_id('capture-close').click()
->>> until(page, "() => document.getElementById('results-panel')"
-...             ".getBoundingClientRect().left >= innerWidth")
->>> until(page, "() => document.getElementById('capture-panel')"
-...             ".getBoundingClientRect().right <= 0")
+>>> page.get_by_test_id('results-panel').wait_for(state='hidden')
+>>> page.get_by_test_id('capture-panel').wait_for(state='hidden')
+>>> until(page, "() => Math.abs(document.getElementById('piano-roll-canvas')"
+...             f".getBoundingClientRect().width - {full}) < 1")
 >>> shots.take(page, 'results', of='#piano-roll-canvas')
 '03-in-the-browser-results.png'
 

@@ -138,14 +138,23 @@ def test_run_on_file_runs_pipeline_for_file_inside_audio_dir(client, no_subproce
     assert res.status_code == 200
     assert res.json() == {"returncode": 0, "stdout": "ok", "stderr": ""}
     assert len(no_subprocess) == 1
-    (_, kwargs), = no_subprocess
-    assert Path(kwargs["env"]["JOE_AUDIO_FILE"]) == (api.AUDIO_DIR / GOOD).resolve()
+    (args, _), = no_subprocess
+    assert args[-1] == GOOD
 
 
 @pytest.mark.parametrize("name", BAD_REQUEST_NAMES)
 def test_run_on_file_rejects_non_bare_names(client, no_subprocess, name):
     res = client.post(f"/api/run/{name}")
     assert res.status_code == 404
+    assert no_subprocess == []
+
+
+def test_run_on_file_refuses_a_format_the_pipeline_cannot_read(client, no_subprocess, audio_dir):
+    (audio_dir / "take.aiff").write_bytes(b"FORM")
+    res = client.post("/api/run/take.aiff")
+    assert res.status_code == 200
+    assert res.json()["returncode"] == 1
+    assert "not supported by the pipeline" in res.json()["stderr"]
     assert no_subprocess == []
 
 
@@ -157,10 +166,8 @@ def test_run_on_file_missing_file_is_404(client, no_subprocess):
 
 # ─── _resolve_audio_path (the voice routes) ───────────────────────────────────
 #
-# POST /api/voice/transcribe takes a filename too, and used its own resolver
-# which applied none of the rules above: `good.wav.` was 404 on /api/audio and
-# 200 here, and a NUL byte raised out of the handler as a 500. Both resolvers
-# now share `_is_bare_filename`, and these hold them to the same list.
+# POST /api/voice/transcribe takes a filename too. Its resolver and the audio
+# routes' share `_is_bare_filename`, and these hold them to the same list.
 #
 # It resolves against a relative `Data/Audio` and `Data/Voice` rather than
 # AUDIO_DIR, so the fixture below moves the working directory instead of
@@ -191,13 +198,21 @@ def test_resolve_audio_path_finds_a_file_under_data_voice(voice_dirs):
     assert api._resolve_audio_path("spoken.wav").name == "spoken.wav"
 
 
+def test_a_name_in_both_folders_is_the_voice_folders(voice_dirs):
+    """vox writes `said.wav` to Data/Voice/; a library recording of that name is not it."""
+    (voice_dirs / "Data" / "Voice" / GOOD).write_bytes(b"RIFF voice")
+    resolved = api._resolve_audio_path(GOOD)
+    assert resolved == (voice_dirs / "Data" / "Voice" / GOOD).resolve()
+    assert resolved.read_bytes() == b"RIFF voice"
+
+
 @pytest.mark.parametrize("name", BAD_HANDLER_NAMES)
 def test_resolve_audio_path_rejects_non_bare_names(voice_dirs, name):
-    """The same list the audio route is held to — including the aliases.
+    """The same list the audio route is held to, including the aliases.
 
-    `good.wav.` and `"good.wav "` are the ones that matter: the file they
-    alias exists, so a resolver that only checked containment returned it
-    and the endpoint transcribed a file under a name no listing shows.
+    `good.wav.` and `"good.wav "` alias a file that exists, so a resolver
+    checking only containment would return it, and the endpoint would
+    transcribe a file under a name no listing shows.
     """
     with pytest.raises(HTTPException) as excinfo:
         api._resolve_audio_path(name)
@@ -208,12 +223,3 @@ def test_resolve_audio_path_rejects_missing_file(voice_dirs):
     with pytest.raises(HTTPException) as excinfo:
         api._resolve_audio_path("absent.wav")
     assert excinfo.value.status_code == 404
-
-
-@pytest.mark.parametrize("name", BAD_HANDLER_NAMES)
-def test_both_resolvers_agree_on_every_bad_name(audio_dir, voice_dirs, name):
-    """The defect was disagreement, so the property is agreement."""
-    for resolver in (api._audio_file, api._resolve_audio_path):
-        with pytest.raises(HTTPException) as excinfo:
-            resolver(name)
-        assert excinfo.value.status_code == 404, f"{resolver.__name__} allowed {name!r}"

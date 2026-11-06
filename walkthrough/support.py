@@ -197,7 +197,15 @@ class LiveApp:
         before = _folders()
         _LEAVING.insert(0, lambda: _tidy(self.uploaded, before))
 
-        quiet = {**os.environ, "JOE_CUES": "0", "JOE_DATAPOINTS": "0"}
+        # As `joe serve` starts the API: every capability on, since the page's
+        # Library and Results need the library and its voice panel the
+        # transcripts; and told to take requests from the page on this port,
+        # which is not `joe dev`'s 3000.
+        from Modules import Access
+
+        quiet = {**os.environ, "JOE_CUES": "0", "JOE_DATAPOINTS": "0",
+                 **{capability.setting: "1" for capability in Access.CAPABILITIES.values()},
+                 Access.ORIGINS_SETTING: self.web}
         self._spawn("api", [sys.executable, "-m", "uvicorn", "api:app",
                             "--host", "127.0.0.1", "--port", str(self.api_port),
                             "--log-level", "warning"], quiet)

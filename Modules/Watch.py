@@ -7,17 +7,16 @@ opens a take first (`/api/voice/watch`), says the question -- stopping when
 `/api/voice/control` reports `interrupted` -- and then listens: the listen
 returns this take when someone began it, and records afresh when nobody did.
 
-**THE QUESTION IS IN THE ROOM TOO.** Said through a speaker, the question
-reaches the microphone. Speech counts as someone beginning only when it is
-louder than the question's own echo by `BARGE_FACTOR`: the echo's level is
-the loudest block of the watch's first `ECHO_SECONDS`, held for the rest of
-it, and nothing begins while it is being learned. It is learned once rather
-than tracked, because a voice rises over several blocks into its first word
-and a level that followed what was not yet loud climbed ahead of it -- seen
-on a virtual cable, where an answer twice the question's loudness never
-began. Headphones leave no echo, and then any speech begins it. A held talk
-key begins it whatever the level. `JOE_BARGE_IN=0` turns the voice off and
-leaves the keys; `JOE_BARGE_FACTOR` sets the margin.
+The question is in the room too: said through a speaker, it reaches the
+microphone. Speech counts as someone beginning only when it is louder than
+the question's own echo by `BARGE_FACTOR`: the echo's level is the loudest
+block of the watch's first `ECHO_SECONDS`, held for the rest of it, and
+nothing begins while it is being learned. It is learned once rather than
+tracked, because a voice rises over several blocks into its first word and a
+tracked level would climb ahead of it. Headphones leave no echo, and then any
+speech begins it. A held talk key begins it whatever the level.
+`JOE_BARGE_IN=0` turns the voice off and leaves the keys; `JOE_BARGE_FACTOR`
+sets the margin.
 """
 
 from __future__ import annotations
