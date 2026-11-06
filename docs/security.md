@@ -110,7 +110,7 @@ joe: !!! WARNING: answering 192.168.1.20, which is not this machine's loopback. 
 | ...and joe's page showing that conversation (the voice panel, the transcript pane) | `GET /api/voice/conversation` (events), `GET /api/voice/history`, `GET /api/voice/vocabulary`, and `GET /api/voice/takes/{take}/audio` for a take shown on the visualiser; the page's keys and buttons post `answer`, `hold` and `strike` | `JOE_ALLOW_TRANSCRIPTS=1` as well |
 | **vox's voice loop**, against a running joe: `vox doctor`, `vox self-report` (live) | `GET /api/health`, `GET /api/voice/devices`, `POST /api/voice/listen` | `JOE_ALLOW_MICROPHONE=1` |
 | `vox loop`, `vox self-report FILE` | `POST /api/voice/transcribe?filename=`, on a file it writes where joe resolves names (`--echo-dir`, joe's `Data/Voice/` or `Data/Audio/`) | `JOE_ALLOW_LIBRARY=1` |
-| **A family's hub**: one that fires cues at joe's API alone | `POST /family/cue` and `GET /family/state` | `JOE_ALLOW_FAMILY=1`. A cue's take is written into `Data/Audio/` and run through the pipeline, and nothing of the library is handed out |
+| **A family's hub**: one that fires cues at joe's API alone | `POST /family/cue`, and `GET /family/state`, `/family/events` and `/family/identity` | `JOE_ALLOW_FAMILY=1`. A cue's take is written into `Data/Audio/` and run through the pipeline, and nothing of the library is handed out |
 | ...and the performing family's demo, which starts joe with `joe serve` and checks it with `joe check` | joe's page through Vite as well: the library, the pipeline and its results | `joe serve`, which turns every one on, as `joe dev` does, and tells the API to take requests from the page on the port it was given; `--allow` names fewer |
 | **joe's own page** (`joe dev`) | **Library**, **Process**, **Results → Fetch Latest**, playing a recording: `library`. **joe's mic** capture: `microphone` (and `library` to play it back). The voice panel and the transcript pane: `transcripts`. Answering by key or button, holding the talk key, striking a word: `microphone` | `uv run joe dev`, which turns every one on; `--allow` names fewer. With one off, its button is greyed, its tooltip naming the setting; the Library, the transcript pane and Results say it is off and link this page; the first-run hint keeps the steps that work |
 
@@ -205,6 +205,8 @@ apart: the binding and the capabilities are its whole access control.
 | `GET /api/results/latest` | `library` | The latest pipeline output: every note found |
 | `POST /family/cue` | `family` | Takes a hub's cue: synthesizes up to 16 notes, 64 s at most, into `Data/Audio/` and runs the pipeline on that recording, one take at a time |
 | `GET /family/state` | `family` | The last cue taken, the latest take's file name and note count, and whether one is running |
+| `GET /family/events` | `family` | That state at every change, as server-sent events |
+| `GET /family/identity` | `family` | What this joe is: its family, the contract it keeps, its version, and the running process's id and instance |
 
 `tests/test_access.py` holds every route to this table: a route added
 without a capability fails it.

@@ -1,12 +1,14 @@
-"""`POST /family/cue` and `GET /family/state`: joe as a member of the performing family.
+"""The `/family` routes: joe as a member of the performing family, on `family/1`.
 
 The hub delivers joe its part of a cue's family block, a take. Most of these
 hold the routes to their answers with the pipeline stood in for, so they are
 quick and say exactly what was asked of it. The last runs the real API under
 uvicorn and the real pipeline, as `joe serve` does, and reads the result back
-through the page's own route.
+through the page's own route. `test_family_conformance.py` replays the
+contract's own cases.
 """
 
+import asyncio
 import io
 import json
 import os
@@ -14,6 +16,7 @@ import subprocess
 import sys
 import threading
 import time
+import types
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -108,7 +111,8 @@ def test_a_take_is_accepted_at_once_and_reported_when_the_pipeline_is_done(clien
     res = client.post("/family/cue", json={"cue": CUE, "action": TAKE})
 
     assert res.status_code == 202
-    assert res.json() == {"ok": True, "state": {"latest": None, "busy": True, "error": None}}
+    assert res.json() == {"ok": True, "state": {"latest": None, "busy": True, "error": None},
+                          "instance": api.family.instance}
     running = client.get("/family/state").json()
     assert running["cue"] == CUE and running["state"]["busy"] is True
     pipeline.release.set()
@@ -242,6 +246,145 @@ def test_an_unknown_action_says_what_joe_understands(client):
                           "error": "joe understands one action, {\"take\": {...}}; got ['clock']"}
 
 
+def test_a_cue_joe_fails_taking_is_500_in_the_contract_s_shape_and_changes_nothing(
+        client, monkeypatch):
+    """The take cannot be started: understood, and joe failed acting on it."""
+    class NoThread:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def start(self):
+            raise RuntimeError("can't start new thread")
+
+    # Only where the member makes its worker: the test client has threads of its own.
+    monkeypatch.setattr(Family, "threading", types.SimpleNamespace(Thread=NoThread))
+    monkeypatch.setattr(api.traceback, "print_exc", lambda: None)
+
+    res = client.post("/family/cue", json={"cue": CUE, "action": TAKE})
+
+    assert res.status_code == 500
+    assert res.json() == {"ok": False, "error": "joe failed acting on the cue: "
+                                                "RuntimeError: can't start new thread"}
+    assert client.get("/family/state").json() == {
+        "member": "joe", "cue": None, "state": {"latest": None, "busy": False, "error": None}}
+
+
+# ─── GET /family/identity, and the instance on each answer ────────────────────
+
+def test_the_identity_says_what_joe_is_and_which_contract_it_keeps(client):
+    res = client.get("/family/identity")
+
+    assert res.status_code == 200
+    identity = res.json()
+    instance = identity.pop("instance")
+    assert identity == {"member": "joe", "family": "performer-display", "version": "0",
+                        "contract": "family/1", "conformance": "0.0.1", "verbs": ["take"],
+                        "pid": os.getpid()}
+    assert len(instance) == 12 and int(instance, 16) >= 0
+
+
+def test_the_api_s_own_member_carries_the_api_s_version():
+    assert api.family.identity()["version"] == api.app.version
+
+
+def test_each_answer_to_a_cue_names_the_instance_the_identity_names(client):
+    instance = client.get("/family/identity").json()["instance"]
+
+    first = client.post("/family/cue", json={"cue": CUE, "action": TAKE})
+    second = client.post("/family/cue", json={"cue": {**CUE, "number": "4"}, "action": TAKE})
+    settled(client)
+
+    assert first.json()["instance"] == second.json()["instance"] == instance
+
+
+def test_a_joe_started_again_is_another_instance(tmp_path):
+    def member():
+        return Family.Member(audio_dir=tmp_path, output_dir=tmp_path, run=lambda path: 0)
+
+    assert member().instance != member().instance
+
+
+@pytest.mark.parametrize("path", ["/family/state", "/family/identity"])
+def test_the_get_routes_answer_a_page_at_any_origin(client, path):
+    res = client.get(path, headers={"Origin": "http://127.0.0.1:6283"})
+
+    assert res.status_code == 200
+    assert res.headers["access-control-allow-origin"] == "*"
+
+
+# ─── GET /family/events ───────────────────────────────────────────────────────
+
+class _Request:
+    """A request that disconnects after `polls` checks, each preceded by `then`."""
+
+    def __init__(self, polls: int, then=lambda: None):
+        self.polls, self.then = polls, then
+
+    async def is_disconnected(self) -> bool:
+        self.then()
+        self.polls -= 1
+        return self.polls < 0
+
+
+def _stream(request, heartbeat: float = 15.0) -> list[str]:
+    async def collect():
+        return [chunk async for chunk in api._family_events(request, poll=0, heartbeat=heartbeat)]
+    return asyncio.run(collect())
+
+
+def _states(chunks: list[str]) -> list[dict]:
+    assert all(c.startswith("event: state\ndata: ") and c.endswith("\n\n")
+               for c in chunks if not c.startswith(":"))
+    return [json.loads(c.split("data: ", 1)[1]) for c in chunks if not c.startswith(":")]
+
+
+def test_the_stream_opens_with_the_state_as_it_stands(client, pipeline):
+    assert _states(_stream(_Request(polls=0))) == [client.get("/family/state").json()]
+
+
+def test_a_cue_reaches_a_follower_and_so_does_its_take_finishing(client, pipeline):
+    pipeline.release.clear()
+    steps = iter([
+        lambda: client.post("/family/cue", json={"cue": CUE, "action": TAKE}),
+        lambda: (pipeline.release.set(), settled(client)),
+    ])
+
+    states = _states(_stream(_Request(polls=2, then=lambda: next(steps, lambda: None)())))
+
+    assert [(s["cue"], s["state"]["busy"]) for s in states] == [
+        (None, False), (CUE, True), (CUE, False)]
+    assert states[-1] == client.get("/family/state").json()
+    assert states[-1]["state"]["latest"]["events"] == EVENTS
+
+
+def test_a_follower_behind_is_sent_the_newest_state_not_a_backlog(client, pipeline):
+    pipeline.release.clear()
+    second = {**CUE, "number": "4", "name": "Third tune"}
+
+    def two_cues():
+        client.post("/family/cue", json={"cue": CUE, "action": TAKE})
+        client.post("/family/cue", json={"cue": second, "action": TAKE})
+
+    steps = iter([two_cues])
+    states = _states(_stream(_Request(polls=1, then=lambda: next(steps, lambda: None)())))
+    pipeline.release.set()
+
+    assert [s["cue"] for s in states] == [None, second]
+
+
+def test_a_refused_cue_sends_a_follower_nothing(client, pipeline):
+    steps = iter([lambda: client.post("/family/cue", json={"cue": CUE, "action": {"clock": "start"}})])
+
+    chunks = _stream(_Request(polls=1, then=lambda: next(steps, lambda: None)()))
+
+    assert len(chunks) == 1
+
+
+def test_a_quiet_stream_is_kept_open_by_a_comment(client, pipeline):
+    assert _stream(_Request(polls=2), heartbeat=0)[1:] == [": still here\n\n"] * 2
+    assert _stream(_Request(polls=2))[1:] == []  # nothing in under fifteen seconds
+
+
 # ─── End to end: the real API and the real pipeline ───────────────────────────
 
 def _call(method: str, url: str, body: dict | None = None):
@@ -289,9 +432,13 @@ def test_a_cue_s_take_runs_through_the_real_pipeline_and_is_reported(tmp_path):
             assert time.monotonic() < deadline, "the API never answered"
             time.sleep(0.25)
 
+        status, identity = _call("GET", f"{base}/family/identity")
+        assert status == 200 and identity["member"] == "joe" and identity["pid"] == server.pid
+
         status, accepted = _call("POST", f"{base}/family/cue", {"cue": CUE, "action": TAKE})
         assert status == 202, accepted
         assert accepted["ok"] is True and accepted["state"]["busy"] is True
+        assert accepted["instance"] == identity["instance"]
 
         deadline = time.monotonic() + 150
         while True:

@@ -38,6 +38,8 @@ answers 403 while it is off; a fresh joe has only [media] on
     DELETE /api/media/{id}          Removes an upload now  [media]
     POST /family/cue                A hub's cue: a take, synthesized and run through the pipeline  [family]
     GET  /family/state              The last cue taken, the latest take's result, and whether one is running  [family]
+    GET  /family/events             That state as server-sent events: at once, then at every change  [family]
+    GET  /family/identity           What this joe is: its family, the contract it keeps, the running instance  [family]
 
 Run directly, with JOE_ALLOW_<NAME>=1 in the environment for each capability
 to turn on:
@@ -54,6 +56,7 @@ import os
 import subprocess
 import sys
 import threading
+import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
@@ -1095,9 +1098,11 @@ app.include_router(media)
 # ─── The performing family ────────────────────────────────────────────────────
 #
 # The hub (ShowRunner) fires a cue and POSTs joe its part of the cue's family
-# block. Both routes live on this API's port, beside /api, so the hub reaches
-# joe at the address `joe serve --api-port` binds. Modules/Family.py holds the
-# take; these routes only answer for it.
+# block. These are the four routes of the family contract, `family/1`, as
+# hearth's docs/contract.md states it and `hearth check` asks them. They live on
+# this API's port, beside /api, so the hub reaches joe at the address
+# `joe serve --api-port` binds. Modules/Family.py holds the take; these routes
+# only answer for it.
 
 def _run_pipeline(path: Path) -> int:
     """`POST /api/run/{filename}`'s pipeline, from a worker thread: main.py on
@@ -1116,7 +1121,12 @@ def _run_pipeline(path: Path) -> int:
 # the pipeline writes: main.py resolves Data/ against the checkout, whatever
 # this process's working directory.
 family = Family.Member(audio_dir=AUDIO_DIR, output_dir=_PROJECT_ROOT / "Data" / "Output",
-                       run=_run_pipeline)
+                       run=_run_pipeline, version=app.version)
+
+# The contract's GET routes answer a page at any origin, since a follower is
+# often a page served elsewhere. `Access.Guard` still refuses, before routing,
+# what a browser marks as sent from another site.
+_ANY_ORIGIN = {"Access-Control-Allow-Origin": "*"}
 
 
 def _not_understood(error: str) -> JSONResponse:
@@ -1128,10 +1138,11 @@ async def family_cue(request: Request):
     """A hub's cue. Body: `{"cue": {"number", "name", "fired_at"}, "action": {"take":
     {"notes": [...], "seconds_per_note": 0.5}}}`.
 
-    `202` with the state, busy, once the take is accepted: it is synthesized
-    and run through the pipeline after the answer. `422` for anything else --
-    a body that is not JSON, a cue that is not an object, or an action joe
-    does not understand -- and nothing changes.
+    `202` with the state, busy, and this joe's `instance`, once the take is
+    accepted: it is synthesized and run through the pipeline after the answer.
+    `422` for anything else -- a body that is not JSON, a cue that is not an
+    object, or an action joe does not understand -- and `500` if joe fails
+    taking it; either way nothing changes.
     """
     try:
         body = await request.json()
@@ -1139,15 +1150,63 @@ async def family_cue(request: Request):
         return _not_understood("the body must be JSON: {\"cue\": {...}, \"action\": {...}}")
     if not isinstance(body, dict):
         return _not_understood("the body must be an object: {\"cue\": {...}, \"action\": {...}}")
+    member = family
     try:
-        state = family.receive(body.get("cue"), body.get("action"))
+        state = member.receive(body.get("cue"), body.get("action"))
     except Family.NotUnderstood as error:
         return _not_understood(str(error))
-    return JSONResponse(status_code=202, content={"ok": True, "state": state})
+    except Exception as error:  # noqa: BLE001 -- answered in the contract's shape, and logged
+        traceback.print_exc()
+        return JSONResponse(status_code=500, content={
+            "ok": False, "error": f"joe failed acting on the cue: {type(error).__name__}: {error}"})
+    return JSONResponse(status_code=202,
+                        content={"ok": True, "state": state, "instance": member.instance})
 
 
 @app.get("/family/state", dependencies=FAMILY)
 def family_state():
     """The last cue joe took, the latest take's file and note events, and whether
     a take is still running. `error` is the last take's failure, if it failed."""
-    return {"member": "joe", "cue": family.cue, "state": family.state()}
+    return JSONResponse(family.snapshot(), headers=_ANY_ORIGIN)
+
+
+@app.get("/family/identity", dependencies=FAMILY)
+def family_identity():
+    """What this joe is: `{"member", "family", "version", "contract",
+    "conformance", "verbs", "instance", "pid"}`. `instance` is new each time the
+    API starts, and is the one each answer to a cue carries."""
+    return JSONResponse(family.identity(), headers=_ANY_ORIGIN)
+
+
+def _state_event(snapshot: dict) -> str:
+    return f"event: state\ndata: {json.dumps(snapshot)}\n\n"
+
+
+async def _family_events(request: Request, poll: float = 0.05, heartbeat: float = 15.0):
+    """Server-sent events: the state at once, then at every change -- the
+    newest each time, never a backlog -- and a comment while nothing changes,
+    which keeps a quiet stream open."""
+    member = family
+    seen, snapshot = member.latest()
+    yield _state_event(snapshot)
+    quiet_since = time.monotonic()
+    while not await request.is_disconnected():
+        changes, snapshot = member.latest()
+        if changes != seen:
+            seen, quiet_since = changes, time.monotonic()
+            yield _state_event(snapshot)
+        elif time.monotonic() - quiet_since >= heartbeat:
+            quiet_since = time.monotonic()
+            yield ": still here\n\n"
+        await asyncio.sleep(poll)
+
+
+@app.get("/family/events", dependencies=FAMILY)
+async def family_events(request: Request):
+    """`GET /family/state`'s answer as server-sent `state` events: at once, then
+    whenever a cue is taken and whenever its take finishes or fails."""
+    return StreamingResponse(
+        _family_events(request),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", **_ANY_ORIGIN},
+    )

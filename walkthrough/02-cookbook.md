@@ -72,26 +72,29 @@ A substring search would not do: `/api/health` is inside `/api/healthz`.
 
 ### The performing family
 
-A hub firing a show's cues reaches joe on two routes of the API's own port --
+A hub firing a show's cues reaches joe on four routes of the API's own port --
 `--api-port` under `joe serve` -- outside `/api`, so the dev server does not
-proxy them:
+proxy them. They are the routes of the family contract, `family/1`:
 
 ```python
 >>> sorted((method, path) for method, path in served if path.startswith('/family/'))
-[('GET', '/family/state'), ('POST', '/family/cue')]
+[('GET', '/family/events'), ('GET', '/family/identity'), ('GET', '/family/state'), ('POST', '/family/cue')]
 
 ```
 
 | Route | Does |
 | --- | --- |
-| `POST /family/cue` | `{"cue": {...}, "action": {"take": {"notes": ["C4", "E4"], "seconds_per_note": 0.5}}}`: synthesizes the notes into `Data/Audio/` and runs the pipeline on them. `202` with the state at once; `422 {"ok": false, "error": ...}` for anything else, changing nothing |
+| `POST /family/cue` | `{"cue": {...}, "action": {"take": {"notes": ["C4", "E4"], "seconds_per_note": 0.5}}}`: synthesizes the notes into `Data/Audio/` and runs the pipeline on them. `202` with the state and this joe's `instance` at once; `422 {"ok": false, "error": ...}` for anything else, changing nothing |
 | `GET /family/state` | `{"member": "joe", "cue": <the last cue accepted>, "state": {"latest": {"file", "events"} or null, "busy", "error"}}` |
+| `GET /family/events` | That answer as server-sent `state` events: at once, then at every change |
+| `GET /family/identity` | `{"member", "family", "version", "contract": "family/1", "conformance", "verbs", "instance", "pid"}` |
 
-Both belong to the `family` capability, off in a fresh joe: `joe serve` turns
-it on with the rest, and `JOE_ALLOW_FAMILY=1` or `joe backend --allow family`
-does for an API started alone. `tests/test_family.py` holds both to those
-answers, and runs one take through the real API and the real pipeline.
-`docs/api.md` has the details.
+All four belong to the `family` capability, off in a fresh joe: `joe serve`
+turns it on with the rest, and `JOE_ALLOW_FAMILY=1` or `joe backend --allow
+family` does for an API started alone. `tests/test_family.py` holds them to
+those answers, and runs one take through the real API and the real pipeline;
+`tests/test_family_conformance.py` replays the contract's own cases, the ones
+`hearth check` asks of a running joe. `docs/api.md` has the details.
 
 ## Environment
 

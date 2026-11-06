@@ -1,8 +1,9 @@
 # joe as a server
 
 A program using joe over HTTP: a video editor, alfred, through the media API;
-voice tools, vox and qmcp, through the voice routes; and scripts through the
-library's. joe has no authentication -- what it serves, it serves to anything
+voice tools, vox and qmcp, through the voice routes; scripts through the
+library's; and a family's hub through the family routes. joe has no
+authentication -- what it serves, it serves to anything
 that reaches its port -- so each part is a setting, and
 [security.md](../security.md) says what each one exposes.
 [api.md](../api.md) and [media.md](../media.md) have every route and field.
@@ -149,3 +150,49 @@ No test reads `GET /api/results/latest`.
    - test: tests/test_conversation.py::test_the_stream_resumes_after_the_last_event_the_client_saw
    - test: tests/test_history.py::test_a_sentence_said_is_written_from_the_conversation_route
    - test: tests/test_take_audio.py::test_a_recording_outside_joe_s_voice_folder_is_never_served
+
+## 5. Take a hub's cue, as a member of a family
+
+Needs `--allow family` (`JOE_ALLOW_FAMILY=1`). joe keeps the family contract,
+`family/1`, which hearth publishes; [api.md](../api.md#the-performing-family)
+has each route.
+
+1. `GET /family/identity` says what this joe is: its member name and family,
+   the contract it keeps and the version of the contract's cases its suite
+   replays, its verb, `take`, and the running instance, which is new each time
+   the API starts.
+
+   - test: tests/test_family.py::test_the_identity_says_what_joe_is_and_which_contract_it_keeps
+   - test: tests/test_family.py::test_a_joe_started_again_is_another_instance
+
+2. `POST /family/cue` with a cue and a `take` of note names is answered `202`
+   at once, busy, naming the instance that took it. joe synthesizes the notes
+   into `Data/Audio/` and runs the pipeline on that recording after the
+   answer, one take at a time. Anything joe does not understand is `422` and
+   changes nothing, the record of the last cue included.
+
+   - test: tests/test_family.py::test_a_take_is_accepted_at_once_and_reported_when_the_pipeline_is_done
+   - test: tests/test_family.py::test_each_answer_to_a_cue_names_the_instance_the_identity_names
+   - test: tests/test_family.py::test_takes_run_in_turn_and_the_latest_is_the_last
+   - test: tests/test_family.py::test_what_joe_does_not_understand_is_422_and_changes_nothing
+   - test: tests/test_family.py::test_a_cue_joe_fails_taking_is_500_in_the_contract_s_shape_and_changes_nothing
+
+3. `GET /family/state` says the last cue taken, the newest take the pipeline
+   finished, by its file and the note events found in it, whether a take is
+   waiting or running, and the last take's failure if it failed.
+   `GET /family/events` sends the same as it changes: at once, when a cue is
+   taken, and when its take ends. A follower that falls behind is sent the
+   newest state, and a quiet stream is kept open.
+
+   - test: tests/test_family.py::test_state_before_any_cue_names_joe_and_nothing_else
+   - test: tests/test_family.py::test_a_pipeline_that_fails_is_reported_and_keeps_the_last_good_take
+   - test: tests/test_family.py::test_a_cue_reaches_a_follower_and_so_does_its_take_finishing
+   - test: tests/test_family.py::test_a_follower_behind_is_sent_the_newest_state_not_a_backlog
+   - test: tests/test_family.py::test_a_quiet_stream_is_kept_open_by_a_comment
+   - test: tests/test_family.py::test_a_cue_s_take_runs_through_the_real_pipeline_and_is_reported
+
+4. `hearth check <url> --action '{"take": {"notes": ["C4"], "seconds_per_note": 0.25}}'`,
+   from a checkout of hearth, is the contract's own test of a joe that is up.
+   joe's suite replays the same cases over a real socket.
+
+   - test: tests/test_family_conformance.py::test_joe_passes_every_member_case_of_the_pinned_vector_set

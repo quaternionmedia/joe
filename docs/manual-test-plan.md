@@ -71,7 +71,7 @@ Nearest automated check: `tests/test_watch.py`, against scripted levels.
 
 ## 6. One recording, end to end
 
-1. Click **Joe, go!**, choose **Browser**, click **Live**, play or sing a few
+1. Click **Joe, go!**, choose **Browser mic**, click **Live**, play or sing a few
    notes, and click **Live** again.
 2. Expect the recording in **Library**; **Process** it and expect the piano
    roll to switch to **RESULTS** with notes drawn.

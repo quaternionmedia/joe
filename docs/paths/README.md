@@ -13,7 +13,7 @@ what checks it, on lines of its own:
 | --- | --- | --- |
 | [The music page](music-page.md) | A person at joe's page: starting joe, analysing a recording, recording live, arranging the windows | `npx playwright test --grep @music-page` |
 | [The voice loop](voice-loop.md) | A person talking with qmcp through joe, and reading back what was heard | `npx playwright test --grep @voice-loop` |
-| [joe as a server](server.md) | A program: alfred through the media API, vox and qmcp through the voice routes, scripts through the library | `uv run pytest tests/` |
+| [joe as a server](server.md) | A program: alfred through the media API, vox and qmcp through the voice routes, scripts through the library, a family's hub through the family routes | `uv run pytest tests/` |
 
 Every page spec carries the tag of the lane it belongs to:
 

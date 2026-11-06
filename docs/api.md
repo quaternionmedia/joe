@@ -746,14 +746,27 @@ to run it beside alfred.
 ## The performing family
 
 A hub -- ShowRunner, firing a show's cues -- delivers joe its part of a cue's
-`family` block on these two routes. They are on this API's own port, beside
-`/api`, so under `joe serve` the hub reaches them at `--api-port`. The Vite dev
-server does not proxy them.
+`family` block, and joe says what it is and how its takes stand. These are the
+four routes of the family contract, `family/1`, which hearth publishes
+(`docs/contract.md` in quaternionmedia/hearth). They are on this API's own
+port, beside `/api`, so under `joe serve` the hub reaches them at `--api-port`.
+The Vite dev server does not proxy them.
 
 Their capability is `family`, off in a fresh joe: `joe serve` turns it on with
 the rest, and `JOE_ALLOW_FAMILY=1` or `joe backend --allow family` does for an
-API started alone. While it is off both answer `403`, as every capability's
+API started alone. While it is off all four answer `403`, as every capability's
 routes do.
+
+The three `GET` routes answer with `Access-Control-Allow-Origin: *`, as the
+contract asks, so a follower's page served on another port of this machine
+reads them. A request a browser marks as sent from another site is still
+refused before routing, as it is for every route
+([security.md](security.md#requests-from-a-browser)).
+
+`hearth check <url> --action '{"take": {"notes": ["C4"], "seconds_per_note": 0.25}}'`
+is the contract's own test of a running joe. `tests/test_family_conformance.py`
+replays the same cases in joe's suite, at the version of hearth's vector set
+that joe's identity names.
 
 ### `POST /family/cue`
 
@@ -773,15 +786,17 @@ their cues came.
 `notes` is 1 to 16 note names (`C4`, `F#3`, `Bb2`; C4 is MIDI 60).
 `seconds_per_note` is 0.1 to 4, and 0.5 when left out.
 
-**Response** — `202 Accepted`, with the state as it stands, busy:
+**Response** — `202 Accepted`, with the state as it stands, busy, and the
+running joe that took the cue, as its identity names it:
 
 ```json
-{"ok": true, "state": {"latest": null, "busy": true, "error": null}}
+{"ok": true, "state": {"latest": null, "busy": true, "error": null}, "instance": "3f9a1c0b7e2d"}
 ```
 
 | Status | Reason |
 | --- | --- |
 | `422` | `{"ok": false, "error": "..."}`: a body that is not a JSON object, a `cue` that is not an object, or an action that is not exactly a `take` joe can play. Nothing changes, not even the last cue |
+| `500` | `{"ok": false, "error": "..."}`: the cue was understood and joe failed taking it. Nothing changes. A take that fails after the answer is in the state's `error` instead |
 
 **curl**
 
@@ -814,6 +829,52 @@ keeps the take before it.
 
 ```bash
 curl http://localhost:8000/family/state
+```
+
+### `GET /family/events`
+
+`GET /family/state`'s answer as server-sent events, so a follower needs no
+polling: a `state` event at once, then one whenever a cue is taken and
+whenever its take finishes or fails.
+
+**Response** — `200 OK`, `text/event-stream`
+
+```text
+event: state
+data: {"member": "joe", "cue": {"number": "3", ...}, "state": {"latest": null, "busy": true, "error": null}}
+
+: still here
+```
+
+A follower that falls behind is sent the newest state, never a backlog. A
+comment every fifteen seconds keeps a quiet stream open.
+
+**curl**
+
+```bash
+curl -N http://localhost:8000/family/events
+```
+
+### `GET /family/identity`
+
+What this joe is, so a hub can tell it from anything else answering the port.
+
+**Response** — `200 OK`
+
+```json
+{"member": "joe", "family": "performer-display", "version": "0.1.0", "contract": "family/1",
+ "conformance": "0.0.1", "verbs": ["take"], "instance": "3f9a1c0b7e2d", "pid": 41234}
+```
+
+`verbs` are the keys of the actions joe takes. `instance` is new each time the
+API starts, and each answer to a cue carries it, so a hub never credits a
+delivery to the joe before a restart. `conformance` is the version of hearth's
+vector set joe's suite replays, and `version` the API's own.
+
+**curl**
+
+```bash
+curl http://localhost:8000/family/identity
 ```
 
 ---

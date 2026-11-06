@@ -10,18 +10,33 @@ naming the file and how many note events the pipeline found in it.
 
 Takes run one at a time, in the order the cues came. A cue that is not
 understood is refused whole and changes nothing, not even the last cue.
+
+These are the routes of the family contract, `family/1`, which hearth
+publishes (its docs/contract.md). Beside the cue and the state, joe says what
+it is (`identity`), names the running joe that took each cue (`instance`), and
+tells a follower the state at every change (`latest`).
 """
 
 from __future__ import annotations
 
 import io
 import json
+import os
 import queue
 import re
 import threading
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
+
+CONTRACT = "family/1"
+# The version of the contract's vector set joe's suite replays
+# (tests/test_family_conformance.py).
+CONFORMANCE = "0.0.1"
+NAME = "joe"
+FAMILY = "performer-display"
+VERBS = ("take",)
 
 NOTE = re.compile(r"^([A-G])([#b]?)(-?\d)$")
 SEMITONE = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
@@ -120,13 +135,21 @@ class Member:
 
     `run(path)` runs the pipeline on one recording and returns its exit
     status; `output_dir` is where the pipeline writes its Process_Data.
+    `version` is the API's own.
     """
 
-    def __init__(self, audio_dir: Path, output_dir: Path, run: Callable[[Path], int]):
+    def __init__(self, audio_dir: Path, output_dir: Path, run: Callable[[Path], int],
+                 version: str = "0"):
         self.audio_dir = Path(audio_dir)
         self.output_dir = Path(output_dir)
         self.run = run
+        self.version = version
+        # This running joe, new at every start: each answer to a cue carries it,
+        # so a hub never credits a delivery to the joe before a restart.
+        self.instance = uuid.uuid4().hex[:12]
         self.cue: dict | None = None
+        # How many times the cue or the state has changed, for a follower.
+        self._changes = 0
         self._latest: dict | None = None
         self._error: str | None = None
         self._pending = 0
@@ -134,12 +157,32 @@ class Member:
         self._takes: queue.Queue = queue.Queue()
         self._worker: threading.Thread | None = None
 
+    def identity(self) -> dict:
+        """What this joe is, so a reader can tell it from anything else on the port."""
+        return {"member": NAME, "family": FAMILY, "version": self.version,
+                "contract": CONTRACT, "conformance": CONFORMANCE, "verbs": list(VERBS),
+                "instance": self.instance, "pid": os.getpid()}
+
     def state(self) -> dict:
         with self._lock:
             return self._state()
 
+    def snapshot(self) -> dict:
+        """The last cue taken and the state, as `GET /family/state` answers."""
+        with self._lock:
+            return self._snapshot()
+
+    def latest(self) -> tuple[int, dict]:
+        """The count of changes so far and the snapshot now, read together: a
+        follower sends the snapshot on whenever the count has moved."""
+        with self._lock:
+            return self._changes, self._snapshot()
+
     def _state(self) -> dict:
         return {"latest": self._latest, "busy": self._pending > 0, "error": self._error}
+
+    def _snapshot(self) -> dict:
+        return {"member": NAME, "cue": self.cue, "state": self._state()}
 
     def receive(self, cue, action) -> dict:
         """Accept a cue's take and start it, returning the state; or NotUnderstood."""
@@ -147,13 +190,17 @@ class Member:
             raise NotUnderstood("cue must be an object: number, name and fired_at")
         midi, seconds = parse_take(action)
         with self._lock:
-            self.cue = cue
-            self._pending += 1
-            self._takes.put((cue, midi, seconds))
             if self._worker is None:
                 # One worker for the life of the process, so takes run in turn.
-                self._worker = threading.Thread(target=self._work, name="joe-family", daemon=True)
-                self._worker.start()
+                # Started before the cue is recorded: a cue joe fails to act on
+                # changes nothing either.
+                worker = threading.Thread(target=self._work, name="joe-family", daemon=True)
+                worker.start()
+                self._worker = worker
+            self.cue = cue
+            self._pending += 1
+            self._changes += 1
+            self._takes.put((cue, midi, seconds))
             return self._state()
 
     def _work(self) -> None:
@@ -168,6 +215,7 @@ class Member:
                     self._latest = latest
                 self._error = error
                 self._pending -= 1
+                self._changes += 1
 
     def _take(self, cue: dict, midi: list[int], seconds: float) -> dict:
         number = re.sub(r"[^A-Za-z0-9.-]", "-", str(cue.get("number", "")))[:16].strip(".") or "none"

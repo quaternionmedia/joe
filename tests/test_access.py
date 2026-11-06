@@ -53,6 +53,8 @@ ROUTES = {
     ("POST", "/api/voice/transcribe"): "library",
     ("POST", "/family/cue"): "family",
     ("GET", "/family/state"): "family",
+    ("GET", "/family/events"): "family",
+    ("GET", "/family/identity"): "family",
 }
 
 
