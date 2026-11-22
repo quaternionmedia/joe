@@ -2,8 +2,9 @@
 
 Sound is generated with numpy and written with soundfile; containers and codecs
 are made by the same ffmpeg joe runs (`Modules.Media.ffmpeg_path`), and the
-tests needing one skip when there is none. Speech, for the one test that runs
-the real whisper model, is synthesized by the platform's own speech engine.
+tests needing one skip when there is none. Voices are synthetic talkers
+(`talker`), or, for the test that runs the real whisper model and the tests
+of the speakers against real speech, the platform's own speech engine's.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 import soundfile as sf
+from scipy import signal
 
 from Modules import Media
 
@@ -52,6 +54,59 @@ def silence_tone_silence(rate: int = 44100, channels: int = 2) -> np.ndarray:
     (-6.02 dBFS peak), and one more of silence."""
     y = np.concatenate([np.zeros(rate, np.float32), tone(1.0, rate), np.zeros(rate, np.float32)])
     return np.stack([y] * channels, axis=1) if channels > 1 else y
+
+
+# ─── Voices ───────────────────────────────────────────────────────────────────
+
+# Three talkers, each a pitch and three formant resonances (centre Hz,
+# bandwidth Hz, gain): a low voice, a high one, and one between.
+LOW = dict(f0=105.0, formants=((550, 80, 1.0), (1150, 110, 0.8), (2450, 150, 0.6)))
+HIGH = dict(f0=235.0, formants=((850, 90, 1.0), (1950, 130, 0.7), (3000, 180, 0.5)))
+MID = dict(f0=160.0, formants=((700, 90, 1.0), (1500, 120, 0.8), (2700, 160, 0.5)))
+TALKERS = {"A": LOW, "B": HIGH, "C": MID}
+
+
+def talker(seconds: float, rate: int, f0: float, formants, seed: int, level: float = 0.3) -> np.ndarray:
+    """A stand-in for a voice: syllables of a sawtooth at `f0`, jittered a little
+    and wobbled, through formant resonators, each with an attack, a decay and a
+    short gap after it. Deterministic for a seed."""
+    rng = np.random.default_rng(seed)
+    n = int(round(seconds * rate))
+    out = np.zeros(n, dtype=np.float64)
+    t = 0
+    while t < n:
+        length = int(rng.uniform(0.10, 0.28) * rate)
+        # The last syllable ends at `seconds` exactly, so the voice fills its turn.
+        if n - t - length < int(0.12 * rate):
+            length = n - t
+        wobble = 1 + 0.03 * np.sin(2 * np.pi * rng.uniform(3, 6) * np.arange(length) / rate)
+        phase = np.cumsum(f0 * (1 + rng.uniform(-0.06, 0.06)) * wobble) / rate
+        saw = 2 * (phase % 1.0) - 1.0
+        y = saw.copy()
+        for centre, bandwidth, gain in formants:
+            b, a = signal.iirpeak(centre / (rate / 2), centre / bandwidth)
+            y += gain * signal.lfilter(b, a, saw)
+        ramp = np.arange(length)
+        y *= np.minimum(1.0, ramp / (0.02 * rate)) * np.minimum(1.0, (length - ramp) / (0.04 * rate))
+        out[t:t + length] += y / (np.abs(y).max() + 1e-9) * level * rng.uniform(0.6, 1.0)
+        t += length
+        if t < n:
+            t += int(rng.uniform(0.02, 0.09) * rate)
+    return out.astype(np.float32)
+
+
+def conversation(turns, rate: int = 16000, gap: float = 0.3, seed: int = 0):
+    """Talkers taking turns: `turns` is `[(seconds, "A" | "B" | "C")]`, with `gap`
+    seconds of silence before each turn and after the last. Returns the samples
+    and each turn as `(start, end, who)`, in seconds."""
+    pieces, times, t = [], [], 0.0
+    for i, (seconds, who) in enumerate(turns):
+        pieces += [np.zeros(int(gap * rate), np.float32), talker(seconds, rate, seed=seed + i, **TALKERS[who])]
+        t += gap
+        times.append((round(t, 3), round(t + seconds, 3), who))
+        t += seconds
+    pieces.append(np.zeros(int(gap * rate), np.float32))
+    return np.concatenate(pieces), times
 
 
 # ─── ffmpeg ───────────────────────────────────────────────────────────────────
@@ -133,27 +188,43 @@ def video_with_late_audio(ffmpeg: str, folder: Path) -> Path:
 # ─── Speech ───────────────────────────────────────────────────────────────────
 
 
-def synthesize_speech(text: str, out: Path) -> Path:
+# espeak's variants for the platform's first and second voice: a male and a
+# female one.
+ESPEAK_VOICES = ("en+m3", "en+f3")
+
+
+def synthesize_speech(text: str, out: Path, voice: int | None = None) -> Path:
     """`text` spoken by the platform's speech engine into a 16 kHz mono WAV:
-    Windows' own SAPI voices, or espeak-ng/espeak elsewhere. Skips when there
-    is none -- speech is not faked."""
+    Windows' own SAPI voices, or espeak-ng/espeak elsewhere. `voice` picks the
+    engine's voices by number -- SAPI's installed voices in the order of their
+    names, espeak's `ESPEAK_VOICES` -- and None its default. Skips when there is
+    no engine, or no such voice -- speech is not faked."""
     if sys.platform == "win32" and shutil.which("powershell"):
+        choose = "" if voice is None else (
+            "$names = @($s.GetInstalledVoices() | ForEach-Object { $_.VoiceInfo.Name } | Sort-Object);"
+            f"if ($names.Count -le {voice}) {{ exit 3 }}; $s.SelectVoice($names[{voice}]);"
+        )
         script = (
             "Add-Type -AssemblyName System.Speech;"
             "$s = New-Object System.Speech.Synthesis.SpeechSynthesizer;"
             "$f = New-Object System.Speech.AudioFormat.SpeechAudioFormatInfo(16000,"
             " [System.Speech.AudioFormat.AudioBitsPerSample]::Sixteen,"
             " [System.Speech.AudioFormat.AudioChannel]::Mono);"
-            f"$s.SetOutputToWaveFile('{out}', $f); $s.Speak('{text}'); $s.Dispose()"
+            f"{choose}$s.SetOutputToWaveFile('{out}', $f); $s.Speak('{text}'); $s.Dispose()"
         )
         done = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
                               capture_output=True, text=True, check=False, timeout=120)
+        if done.returncode == 3:
+            pytest.skip(f"this machine's speech engine has no voice {voice}")
         if done.returncode == 0 and out.exists() and out.stat().st_size > 1000:
             return out
     for engine in ("espeak-ng", "espeak"):
         found = shutil.which(engine)
         if found:
-            done = subprocess.run([found, "-w", str(out), text], capture_output=True, check=False)
+            if voice is not None and voice >= len(ESPEAK_VOICES):
+                pytest.skip(f"espeak is given {len(ESPEAK_VOICES)} voices here, not a voice {voice}")
+            chosen = [] if voice is None else ["-v", ESPEAK_VOICES[voice]]
+            done = subprocess.run([found, *chosen, "-w", str(out), text], capture_output=True, check=False)
             if done.returncode == 0 and out.exists():
                 return out
     pytest.skip("no speech synthesizer here (Windows SAPI, espeak-ng or espeak) to make speech with")

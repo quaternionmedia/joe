@@ -733,7 +733,7 @@ in short:
 | `GET /api/media/capabilities` | `{"formats", "features", "speech_model", "word_timestamps", "max_bytes", "max_seconds", "ttl_seconds"}` |
 | `POST /api/media` | Raw audio or video body, typed by `Content-Type` -> `201 {"media_id", "duration", "sample_rate", "channels", "has_audio"}`; `415`, `413`, `422`, `503` |
 | `POST /api/media/{media_id}/transcribe?language=&words=true` | `{"text", "language", "segments": [{"start", "end", "text", "words"}], "info"}` |
-| `POST /api/media/{media_id}/analyze?features=...` | `{"duration", "tempo", "beats", "onsets", "loudness", "silences", "peaks"}` |
+| `POST /api/media/{media_id}/analyze?features=...` | `{"duration", "tempo", "beats", "onsets", "loudness", "silences", "peaks", "speakers"}` |
 | `DELETE /api/media/{media_id}` | `204`; `404` for one that is not here |
 
 Its capability is `media`, on in a fresh joe. Every failure there is `{"detail": str}`.

@@ -34,7 +34,7 @@ answers 403 while it is off; a fresh joe has only [media] on
     GET  /api/media/capabilities    What the media API takes and does (docs/media.md)  [media]
     POST /api/media                 Takes audio or video and keeps its sound for a while  [media]
     POST /api/media/{id}/transcribe What is said in an upload, with segment and word times  [media]
-    POST /api/media/{id}/analyze    Tempo, beats, onsets, loudness, silences and peaks of an upload  [media]
+    POST /api/media/{id}/analyze    Tempo, beats, onsets, loudness, silences, peaks and speakers of an upload  [media]
     DELETE /api/media/{id}          Removes an upload now  [media]
 
 Run directly, with JOE_ALLOW_<NAME>=1 in the environment for each capability
@@ -1014,7 +1014,7 @@ async def media_upload(request: Request):
 
 
 # The analysis's answer, in V1's order: every key but `duration` is a feature's.
-_ANALYSIS_KEYS = ("tempo", "beats", "onsets", "loudness", "silences", "peaks")
+_ANALYSIS_KEYS = ("tempo", "beats", "onsets", "loudness", "silences", "peaks", "speakers")
 
 
 def _features(asked: str | None) -> list[str]:
@@ -1039,20 +1039,22 @@ async def media_analyze(
     silence_db: float = Query(Analysis.DEFAULT_SILENCE_DB, ge=-120.0, le=0.0),
     silence_min: float = Query(Analysis.DEFAULT_SILENCE_MIN, gt=0.0, le=3600.0),
 ):
-    """`{"duration", "tempo", "beats", "onsets", "loudness", "silences", "peaks"}`,
-    with only the features asked for. Times are seconds of the uploaded media.
+    """`{"duration", "tempo", "beats", "onsets", "loudness", "silences", "peaks",
+    "speakers"}`, with only the features asked for. Times are seconds of the
+    uploaded media.
 
     `peaks_rate` is the waveform's values per second; `silence_db` and
-    `silence_min` are the level a silence stays under and how long it lasts.
-    Measured on the media threads.
+    `silence_min` are the level a silence stays under and how long it lasts,
+    and `silence_db` is the floor under which nobody is speaking. Measured on
+    the media threads.
     """
     wanted = _features(features)
 
     def analyze() -> dict:
         with media_store.use(media_id) as item:
             found = Analysis.analyze(
-                item.sound, item.rhythm, wanted, peaks_rate=peaks_rate, silence_db=silence_db,
-                silence_min=silence_min, ffmpeg=Media.ffmpeg_path(),
+                item.sound, item.rhythm, wanted, speech=item.speech, peaks_rate=peaks_rate,
+                silence_db=silence_db, silence_min=silence_min, ffmpeg=Media.ffmpeg_path(),
             )
         return {"duration": item.duration, **{key: found[key] for key in _ANALYSIS_KEYS if key in found}}
 

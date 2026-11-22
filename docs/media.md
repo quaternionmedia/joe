@@ -7,8 +7,9 @@
 
 joe is the audio engine of a video pipeline. A video editor (alfred) sends it a
 clip, or a timeline's mixed sound, and asks what is said in it and when
-(captions), and how it moves: tempo, beats, onsets, loudness, silences and a
-waveform. The routes live under `/api/media`, independent of the voice API,
+(captions), how it moves: tempo, beats, onsets, loudness, silences and a
+waveform -- and who is speaking when, by the sound alone. The routes live
+under `/api/media`, independent of the voice API,
 `/api/audio/upload` and `/api/voice/transcribe`.
 
 An upload is answered with an id; everything after is asked by that id:
@@ -16,7 +17,7 @@ An upload is answered with an id; everything after is asked by that id:
 ```text
 POST   /api/media                        -> 201 {"media_id", "duration", "sample_rate", "channels", "has_audio"}
 POST   /api/media/{media_id}/transcribe  -> {"text", "language", "segments", "info"}
-POST   /api/media/{media_id}/analyze     -> {"duration", "tempo", "beats", "onsets", "loudness", "silences", "peaks"}
+POST   /api/media/{media_id}/analyze     -> {"duration", "tempo", "beats", "onsets", "loudness", "silences", "peaks", "speakers"}
 DELETE /api/media/{media_id}             -> 204
 GET    /api/media/capabilities           -> {"formats", "features", "speech_model", "word_timestamps", ...}
 ```
@@ -118,8 +119,9 @@ each address beyond loopback, once.
 Each upload is a directory under `JOE_MEDIA_DIR`, named by a random 128-bit id,
 the only way to reach it: no route lists uploads. ffmpeg decodes the first
 audio stream once into three WAVs: the sound at its own rate and channel count
-(levels, silences, peaks), 16 kHz mono (whisper) and 22050 Hz mono (librosa's
-beat tracker). The upload itself is deleted as soon as its sound is out.
+(levels, silences, peaks), 16 kHz mono (whisper, and the speakers) and 22050 Hz
+mono (librosa's beat tracker). The upload itself is deleted as soon as its sound
+is out.
 Nothing is loudness-normalised: "normalised" means one format, never one
 level. A sound track that starts after its video is padded with silence to
 its start, so its times are the video's.
@@ -150,7 +152,7 @@ curl http://localhost:8010/api/media/capabilities
               "audio/ogg", "audio/vnd.wave", "audio/wav", "audio/wave", "audio/webm", "audio/x-aac",
               "audio/x-flac", "audio/x-m4a", "audio/x-wav", "video/matroska", "video/mp4",
               "video/quicktime", "video/webm", "video/x-matroska"],
-  "features": ["tempo", "beats", "onsets", "loudness", "silence", "peaks"],
+  "features": ["tempo", "beats", "onsets", "loudness", "silence", "peaks", "speakers"],
   "speech_model": "whisper-base",
   "word_timestamps": true,
   "max_bytes": 1073741824,
@@ -276,9 +278,9 @@ a `422`; `language` is judged after.
 
 | Query | Default | |
 | --- | --- | --- |
-| `features` | all six | Comma-separated: `tempo`, `beats`, `onsets`, `loudness`, `silence`, `peaks` |
+| `features` | every one | Comma-separated: `tempo`, `beats`, `onsets`, `loudness`, `silence`, `peaks`, `speakers` |
 | `peaks_rate` | `50` | Waveform values per second, `1..1000` |
-| `silence_db` | `-40` | The level, in dBFS, a silence stays under, `-120..0` |
+| `silence_db` | `-40` | The level, in dBFS, a silence stays under, and nobody speaks under, `-120..0` |
 | `silence_min` | `0.5` | The shortest silence reported, in seconds, `0 < s <= 3600` |
 
 ```bash
@@ -303,9 +305,9 @@ curl -X POST "http://localhost:8010/api/media/f934079ba002a614c6a0e6d710ca124f/a
 }
 ```
 
-`duration` always comes first, then only the features asked for, in this
-order: `features=loudness,silence` answers `{"duration", "loudness",
-"silences"}`. The feature is `silence`; its answer is `silences`.
+`duration` always comes first, then only the features asked for, in the order
+of the table below: `features=loudness,silence` answers `{"duration",
+"loudness", "silences"}`. The feature is `silence`; its answer is `silences`.
 
 | Key | What it is |
 | --- | --- |
@@ -317,6 +319,7 @@ order: `features=loudness,silence` answers `{"duration", "loudness",
 | `loudness.lufs` | Integrated loudness (EBU R128 / ITU-R BS.1770) by ffmpeg's `ebur128`; `null` for silence, which the meter cannot integrate, or when ffmpeg cannot run |
 | `silences` | Spans whose 10 ms RMS stays under `silence_db` for at least `silence_min` seconds, `{"start", "end"}` |
 | `peaks` | `{"rate", "values"}`: window `i` covers `[i/rate, (i+1)/rate)` seconds, and its value is the largest absolute sample in it over all channels, as a fraction of full scale -- absolute, not scaled to the loudest window, so a quiet clip draws quiet. `ceil(duration * rate)` values |
+| `speakers` | `{"count", "turns"}`: how many voices were heard, and the turns, each `{"start", "end", "speaker"}` with the speaker a letter -- `"A"` for the first voice heard, `"B"` for the next -- the same for one voice throughout the analysis, and nobody's name ([Who is speaking](#who-is-speaking)) |
 
 Levels are floored at -120 dBFS, so digital silence reads `-120.0`, never
 minus infinity. LUFS is gated, per BS.1770: a second of tone between two of
@@ -324,16 +327,75 @@ silence reads the tone's loudness, not a third of it.
 
 Tempo, beats and onsets are read from the 22050 Hz mono copy with a 256-sample
 hop; levels, silences and peaks from the sound at its own rate, so a peak is a
-sample that was there. Nothing holds a whole signal in memory: an hour of 48
-kHz stereo is read in blocks, with the results librosa gives on the whole
-signal (`Modules/Analysis.py`).
+sample that was there; the speakers from the 16 kHz mono copy. Nothing holds a
+whole signal in memory: an hour of 48 kHz stereo is read in blocks, with the
+results librosa gives on the whole signal (`Modules/Analysis.py`,
+`Modules/Speakers.py`).
+
+### Who is speaking
+
+`features=speakers` answers who is speaking when, told apart by the sound
+alone -- never by the words, which `transcribe` answers. Two voices reading
+sentences in turn, with a short silence between:
+
+```json
+{
+  "duration": 24.18,
+  "speakers": {
+    "count": 2,
+    "turns": [
+      {"start": 0.53, "end": 3.46, "speaker": "A"},
+      {"start": 4.77, "end": 7.75, "speaker": "B"},
+      {"start": 9.0, "end": 11.88, "speaker": "A"},
+      {"start": 13.21, "end": 16.05, "speaker": "B"},
+      {"start": 17.43, "end": 19.52, "speaker": "A"},
+      {"start": 20.82, "end": 23.02, "speaker": "B"}
+    ]
+  }
+}
+```
+
+A turn is a stretch in which one voice is heard; it ends at a pause of a
+second or more, or where another voice takes over. The speaker is a letter:
+`"A"` is the first voice heard, `"B"` the next, and one voice keeps its
+letter throughout one analysis. **No letter is a name.** joe hears that two
+stretches are the same voice, never whose; putting a name to a letter is a
+person's, in the program that asked. `count` is how many letters there are.
+Silence, and anything under `silence_db`, is nobody: a silent upload answers
+`{"count": 0, "turns": []}`.
+
+Each voice is a point in a small space -- its timbre, the long-term spectral
+envelope as mel-frequency cepstral coefficients, and its median pitch --
+measured over pieces of speech about a sentence long, and pieces closer than
+a fixed distance are one voice. The number of voices is read off the sound
+that way, not given. Inside a stretch where the voice changes without a pause,
+the change is placed frame by frame, to within about half a second.
+
+What it cannot do:
+
+- **It does not know who.** Nothing here recognises a person, and no upload
+  is compared with another: the letters of one analysis mean nothing in the
+  next.
+- **Voices that sound alike read as one.** Two voices of the same sex with a
+  similar pitch and timbre -- within a few semitones, with the same colour --
+  are one letter. Voices a few semitones apart with a different timbre, or a
+  man's and a woman's, are told apart.
+- **Music is not a speaker, and joe does not tell it from one.** Anything
+  over the floor is taken for a voice: a stretch of music alone is lettered,
+  and music or noise under speech colours the voice over it, so a voice over
+  music and the same voice without it can be two letters.
+- **Overlapping voices are one letter or the other**, never both, and a
+  voice heard for under half a second is folded into the turn beside it.
+
+The speakers are read from the 16 kHz mono copy, in blocks, and quickly:
+well under the time a transcript takes.
 
 **Errors:** `404` for an id that is not here. `422` for an unknown feature
 (`unknown feature 'pitch'; joe measures tempo, beats, onsets, loudness,
-silence, peaks`) or a parameter out of bounds (`peaks_rate: Input should be
-greater than or equal to 1`) or not a number (`peaks_rate: Input should be a
-valid integer, unable to parse string as an integer`). Both are judged before
-the id is looked up, so an unknown id with either is a `422`.
+silence, peaks, speakers`) or a parameter out of bounds (`peaks_rate: Input
+should be greater than or equal to 1`) or not a number (`peaks_rate: Input
+should be a valid integer, unable to parse string as an integer`). Both are
+judged before the id is looked up, so an unknown id with either is a `422`.
 
 ## `DELETE /api/media/{media_id}`
 
@@ -354,9 +416,13 @@ uploaded, expired, or already deleted:
 
 `uv run pytest tests/` runs the media tests with the rest.
 
-- They make their media at test time: click tracks, a tone between silences
-  and a quiet room with numpy; every container and codec with ffmpeg. Nothing
-  binary is committed.
+- They make their media at test time: click tracks, a tone between silences,
+  a quiet room and three synthetic talkers of different pitch and timbre with
+  numpy; every container and codec with ffmpeg. Nothing binary is committed.
+- The speakers are also tried on real speech where the platform's own speech
+  engine has two voices (Windows' SAPI voices, or espeak's variants): one
+  voice reading six sentences is one speaker, two reading in turn are two.
+  Those tests skip elsewhere.
 - What needs ffmpeg skips when there is none (`JOE_FFMPEG`).
 - Whisper is a stand-in except in one test, marked `whisper_model`. It runs
   the real base model from this machine's cache (skipping rather than

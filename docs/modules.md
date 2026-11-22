@@ -127,10 +127,10 @@ joe has no authentication; `Access` stands in for it ([security.md](security.md)
 
 ## Media and Analysis (the video pipeline's audio engine)
 
-Beside the pipeline above, two modules answer a video editor over `/api/media`
+Beside the pipeline above, three modules answer a video editor over `/api/media`
 ([media.md](media.md)):
 
-`api.py /api/media` -> `Media.extract` (ffmpeg) -> `MediaStore` -> `Media.transcribe` (whisper) | `Analysis.analyze` (librosa, ffmpeg)
+`api.py /api/media` -> `Media.extract` (ffmpeg) -> `MediaStore` -> `Media.transcribe` (whisper) | `Analysis.analyze` (librosa, ffmpeg) -> `Speakers.turns` (librosa)
 
 - `Media` decodes an upload's first audio stream once with ffmpeg into three
   WAVs -- the sound at its own rate and channels, 16 kHz mono for whisper,
@@ -144,3 +144,8 @@ Beside the pipeline above, two modules answer a video editor over `/api/media`
   silent spans and a waveform's peaks. It reads a block at a time, so an hour
   of sound is never held whole, and gives the results librosa gives on the
   whole signal.
+- `Speakers` tells who is speaking when, by the sound alone: each piece of
+  speech is a point -- its timbre as mel-frequency cepstral coefficients and
+  its median pitch -- and pieces closer than a fixed distance are one voice,
+  so the number of voices is read off the sound. It answers the turns, each
+  voice a letter and none a name, and reads the 16 kHz mono copy in blocks.
