@@ -18,7 +18,7 @@ import api
 from Modules import Analysis, Media
 from Modules.Media import MediaStore
 from tests.media_fixtures import (
-    KINDS, click_track, ffmpeg_make, ffmpeg_or_skip, make_kind, silence_tone_silence,
+    KINDS, click_track, conversation, ffmpeg_make, ffmpeg_or_skip, make_kind, silence_tone_silence,
     video_with_late_audio, video_without_audio, write_wav,
 )
 
@@ -265,11 +265,11 @@ def test_an_analysis_answers_every_feature_in_v1_s_shape(client, ffmpeg, tmp_pat
     media_id = upload_file(client, path, "audio/wav")["media_id"]
 
     res = client.post(f"/api/media/{media_id}/analyze",
-                      params={"features": "tempo,beats,onsets,loudness,silence,peaks"})
+                      params={"features": "tempo,beats,onsets,loudness,silence,peaks,speakers"})
 
     assert res.status_code == 200, res.text
     body = res.json()
-    assert list(body) == ["duration", "tempo", "beats", "onsets", "loudness", "silences", "peaks"]
+    assert list(body) == ["duration", "tempo", "beats", "onsets", "loudness", "silences", "peaks", "speakers"]
     assert body["duration"] == 3.0
     assert body["tempo"] is None or isinstance(body["tempo"], float)
     assert all(isinstance(t, float) for t in body["beats"] + body["onsets"])
@@ -283,6 +283,7 @@ def test_an_analysis_answers_every_feature_in_v1_s_shape(client, ffmpeg, tmp_pat
     assert body["peaks"]["rate"] == Analysis.DEFAULT_PEAKS_RATE
     values = body["peaks"]["values"]
     assert len(values) == 150 and values[:50] == [0.0] * 50 and values[50:100] == [0.5] * 50
+    assert set(body["speakers"]) == {"count", "turns"}
 
 
 def test_no_features_named_is_every_feature(client, ffmpeg, tmp_path):
@@ -291,7 +292,7 @@ def test_no_features_named_is_every_feature(client, ffmpeg, tmp_path):
 
     for params in ({}, {"features": ""}):
         body = client.post(f"/api/media/{media_id}/analyze", params=params).json()
-        assert list(body) == ["duration", "tempo", "beats", "onsets", "loudness", "silences", "peaks"]
+        assert list(body) == ["duration", "tempo", "beats", "onsets", "loudness", "silences", "peaks", "speakers"]
 
 
 def test_a_click_track_s_tempo_through_upload_and_analysis(client, ffmpeg, tmp_path):
@@ -304,6 +305,23 @@ def test_a_click_track_s_tempo_through_upload_and_analysis(client, ffmpeg, tmp_p
     assert body["tempo"] == pytest.approx(120, rel=0.02)
     beats = np.array(body["beats"])
     assert np.abs(beats[:, None] - clicks[None, :]).min(axis=1).max() < 0.04
+
+
+def test_who_is_speaking_when_through_upload_and_analysis(client, ffmpeg, tmp_path):
+    """Two synthetic voices in a stereo upload at 44.1 kHz: the speakers are
+    read from the 16 kHz mono speech copy, in the upload's own seconds."""
+    samples, expected = conversation([(1.5, "A"), (1.2, "B"), (1.8, "A")], rate=44100)
+    stereo = np.stack([samples, samples], axis=1)
+    media_id = upload_file(client, write_wav(tmp_path / "talk.wav", stereo, 44100), "audio/wav")["media_id"]
+
+    body = client.post(f"/api/media/{media_id}/analyze", params={"features": "speakers"}).json()
+
+    assert list(body) == ["duration", "speakers"]
+    assert body["speakers"]["count"] == 2
+    assert [t["speaker"] for t in body["speakers"]["turns"]] == ["A", "B", "A"]
+    for turn, (start, end, _) in zip(body["speakers"]["turns"], expected):
+        assert turn["start"] == pytest.approx(start, abs=0.1)
+        assert turn["end"] == pytest.approx(end, abs=0.1)
 
 
 def test_only_the_features_asked_for_are_answered(client, ffmpeg, tmp_path):

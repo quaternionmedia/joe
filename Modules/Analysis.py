@@ -1,6 +1,6 @@
 """Analysis: what a piece of media's sound does over time, for the video pipeline.
 
-Six features, each named by the media API's `features` parameter:
+The features, each named by the media API's `features` parameter:
 
 - `tempo` and `beats` -- librosa's beat tracker: its tempo estimate in beats
   per minute and the beat times it tracks;
@@ -10,13 +10,16 @@ Six features, each named by the media API's `features` parameter:
   loudness in LUFS (ITU-R BS.1770, through ffmpeg's `ebur128` filter);
 - `silence` -- the spans whose level stays under a threshold for at least a
   minimum length;
-- `peaks` -- a waveform: the loudest sample in each window, at a stated rate.
+- `peaks` -- a waveform: the loudest sample in each window, at a stated rate;
+- `speakers` -- who is speaking when, told apart by the sound alone and
+  lettered, never named (`Modules.Speakers`).
 
-**Two copies of one sound.** Levels, silences and peaks are read from the sound
-at its own rate and channel count (`sound`), so a peak is the sample that was
-there. Tempo, beats and onsets are read from a 22050 Hz mono copy (`rhythm`):
-the rate librosa's beat tracker and its defaults are made for. `Modules.Media`
-writes both when a file is uploaded.
+**Three copies of one sound.** Levels, silences and peaks are read from the
+sound at its own rate and channel count (`sound`), so a peak is the sample that
+was there. Tempo, beats and onsets are read from a 22050 Hz mono copy
+(`rhythm`): the rate librosa's beat tracker and its defaults are made for. The
+speakers are read from the 16 kHz mono copy whisper reads (`speech`).
+`Modules.Media` writes all three when a file is uploaded.
 
 **Read in blocks.** An hour of 48 kHz stereo is 1.4 GB as float32, and librosa's
 tempo estimate over a whole hour builds an autocorrelation several gigabytes
@@ -41,7 +44,9 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
-FEATURES = ("tempo", "beats", "onsets", "loudness", "silence", "peaks")
+from Modules import Speakers
+
+FEATURES = ("tempo", "beats", "onsets", "loudness", "silence", "peaks", "speakers")
 
 # The rhythm copy's rate, and the frames librosa analyses it in. A 256-sample
 # hop (11.6 ms) rather than librosa's 512 halves the tempo's quantisation: a
@@ -77,6 +82,7 @@ def analyze(
     rhythm: Path,
     features=FEATURES,
     *,
+    speech: Path | None = None,
     peaks_rate: int = DEFAULT_PEAKS_RATE,
     silence_db: float = DEFAULT_SILENCE_DB,
     silence_min: float = DEFAULT_SILENCE_MIN,
@@ -85,9 +91,10 @@ def analyze(
     """The features asked for, keyed as the media API answers them.
 
     `tempo` -> `tempo`, `beats` -> `beats`, `onsets` -> `onsets`, `loudness` ->
-    `loudness`, `silence` -> `silences`, `peaks` -> `peaks`; a feature not asked
-    for is not computed and its key is absent. `ffmpeg` measures LUFS; without
-    it `lufs` is None.
+    `loudness`, `silence` -> `silences`, `peaks` -> `peaks`, `speakers` ->
+    `speakers`; a feature not asked for is not computed and its key is absent.
+    `ffmpeg` measures LUFS; without it `lufs` is None. `speakers` reads the
+    16 kHz mono `speech` copy, and `silence_db` is its floor.
     """
     wanted = set(features)
     unknown = wanted - set(FEATURES)
@@ -113,6 +120,10 @@ def analyze(
             out["peaks"] = scan["peaks"]
     if wanted & {"tempo", "beats", "onsets"}:
         out.update(rhythm_features(rhythm, wanted))
+    if "speakers" in wanted:
+        if speech is None:
+            raise ValueError("the speakers feature needs the speech copy")
+        out["speakers"] = Speakers.turns(speech, silence_db=silence_db)
     return out
 
 

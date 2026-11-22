@@ -43,7 +43,8 @@ uv run pytest tests/
 ## 2. Caption and analyse a video for an editor
 
 What joe hears in a clip, for alfred: the words with their times, for captions,
-and its beats, loudness, silences and waveform, for cutting.
+its beats, loudness, silences and waveform, for cutting, and who is speaking
+when, as lettered voices, for alfred to put names to.
 
 1. Put ffmpeg on `PATH`, or name it in `JOE_FFMPEG`. Start the API alone on a
    port alfred does not use -- alfred has 8000 -- and check that joe answers
@@ -78,12 +79,19 @@ and its beats, loudness, silences and waveform, for cutting.
    ```bash
    curl -X POST "http://localhost:8010/api/media/323be26e5105eb0a57ca72d44566409b/transcribe"
    curl -X POST "http://localhost:8010/api/media/323be26e5105eb0a57ca72d44566409b/analyze?features=beats,loudness,silence"
+   curl -X POST "http://localhost:8010/api/media/323be26e5105eb0a57ca72d44566409b/analyze?features=speakers"
    ```
+
+   `speakers` answers who is speaking when: each turn's voice a letter, the
+   same letter for one voice throughout, and no letter a name.
 
    - test: tests/test_media_transcribe.py::test_a_transcript_has_segment_and_word_times_in_v1_s_shape
    - test: tests/test_media_api.py::test_an_analysis_answers_every_feature_in_v1_s_shape
    - test: tests/test_media_api.py::test_only_the_features_asked_for_are_answered
    - test: tests/test_media_api.py::test_a_track_that_starts_late_is_kept_on_the_media_s_own_time
+   - test: tests/test_media_api.py::test_who_is_speaking_when_through_upload_and_analysis
+   - test: tests/test_media_speakers.py::test_two_voices_in_turn_are_two_speakers_with_turns_at_their_times
+   - test: tests/test_media_speakers.py::test_one_voice_is_one_speaker_and_a_short_pause_does_not_end_its_turn
 
 4. Delete it when done, or leave it: an upload goes an hour after its last use
    (`JOE_MEDIA_TTL`).

@@ -159,8 +159,10 @@ accepted. `JOE_DATAPOINTS=0` writes none; nothing deletes them.
 
 **The audio engine of a video editor:** alfred uploads a clip, or a
 timeline's mixed sound, to `/api/media` and asks by id what is said in it
-(each segment and word with its time, for captions) and how it moves: tempo,
-beats, onsets, loudness (dBFS and LUFS), silences and a waveform's peaks. It
+(each segment and word with its time, for captions), how it moves: tempo,
+beats, onsets, loudness (dBFS and LUFS), silences and a waveform's peaks --
+and who is speaking when, the voices told apart by their sound and lettered,
+never named. It
 needs ffmpeg (on PATH, or named by `JOE_FFMPEG`) and no setting. Beside
 alfred, which has port 8000, run the API alone:
 `uv run uvicorn api:app --port 8010`. On loopback, alfred's containers reach
@@ -225,7 +227,7 @@ Input audio is read from `Data/Audio/`.
 ## Project Structure
 
 - `Data/`: input audio and generated outputs (git-ignored)
-- `Modules/`: core Python classes (`Audio`, `Chroma`, `MIDI`, `Note`, utilities), and `Media` and `Analysis` behind the media API — see [docs/modules.md](docs/modules.md)
+- `Modules/`: core Python classes (`Audio`, `Chroma`, `MIDI`, `Note`, utilities), and `Media`, `Analysis` and `Speakers` behind the media API — see [docs/modules.md](docs/modules.md)
 - `src/`: frontend source (`p5.js` + Vite) — components, config, sketch
 - `tests/`: Python unit tests; `tests/e2e/` for Playwright E2E tests
 - `docs/`: contributor guide, module reference, API reference

@@ -219,7 +219,7 @@ def test_the_capabilities_name_the_formats_features_and_model(client, monkeypatc
 
     assert body == {
         "formats": sorted(Media.FORMATS),
-        "features": ["tempo", "beats", "onsets", "loudness", "silence", "peaks"],
+        "features": ["tempo", "beats", "onsets", "loudness", "silence", "peaks", "speakers"],
         "speech_model": "whisper-base",
         "word_timestamps": True,
         "max_bytes": 1024**3,

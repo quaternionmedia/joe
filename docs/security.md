@@ -177,7 +177,7 @@ apart: the binding and the capabilities are its whole access control.
 | `GET /api/media/capabilities` | `media` | The formats, features, speech model and limits |
 | `POST /api/media` | `media` | Takes up to `JOE_MEDIA_MAX_BYTES` (1 GiB) of audio or video, decodes it with ffmpeg on this machine, keeps its sound an hour after its last use; answers its id |
 | `POST /api/media/{id}/transcribe` | `media` | Runs whisper on an upload; answers what is said in it. Needs the upload's 128-bit random id |
-| `POST /api/media/{id}/analyze` | `media` | Measures an upload's tempo, beats, loudness, silences, peaks |
+| `POST /api/media/{id}/analyze` | `media` | Measures an upload's tempo, beats, loudness, silences, peaks, and who is speaking when, as lettered voices that name nobody |
 | `DELETE /api/media/{id}` | `media` | Removes an upload |
 | `POST /api/capture/start`, `/stop` | `microphone` | Records from the default input into `Data/Audio/` until stopped |
 | `GET /api/voice/devices` | `microphone` | The machine's audio inputs, by name |
